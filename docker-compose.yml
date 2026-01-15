@@ -1,0 +1,81 @@
+services:
+  # 1. The Database
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: toshacity
+      POSTGRES_PASSWORD: toshacity_pass
+      POSTGRES_DB: toshacity_butchery
+    ports:
+      - "5432:5432" 
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toshacity -d toshacity_butchery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: toshacity-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: toshacity
+      DATABASE_PASSWORD: toshacity_pass
+      DATABASE_NAME: toshacity_butchery
+      PORT: 3000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"  # Backend exposed on localhost:3000
+    command: npm run start:prod
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3000/api
+    container_name: toshacity-frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"  # Frontend on localhost:3001
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  proxy:
+    build: ./proxy
+    container_name: toshacity-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80" 
+      - "443:443" 
+    networks:
+      - app-network
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  db_data: {}
+
+networks:
+  app-network:
+    driver: bridge
+

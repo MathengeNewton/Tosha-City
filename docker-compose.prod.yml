@@ -1,0 +1,87 @@
+services:
+  # 1. The Database
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-toshacity}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME:-toshacity_butchery}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-toshacity} -d ${DATABASE_NAME:-toshacity_butchery}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: toshacity-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER:-toshacity}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME:-toshacity_butchery}
+      PORT: 3000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      FRONTEND_URL: ${FRONTEND_URL:-https://admin.toshacity.co.ke}
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://apis.toshacity.co.ke/api}
+    container_name: toshacity-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://apis.toshacity.co.ke/api}
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: toshacity-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80" 
+      - "443:443"
+    volumes:
+      - ./proxy/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy/ssl:/etc/nginx/ssl:ro
+    networks:
+      - app-network
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  db_data: {}
+
+networks:
+  app-network:
+    driver: bridge
+
