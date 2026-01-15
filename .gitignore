@@ -45,6 +45,9 @@ proxy/ssl/*.key
 coverage/
 *.lcov
 
+# Old test files
+backend/tests/
+
 # Temporary files
 tmp/
 temp/
