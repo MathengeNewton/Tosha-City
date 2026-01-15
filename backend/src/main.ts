@@ -22,10 +22,10 @@ async function bootstrap() {
   // Add development origins only in development mode
   if (process.env.NODE_ENV === 'development') {
     allowedOrigins.push(
-      'http://localhost:3001',
-      'http://localhost:3000',
-      'http://127.0.0.1:3001',
-      'http://127.0.0.1:3000',
+      'http://localhost:3015',  // Frontend
+      'http://localhost:4515',   // Backend (for direct API access)
+      'http://127.0.0.1:3015',
+      'http://127.0.0.1:4515',
     );
   }
 
