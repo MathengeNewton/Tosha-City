@@ -21,7 +21,7 @@ export const metadata = {
     title: "ToshaCity Butchery | Management System",
     description:
       "Manage your butchery operations efficiently. Track stock, sales, wastage, and generate comprehensive reports.",
-    url: "http://localhost:3001",
+    url: "https://admin.toshacity.co.ke",
     siteName: "ToshaCity Butchery",
     type: "website",
     images: [

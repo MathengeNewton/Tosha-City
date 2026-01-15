@@ -15,22 +15,26 @@ async function bootstrap() {
 
   // Enable CORS
   const allowedOrigins = [
-    'http://localhost:3001', // Frontend (dev)
-    'http://localhost:3000', // Fallback (dev)
-    'http://127.0.0.1:3001',
-    'http://127.0.0.1:3000',
-    'http://toshacity.local', // Local domain
-    'https://toshacity.local', // Local domain (HTTPS)
     'https://admin.toshacity.co.ke', // Production frontend
     'http://admin.toshacity.co.ke', // Production frontend (HTTP redirect)
   ];
+
+  // Add development origins only in development mode
+  if (process.env.NODE_ENV === 'development') {
+    allowedOrigins.push(
+      'http://localhost:3001',
+      'http://localhost:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:3000',
+    );
+  }
 
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       
-      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));

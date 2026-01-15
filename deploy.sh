@@ -50,8 +50,9 @@ sleep 15
 # Health checks
 echo -e "${YELLOW}🏥 Running health checks...${NC}"
 
-# Check backend
-if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+# Check backend (using production URL from env or default)
+BACKEND_URL=${NEXT_PUBLIC_API_URL:-https://apis.toshacity.co.ke/api}
+if curl -f ${BACKEND_URL}/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend is healthy${NC}"
 else
     echo -e "${RED}❌ Backend health check failed${NC}"
@@ -59,8 +60,9 @@ else
     exit 1
 fi
 
-# Check frontend
-if curl -f http://localhost:3001 > /dev/null 2>&1; then
+# Check frontend (using production URL from env or default)
+FRONTEND_URL=${FRONTEND_URL:-https://admin.toshacity.co.ke}
+if curl -f ${FRONTEND_URL} > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Frontend is healthy${NC}"
 else
     echo -e "${RED}❌ Frontend health check failed${NC}"

@@ -2,9 +2,9 @@ import axios from 'axios';
 
 /**
  * API Configuration
- * Backend API base URL - can be overridden with NEXT_PUBLIC_API_URL environment variable
+ * Backend API base URL - must be set via NEXT_PUBLIC_API_URL environment variable
  */
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://apis.toshacity.co.ke/api';
 
 // Create axios instance
 const api = axios.create({

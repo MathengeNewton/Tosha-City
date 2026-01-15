@@ -78,6 +78,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
             
@@ -131,9 +132,11 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            sleep 10
-            curl -f https://apis.toshacity.co.ke/api/health || exit 1
-            echo "Backend health check passed"
-            curl -f https://admin.toshacity.co.ke || exit 1
-            echo "Frontend health check passed"
+            sleep 15
+            echo "Checking backend health..."
+            curl -f ${{ secrets.NEXT_PUBLIC_API_URL }}/health || exit 1
+            echo "✅ Backend health check passed"
+            echo "Checking frontend health..."
+            curl -f ${{ secrets.FRONTEND_URL }} || exit 1
+            echo "✅ Frontend health check passed"
 

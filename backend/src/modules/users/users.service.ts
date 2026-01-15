@@ -44,11 +44,11 @@ export class UsersService {
     // Generate unique email if not provided
     let finalEmail = createDto.email;
     if (!finalEmail) {
-      let emailAttempt = `${createDto.username}@toshacity.local`;
+      let emailAttempt = `${createDto.username}@toshacity.co.ke`;
       let attemptCount = 0;
       while (await this.userRepo.findOne({ where: { email: emailAttempt } })) {
         attemptCount++;
-        emailAttempt = `${createDto.username}${attemptCount}@toshacity.local`;
+        emailAttempt = `${createDto.username}${attemptCount}@toshacity.co.ke`;
       }
       finalEmail = emailAttempt;
     }

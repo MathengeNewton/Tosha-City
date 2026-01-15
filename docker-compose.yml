@@ -1,3 +1,7 @@
+# LOCAL DEVELOPMENT CONFIGURATION
+# This file is for local development only.
+# For production deployment, use docker-compose.prod.yml
+
 services:
   # 1. The Database
   db:

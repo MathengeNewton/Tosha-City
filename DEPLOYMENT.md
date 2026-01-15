@@ -146,16 +146,25 @@ sudo ufw enable
 
 ### 6. Set Up SSH Key for GitHub Actions
 
+**Quick Setup:**
 ```bash
-# Generate SSH key pair
-ssh-keygen -t ed25519 -C "deploy@toshacity" -f ~/.ssh/deploy_key
+# On your LOCAL machine, run:
+./setup-ssh-key.sh
+```
 
-# Add public key to authorized_keys
-cat ~/.ssh/deploy_key.pub >> ~/.ssh/authorized_keys
+**Or manually:**
+```bash
+# Generate SSH key pair (on your LOCAL machine)
+ssh-keygen -t ed25519 -C "github-actions-deploy@toshacity" -f ~/.ssh/toshacity_deploy_key
+
+# Copy public key to server
+ssh-copy-id -i ~/.ssh/toshacity_deploy_key.pub user@your-server-ip
 
 # Display private key (copy this to GitHub Secrets → SSH_PRIVATE_KEY)
-cat ~/.ssh/deploy_key
+cat ~/.ssh/toshacity_deploy_key
 ```
+
+**📖 For detailed instructions, see [`SSH_SETUP_GUIDE.md`](./SSH_SETUP_GUIDE.md)**
 
 ## Deployment Methods
 

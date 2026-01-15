@@ -141,7 +141,7 @@ export default function LoginForm() {
                     ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                     : "border-gray-300 focus:border-blue-600 focus:ring-blue-600/20"
                 } outline-none transition-all`}
-                placeholder="admin@toshacity.local"
+                placeholder="admin@toshacity.co.ke"
                 disabled={isLoading}
               />
               <EnvelopeIcon className="absolute left-4 top-3.5 h-5 w-5 text-gray-400 pointer-events-none" />

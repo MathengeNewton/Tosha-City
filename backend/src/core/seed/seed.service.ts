@@ -45,7 +45,7 @@ export class SeedService implements OnApplicationBootstrap {
       
       const user = this.userRepo.create({
         username: 'admin',
-        email: 'admin@toshacity.local',
+        email: 'admin@toshacity.co.ke',
         password: await bcrypt.hash('admin123', 10),
         roles: [adminRole],
       });

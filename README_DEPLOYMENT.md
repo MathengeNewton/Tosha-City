@@ -70,6 +70,8 @@ Before deploying, ensure:
 ## 📚 Documentation
 
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment guide
+- **[SSH_SETUP_GUIDE.md](./SSH_SETUP_GUIDE.md)** - Detailed SSH key setup guide
+- **[QUICK_SSH_SETUP.md](./QUICK_SSH_SETUP.md)** - Quick 5-minute SSH setup
 - **[GITHUB_SECRETS.md](./GITHUB_SECRETS.md)** - GitHub secrets setup
 - **[.env.example](./.env.example)** - Environment variables template
 
