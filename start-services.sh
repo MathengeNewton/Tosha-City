@@ -76,8 +76,31 @@ check_health() {
 # Check if env file exists (if specified)
 if [ -n "$ENV_FILE" ]; then
     if [ ! -f "$ENV_FILE" ]; then
-        log_warning "$ENV_FILE not found, using default environment variables"
-        ENV_FILE=""
+        log_error "$ENV_FILE not found!"
+        log_error "This file is REQUIRED for production deployment."
+        log_error ""
+        log_error "Please create $ENV_FILE with the following variables:"
+        log_error "  - DATABASE_USER"
+        log_error "  - DATABASE_PASSWORD (REQUIRED)"
+        log_error "  - DATABASE_NAME"
+        log_error "  - JWT_SECRET (REQUIRED)"
+        log_error "  - JWT_EXPIRES_IN"
+        log_error "  - FRONTEND_URL"
+        log_error "  - NEXT_PUBLIC_API_URL"
+        log_error ""
+        log_error "See GITHUB_SECRETS.md for details on what values to use."
+        log_error ""
+        log_error "Example:"
+        log_error "  cat > $ENV_FILE << 'EOF'"
+        log_error "  DATABASE_USER=toshacity"
+        log_error "  DATABASE_PASSWORD=your_secure_password_here"
+        log_error "  DATABASE_NAME=toshacity_butchery"
+        log_error "  JWT_SECRET=your_jwt_secret_here"
+        log_error "  JWT_EXPIRES_IN=7d"
+        log_error "  FRONTEND_URL=https://admin.toshacity.co.ke"
+        log_error "  NEXT_PUBLIC_API_URL=https://apis.toshacity.co.ke/api"
+        log_error "  EOF"
+        exit 1
     else
         log_info "Loading environment variables from $ENV_FILE"
         # Load env vars (handle values with spaces/special chars)
@@ -102,6 +125,22 @@ fi
 COMPOSE_CMD="$COMPOSE_CMD_BASE -f $COMPOSE_FILE"
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     COMPOSE_CMD="$COMPOSE_CMD --env-file $ENV_FILE"
+    # Also export variables for direct access in script
+    log_info "Environment file loaded: $ENV_FILE"
+    log_info "Verifying critical variables..."
+    if [ -z "$DATABASE_PASSWORD" ]; then
+        log_error "DATABASE_PASSWORD is not set in $ENV_FILE"
+        log_error "Please check your .env.production file"
+        exit 1
+    fi
+    if [ -z "$JWT_SECRET" ]; then
+        log_error "JWT_SECRET is not set in $ENV_FILE"
+        log_error "Please check your .env.production file"
+        exit 1
+    fi
+    log_success "Critical environment variables are set"
+else
+    log_warning "No environment file specified or found"
 fi
 
 log_info "Using: $COMPOSE_CMD_BASE"

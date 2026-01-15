@@ -77,6 +77,7 @@ For resource-constrained environments, use `start-services.sh`:
 ## Documentation
 
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment guide
+- **[SERVER_SETUP.md](./SERVER_SETUP.md)** - **Server setup guide (create .env.production)**
 - **[SSH_SETUP_GUIDE.md](./SSH_SETUP_GUIDE.md)** - SSH key setup for GitHub Actions
 - **[GITHUB_SECRETS.md](./GITHUB_SECRETS.md)** - GitHub secrets configuration
 - **[NGINX_PROXY_EXPLANATION.md](./NGINX_PROXY_EXPLANATION.md)** - Nginx proxy setup guide
