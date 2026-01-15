@@ -20,6 +20,15 @@ if [ ! -f .env.production ]; then
     exit 1
 fi
 
+# Checkout development branch
+echo -e "${YELLOW}📦 Checking out development branch...${NC}"
+git fetch origin
+git checkout development || git checkout -b development origin/development
+
+# Pull latest code
+echo -e "${YELLOW}⬇️  Pulling latest code from development branch...${NC}"
+git pull origin development
+
 # Load environment variables
 export $(cat .env.production | grep -v '^#' | xargs)
 
@@ -39,8 +48,8 @@ fi
 echo -e "${YELLOW}🛑 Stopping existing containers...${NC}"
 docker-compose -f docker-compose.prod.yml down || true
 
-# Build and start services
-echo -e "${YELLOW}🔨 Building and starting services...${NC}"
+# Rebuild and start services
+echo -e "${YELLOW}🔨 Rebuilding and starting services...${NC}"
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
 # Wait for services to be healthy
