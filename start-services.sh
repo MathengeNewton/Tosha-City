@@ -73,12 +73,6 @@ check_health() {
     return 1
 }
 
-# Check if docker-compose is available
-if ! command -v docker-compose &> /dev/null; then
-    log_error "docker-compose is not installed or not in PATH"
-    exit 1
-fi
-
 # Check if env file exists (if specified)
 if [ -n "$ENV_FILE" ]; then
     if [ ! -f "$ENV_FILE" ]; then
@@ -93,11 +87,24 @@ if [ -n "$ENV_FILE" ]; then
     fi
 fi
 
+# Detect docker-compose command (v1 or v2)
+if command -v docker-compose > /dev/null 2>&1; then
+    COMPOSE_CMD_BASE="docker-compose"
+elif docker compose version > /dev/null 2>&1; then
+    COMPOSE_CMD_BASE="docker compose"
+else
+    log_error "docker-compose is not installed or not in PATH"
+    log_error "Please install docker-compose or Docker with compose plugin"
+    exit 1
+fi
+
 # Build docker-compose command
-COMPOSE_CMD="docker-compose -f $COMPOSE_FILE"
+COMPOSE_CMD="$COMPOSE_CMD_BASE -f $COMPOSE_FILE"
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     COMPOSE_CMD="$COMPOSE_CMD --env-file $ENV_FILE"
 fi
+
+log_info "Using: $COMPOSE_CMD_BASE"
 
 log "🚀 Starting ToshaCity Butchery Services (Sequential Mode)"
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -112,11 +119,11 @@ log_info "Starting database container..."
 if ! $COMPOSE_CMD up -d db; then
     log_error "Failed to start database container"
     log_warning "Attempting to fix Docker Compose metadata issue..."
-    docker-compose -f $COMPOSE_FILE down 2>/dev/null || true
+    $COMPOSE_CMD_BASE -f $COMPOSE_FILE down 2>/dev/null || true
     docker ps -a | grep toshacity | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
     log_info "Retrying database startup..."
     $COMPOSE_CMD up -d db || {
-        log_error "Database startup failed. Check Docker and try: docker-compose down --rmi all"
+        log_error "Database startup failed. Check Docker and try: $COMPOSE_CMD_BASE down --rmi all"
         exit 1
     }
 fi

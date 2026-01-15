@@ -44,13 +44,26 @@ if [ ! -z "$DOCKER_REGISTRY" ]; then
     docker pull ${DOCKER_REGISTRY}/toshacity-proxy:latest || true
 fi
 
+# Detect docker-compose command (v1 or v2)
+if command -v docker-compose > /dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version > /dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+else
+    echo -e "${RED}❌ docker-compose is not installed or not in PATH${NC}"
+    echo "Please install docker-compose or Docker with compose plugin"
+    exit 1
+fi
+
+echo -e "${GREEN}Using: $COMPOSE_CMD${NC}"
+
 # Stop existing containers
 echo -e "${YELLOW}🛑 Stopping existing containers...${NC}"
-docker-compose -f docker-compose.prod.yml down || true
+$COMPOSE_CMD -f docker-compose.prod.yml down || true
 
 # Rebuild and start services
 echo -e "${YELLOW}🔨 Rebuilding and starting services...${NC}"
-docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+$COMPOSE_CMD -f docker-compose.prod.yml --env-file .env.production up -d --build
 
 # Wait for services to be healthy
 echo -e "${YELLOW}⏳ Waiting for services to be healthy...${NC}"
@@ -65,7 +78,7 @@ if curl -f ${BACKEND_URL}/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend is healthy${NC}"
 else
     echo -e "${RED}❌ Backend health check failed${NC}"
-    docker-compose -f docker-compose.prod.yml logs backend
+    $COMPOSE_CMD -f docker-compose.prod.yml logs backend
     exit 1
 fi
 
@@ -75,7 +88,7 @@ if curl -f ${FRONTEND_URL} > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Frontend is healthy${NC}"
 else
     echo -e "${RED}❌ Frontend health check failed${NC}"
-    docker-compose -f docker-compose.prod.yml logs frontend
+    $COMPOSE_CMD -f docker-compose.prod.yml logs frontend
     exit 1
 fi
 
@@ -85,7 +98,7 @@ docker image prune -f
 
 # Show running containers
 echo -e "${GREEN}📊 Current container status:${NC}"
-docker-compose -f docker-compose.prod.yml ps
+$COMPOSE_CMD -f docker-compose.prod.yml ps
 
 echo -e "${GREEN}✅ Deployment completed successfully!${NC}"
 

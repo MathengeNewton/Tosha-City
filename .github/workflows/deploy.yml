@@ -117,19 +117,30 @@ jobs:
             docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }} toshacity-frontend:latest 2>/dev/null || true
             docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-proxy:${{ github.sha }} toshacity-proxy:latest 2>/dev/null || true
             
+            # Detect docker-compose command (v1 or v2)
+            if command -v docker-compose > /dev/null 2>&1; then
+                COMPOSE_CMD="docker-compose"
+            elif docker compose version > /dev/null 2>&1; then
+                COMPOSE_CMD="docker compose"
+            else
+                echo "❌ docker-compose is not installed"
+                exit 1
+            fi
+            echo "Using: $COMPOSE_CMD"
+            
             # Stop and remove old containers
             echo "🛑 Stopping existing containers..."
-            docker-compose -f docker-compose.prod.yml down || true
+            $COMPOSE_CMD -f docker-compose.prod.yml down || true
             
             # Rebuild and start services with production config
             echo "🔨 Rebuilding and starting services..."
-            docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+            $COMPOSE_CMD -f docker-compose.prod.yml --env-file .env.production up -d --build
             
             # Clean up old images
             docker image prune -f
             
             # Show running containers
-            docker-compose -f docker-compose.prod.yml ps
+            $COMPOSE_CMD -f docker-compose.prod.yml ps
 
       - name: Health check
         uses: appleboy/ssh-action@v1.0.0
