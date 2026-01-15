@@ -32,16 +32,14 @@ git pull origin development
 # Load environment variables
 export $(cat .env.production | grep -v '^#' | xargs)
 
-# Copy production nginx config
-echo -e "${YELLOW}📝 Copying production nginx configuration...${NC}"
-cp proxy/nginx.prod.conf proxy/nginx.conf
+# Note: Nginx should be configured separately on the host
+echo -e "${YELLOW}ℹ️  Note: Configure nginx separately on the host${NC}"
 
 # Pull latest images (if using registry)
 if [ ! -z "$DOCKER_REGISTRY" ]; then
     echo -e "${YELLOW}📥 Pulling latest images from registry...${NC}"
     docker pull ${DOCKER_REGISTRY}/toshacity-backend:latest || true
     docker pull ${DOCKER_REGISTRY}/toshacity-frontend:latest || true
-    docker pull ${DOCKER_REGISTRY}/toshacity-proxy:latest || true
 fi
 
 # Detect docker-compose command (v1 or v2)

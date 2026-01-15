@@ -19,14 +19,11 @@ async function bootstrap() {
     'http://admin.toshacity.co.ke', // Production frontend (HTTP redirect)
   ];
 
-  // Add development origins only in development mode
-  if (process.env.NODE_ENV === 'development') {
-    allowedOrigins.push(
-      'http://localhost:3015',  // Frontend
-      'http://localhost:4515',   // Backend (for direct API access)
-      'http://127.0.0.1:3015',
-      'http://127.0.0.1:4515',
-    );
+  // Development origins are handled via environment variables
+  // Add custom origins from environment if needed
+  if (process.env.ALLOWED_ORIGINS) {
+    const customOrigins = process.env.ALLOWED_ORIGINS.split(',');
+    allowedOrigins.push(...customOrigins);
   }
 
   app.enableCors({

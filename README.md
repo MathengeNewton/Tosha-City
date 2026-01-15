@@ -33,9 +33,8 @@ docker-compose up
 # Frontend: https://admin.toshacity.co.ke
 # API Docs: https://apis.toshacity.co.ke/api/docs
 
-# Local ports (for direct access only, not used by frontend):
-# Backend: http://localhost:4515/api
-# Frontend: http://localhost:3015
+# Note: Services communicate via production domains
+# Configure nginx on host to route traffic appropriately
 ```
 
 ### Production Deployment
@@ -80,7 +79,6 @@ For resource-constrained environments, use `start-services.sh`:
 - **[SERVER_SETUP.md](./SERVER_SETUP.md)** - **Server setup guide (create .env.production)**
 - **[SSH_SETUP_GUIDE.md](./SSH_SETUP_GUIDE.md)** - SSH key setup for GitHub Actions
 - **[GITHUB_SECRETS.md](./GITHUB_SECRETS.md)** - GitHub secrets configuration
-- **[NGINX_PROXY_EXPLANATION.md](./NGINX_PROXY_EXPLANATION.md)** - Nginx proxy setup guide
 
 ## Production URLs
 

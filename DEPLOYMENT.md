@@ -14,10 +14,9 @@ This document provides instructions for deploying ToshaCity Butchery to producti
      - `admin.toshacity.co.ke` → Frontend Application
 
 2. **SSL Certificates:**
-   - SSL certificates should be placed in `proxy/ssl/`:
-     - `fullchain.pem` - Full certificate chain
-     - `privkey.pem` - Private key
+   - Configure SSL certificates on your nginx server (separate from Docker)
    - You can use Let's Encrypt with Certbot to generate certificates
+   - Note: Nginx should be configured separately on the host server
 
 ## GitHub Secrets Configuration
 
@@ -109,11 +108,8 @@ sudo apt install certbot -y
 # Generate certificates for both domains
 sudo certbot certonly --standalone -d apis.toshacity.co.ke -d admin.toshacity.co.ke
 
-# Copy certificates to project directory
-sudo mkdir -p /var/www/toshacity/proxy/ssl
-sudo cp /etc/letsencrypt/live/apis.toshacity.co.ke/fullchain.pem /var/www/toshacity/proxy/ssl/
-sudo cp /etc/letsencrypt/live/apis.toshacity.co.ke/privkey.pem /var/www/toshacity/proxy/ssl/
-sudo chown -R $USER:$USER /var/www/toshacity/proxy/ssl
+# Note: Configure nginx separately on the host server
+# SSL certificates should be configured in your nginx setup
 ```
 
 ### 4. Create Environment File
@@ -201,8 +197,7 @@ chmod +x deploy.sh
 # Navigate to project directory
 cd /var/www/toshacity
 
-# Copy production nginx config
-cp proxy/nginx.prod.conf proxy/nginx.conf
+# Note: Configure nginx separately on the host server
 
 # Deploy
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
@@ -233,7 +228,7 @@ sudo certbot renew --dry-run
 # Certbot will auto-renew, but you may need to reload nginx
 # Add to crontab:
 sudo crontab -e
-# Add: 0 0 * * * certbot renew --quiet && docker-compose -f /var/www/toshacity/docker-compose.prod.yml restart proxy
+# Add: 0 0 * * * certbot renew --quiet && systemctl reload nginx
 ```
 
 ### 3. Set Up Database Backups
@@ -284,14 +279,12 @@ docker exec toshacity-backend env | grep DATABASE
 ### SSL certificate issues
 
 ```bash
-# Verify certificate files exist
-ls -la proxy/ssl/
+# Check nginx configuration (on host)
+sudo nginx -t
 
-# Check nginx configuration
-docker exec toshacity-proxy nginx -t
-
-# View nginx logs
-docker logs toshacity-proxy
+# View nginx logs (on host)
+sudo tail -f /var/log/nginx/error.log
+sudo tail -f /var/log/nginx/access.log
 ```
 
 ### Frontend not loading

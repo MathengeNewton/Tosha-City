@@ -146,6 +146,7 @@ fi
 log_info "Using: $COMPOSE_CMD_BASE"
 
 log "🚀 Starting ToshaCity Butchery Services (Sequential Mode)"
+log_info "Note: Nginx/proxy should be configured separately on the host"
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Step 1: Start Database
@@ -190,7 +191,7 @@ done
 # Step 2: Start Backend
 log ""
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-log "🔧 Step 2/4: Starting Backend API..."
+log "🔧 Step 2/3: Starting Backend API..."
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 log_info "Starting backend container..."
@@ -206,7 +207,7 @@ fi
 # Step 3: Start Frontend
 log ""
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-log "🎨 Step 3/4: Starting Frontend..."
+log "🎨 Step 3/3: Starting Frontend..."
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 log_info "Starting frontend container..."
@@ -219,21 +220,6 @@ else
     sleep 5
 fi
 
-# Step 4: Start Proxy
-log ""
-log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-log "🌐 Step 4/4: Starting Nginx Proxy..."
-log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-log_info "Starting proxy container..."
-if ! $COMPOSE_CMD up -d proxy; then
-    log_error "Failed to start proxy container"
-    $COMPOSE_CMD logs proxy | tail -20
-    log_warning "Continuing anyway - will check health later..."
-else
-    log_info "Proxy container started..."
-    sleep 3
-fi
 
 # Final Health Checks - After all services are up
 log ""
@@ -250,13 +236,14 @@ else
     $COMPOSE_CMD logs db | tail -20
 fi
 
-# Check Backend API (use production URL if available, otherwise localhost for internal check)
+# Check Backend API (use production URL if available, otherwise internal container check)
 if [ -n "$NEXT_PUBLIC_API_URL" ] && [[ "$NEXT_PUBLIC_API_URL" == http* ]]; then
     BACKEND_HEALTH_URL="${NEXT_PUBLIC_API_URL}/health"
     log "Checking backend API health via production URL: $BACKEND_HEALTH_URL"
 else
-    BACKEND_HEALTH_URL="http://localhost:4515/api/health"  # Internal Docker network check
-    log "Checking backend API health via localhost: $BACKEND_HEALTH_URL"
+    # Check via internal Docker network (container name)
+    BACKEND_HEALTH_URL="http://backend:3000/api/health"
+    log "Checking backend API health via internal network"
 fi
 log "Checking backend API health..."
 if check_health "backend" "$BACKEND_HEALTH_URL" "Backend API"; then
@@ -273,11 +260,12 @@ else
     fi
 fi
 
-# Check Frontend (use production URL if available, otherwise localhost for internal check)
+# Check Frontend (use production URL if available, otherwise internal container check)
 if [ -n "$FRONTEND_URL" ] && [[ "$FRONTEND_URL" == http* ]]; then
     FRONTEND_HEALTH_URL="$FRONTEND_URL"
 else
-    FRONTEND_HEALTH_URL="http://localhost:3015"  # Internal Docker network check
+    # Check via internal Docker network (container name)
+    FRONTEND_HEALTH_URL="http://frontend:3000"
 fi
 log "Checking frontend health..."
 if check_health "frontend" "$FRONTEND_HEALTH_URL" "Frontend Application"; then
@@ -294,20 +282,6 @@ else
     fi
 fi
 
-# Check Proxy (if ports are exposed)
-log "Checking proxy status..."
-if $COMPOSE_CMD ps proxy | grep -q "Up"; then
-    log_success "Proxy container is running"
-    # Try to check if proxy is responding on port 80
-    if curl -f -s --max-time $HEALTH_CHECK_TIMEOUT "http://localhost" > /dev/null 2>&1; then
-        log_success "Proxy is responding on port 80"
-    else
-        log_warning "Proxy container is running but not responding on port 80"
-    fi
-else
-    log_error "Proxy container is not running"
-    $COMPOSE_CMD logs proxy | tail -20
-fi
 
 # Show container status
 log ""
@@ -322,12 +296,11 @@ log_success "All services started successfully!"
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 log ""
 log_info "Services are running:"
-log_info "  • Database: PostgreSQL (localhost:5432)"
+log_info "  • Database: PostgreSQL (internal network)"
 log_info "  • Backend API: https://apis.toshacity.co.ke/api"
 log_info "  • Frontend: https://admin.toshacity.co.ke"
-log_info "  • Local Access (dev only):"
-log_info "    - Backend: http://localhost:4515/api"
-log_info "    - Frontend: http://localhost:3015"
+log_info ""
+log_info "⚠️  Note: Configure nginx separately on the host to route traffic"
 log ""
 log_info "To view logs: $COMPOSE_CMD logs -f [service_name]"
 log_info "To stop services: $COMPOSE_CMD down"
