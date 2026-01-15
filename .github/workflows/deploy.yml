@@ -3,8 +3,7 @@ name: Deploy to Production
 on:
   push:
     branches:
-      - main
-      - master
+      - development
   workflow_dispatch:
 
 env:
@@ -82,8 +81,14 @@ jobs:
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
             
+            # Checkout development branch
+            echo "📦 Checking out development branch..."
+            git fetch origin
+            git checkout development || git checkout -b development origin/development
+            
             # Pull latest code
-            git pull origin main || git pull origin master
+            echo "⬇️  Pulling latest code from development branch..."
+            git pull origin development
             
             # Copy production nginx config before building
             cp proxy/nginx.prod.conf proxy/nginx.conf
@@ -113,9 +118,11 @@ jobs:
             docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-proxy:${{ github.sha }} toshacity-proxy:latest 2>/dev/null || true
             
             # Stop and remove old containers
+            echo "🛑 Stopping existing containers..."
             docker-compose -f docker-compose.prod.yml down || true
             
-            # Start services with production config
+            # Rebuild and start services with production config
+            echo "🔨 Rebuilding and starting services..."
             docker-compose -f docker-compose.prod.yml --env-file .env.production up -d --build
             
             # Clean up old images
