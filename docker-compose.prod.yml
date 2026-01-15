@@ -37,6 +37,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       FRONTEND_URL: ${FRONTEND_URL:-https://admin.toshacity.co.ke}
+    ports:
+      - "4515:3000"  # Expose backend on host port 4515
     networks:
       - app-network
     healthcheck:
@@ -55,6 +57,8 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://apis.toshacity.co.ke/api}
+    ports:
+      - "3015:3000"  # Expose frontend on host port 3015
     networks:
       - app-network
     depends_on:
