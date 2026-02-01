@@ -38,8 +38,20 @@ export class SalesController {
   @ApiOperation({ summary: 'Get all sales (with optional filters)' })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
-  findAll(@Query('sessionId') sessionId?: string, @Query('date') date?: string) {
-    return this.salesService.findAll(sessionId ? +sessionId : undefined, date);
+  @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date YYYY-MM-DD' })
+  @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date YYYY-MM-DD' })
+  findAll(
+    @Query('sessionId') sessionId?: string,
+    @Query('date') date?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.salesService.findAll(
+      sessionId ? +sessionId : undefined,
+      date,
+      dateFrom,
+      dateTo,
+    );
   }
 
   @Get(':id')

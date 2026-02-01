@@ -1,8 +1,32 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
+
+const defaultEnd = new Date();
+const defaultStart = new Date();
+defaultStart.setDate(defaultStart.getDate() - 30);
+
+function filterByDateRange(items, dateFrom, dateTo, dateKey = "recordedAt") {
+  if (!dateFrom && !dateTo) return items;
+  return items.filter((item) => {
+    const d = item[dateKey] ? new Date(item[dateKey]) : null;
+    if (!d) return true;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (d > to) return false;
+    }
+    return true;
+  });
+}
 
 export default function StockManagementPage() {
   const router = useRouter();
@@ -12,6 +36,15 @@ export default function StockManagementPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
   const [activeTab, setActiveTab] = useState('overview'); // overview, opening, incoming, wastage, closing
+  const [filters, setFilters] = useState({
+    dateFrom: defaultStart.toISOString().split("T")[0],
+    dateTo: defaultEnd.toISOString().split("T")[0],
+  });
+
+  const filteredStockEntries = useMemo(
+    () => filterByDateRange(stockEntries, filters.dateFrom, filters.dateTo, "recordedAt"),
+    [stockEntries, filters.dateFrom, filters.dateTo]
+  );
 
   useEffect(() => {
     loadData();
@@ -137,6 +170,58 @@ export default function StockManagementPage() {
       {/* Tabs */}
       {currentSession && currentSession.status === 'OPEN' && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          {/* Date range filter - applies to overview table */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rows = filteredStockEntries.map((e) => ({
+                      product: e.product?.name || "N/A",
+                      type: e.type,
+                      quantity: e.quantity,
+                      unit: e.unit || "kg",
+                      date: e.recordedAt ? new Date(e.recordedAt).toLocaleString() : "",
+                    }));
+                    exportToExcel(
+                      rows,
+                      [
+                        { key: "product", label: "Product" },
+                        { key: "type", label: "Type" },
+                        { key: "quantity", label: "Quantity" },
+                        { key: "unit", label: "Unit" },
+                        { key: "date", label: "Date" },
+                      ],
+                      "stock-entries-export"
+                    );
+                    toast.success("Excel exported");
+                  }}
+                  className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm"
+                >
+                  Export Excel
+                </button>
+              </div>
+            </div>
+          </div>
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px">
               {['overview', 'opening', 'incoming', 'wastage', 'closing'].map((tab) => (
@@ -160,7 +245,7 @@ export default function StockManagementPage() {
               <StockOverview 
                 session={currentSession} 
                 products={products} 
-                stockEntries={stockEntries}
+                stockEntries={filteredStockEntries}
                 onRefresh={loadData}
               />
             )}

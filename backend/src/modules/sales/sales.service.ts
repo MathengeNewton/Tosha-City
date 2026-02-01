@@ -125,7 +125,12 @@ export class SalesService {
     }
   }
 
-  async findAll(sessionId?: number, date?: string): Promise<Sale[]> {
+  async findAll(
+    sessionId?: number,
+    date?: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ): Promise<Sale[]> {
     const query = this.saleRepository.createQueryBuilder('sale')
       .leftJoinAndSelect('sale.items', 'items')
       .leftJoinAndSelect('items.product', 'product')
@@ -136,7 +141,10 @@ export class SalesService {
       query.where('sale.sessionId = :sessionId', { sessionId });
     }
 
-    if (date) {
+    if (dateFrom && dateTo) {
+      query.andWhere('DATE(sale.soldAt) >= :dateFrom', { dateFrom });
+      query.andWhere('DATE(sale.soldAt) <= :dateTo', { dateTo });
+    } else if (date) {
       query.andWhere('DATE(sale.soldAt) = :date', { date });
     }
 

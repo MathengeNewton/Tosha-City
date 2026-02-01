@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
@@ -73,35 +74,87 @@ export default function ReportsPage() {
           </nav>
         </div>
 
-        {/* Filters */}
-        {activeTab !== 'weekly' && (
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+        {/* Filters + Export */}
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            {activeTab !== 'weekly' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
+            <div className={activeTab === 'weekly' ? 'md:col-span-2' : ''}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab === 'sales' && salesReport?.salesByProduct) {
+                    const rows = Object.entries(salesReport.salesByProduct).map(([product, stats]) => ({
+                      product,
+                      quantity: stats.quantity,
+                      revenue: parseFloat(stats.revenue || 0),
+                    }));
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity' }, { key: 'revenue', label: 'Revenue (KES)' }], 'sales-report');
+                    toast.success('Excel exported');
+                  } else if (activeTab === 'stock' && stockReport?.stockByProduct) {
+                    const rows = Object.entries(stockReport.stockByProduct).map(([product, stats]) => ({
+                      product,
+                      opening: stats.opening,
+                      incoming: stats.incoming,
+                      closing: stats.closing,
+                      wastage: stats.wastage,
+                    }));
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'opening', label: 'Opening' }, { key: 'incoming', label: 'Incoming' }, { key: 'closing', label: 'Closing' }, { key: 'wastage', label: 'Wastage' }], 'stock-report');
+                    toast.success('Excel exported');
+                  } else if (activeTab === 'wastage' && wastageReport?.wastageByProduct) {
+                    const rows = Object.entries(wastageReport.wastageByProduct).map(([product, stats]) => ({
+                      product,
+                      quantity: stats.quantity,
+                      entries: stats.entries?.length ?? 0,
+                    }));
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity' }, { key: 'entries', label: 'Entries' }], 'wastage-report');
+                    toast.success('Excel exported');
+                  } else if (activeTab === 'weekly' && weeklyComparison) {
+                    const rows = [
+                      { metric: 'Current Week Sales', value: weeklyComparison.currentWeek?.totalSales ?? 0 },
+                      { metric: 'Current Week Revenue', value: weeklyComparison.currentWeek?.totalRevenue ?? 0 },
+                      { metric: 'Last Week Sales', value: weeklyComparison.lastWeek?.totalSales ?? 0 },
+                      { metric: 'Last Week Revenue', value: weeklyComparison.lastWeek?.totalRevenue ?? 0 },
+                      { metric: 'Revenue Change %', value: weeklyComparison.comparison?.revenueChange ?? 0 },
+                      { metric: 'Sales Change %', value: weeklyComparison.comparison?.salesChange ?? 0 },
+                    ];
+                    exportToExcel(rows, [{ key: 'metric', label: 'Metric' }, { key: 'value', label: 'Value' }], 'weekly-report');
+                    toast.success('Excel exported');
+                  } else {
+                    toast.info('Load the report first');
+                  }
+                }}
+                className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm"
+              >
+                Export Excel
+              </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Report Content */}
         <div className="p-6">
