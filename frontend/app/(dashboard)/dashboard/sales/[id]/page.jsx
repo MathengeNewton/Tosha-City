@@ -157,7 +157,7 @@ export default function SaleDetailsPage() {
 
       {/* Record Payment Modal */}
       {showPaymentModal && sale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Record Payment</h2>
             <p className="text-sm text-gray-600 mb-4">
