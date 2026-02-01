@@ -1,7 +1,31 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
+
+const defaultEnd = new Date();
+const defaultStart = new Date();
+defaultStart.setDate(defaultStart.getDate() - 365);
+
+function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
+  if (!dateFrom && !dateTo) return items;
+  return items.filter((item) => {
+    const d = item[dateKey] ? new Date(item[dateKey]) : null;
+    if (!d) return true;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (d > to) return false;
+    }
+    return true;
+  });
+}
 
 const UsersPage = () => {
   const [users, setUsers] = useState([]);
@@ -11,6 +35,10 @@ const UsersPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [selectedDistrictFilter, setSelectedDistrictFilter] = useState("");
+  const [filters, setFilters] = useState({
+    dateFrom: defaultStart.toISOString().split("T")[0],
+    dateTo: defaultEnd.toISOString().split("T")[0],
+  });
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -18,6 +46,11 @@ const UsersPage = () => {
     districtId: "",
     roleIds: [],
   });
+
+  const filteredUsers = useMemo(
+    () => filterByDateRange(users, filters.dateFrom, filters.dateTo),
+    [users, filters.dateFrom, filters.dateTo]
+  );
 
   useEffect(() => {
     loadUsers();
@@ -183,34 +216,77 @@ const UsersPage = () => {
 
       {/* Filter Section */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700">
-            Filter by District:
-          </label>
-          <select
-            value={selectedDistrictFilter}
-            onChange={(e) => setSelectedDistrictFilter(e.target.value)}
-            className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-          >
-            <option value="">All Districts</option>
-            {districts.map((district) => (
-              <option key={district.id} value={district.id}>
-                {district.name}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Filter by District</label>
+            <select
+              value={selectedDistrictFilter}
+              onChange={(e) => setSelectedDistrictFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
+            >
+              <option value="">All Districts</option>
+              {districts.map((district) => (
+                <option key={district.id} value={district.id}>
+                  {district.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-800">User List</h3>
-          <button
-            onClick={handleCreate}
-            className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors"
-          >
-            Create User
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const rows = filteredUsers.map((u) => ({
+                  username: u.username,
+                  email: u.email || "",
+                  roles: u.roles?.map((r) => r.name).join(", ") || "",
+                }));
+                exportToExcel(
+                  rows,
+                  [
+                    { key: "username", label: "Username" },
+                    { key: "email", label: "Email" },
+                    { key: "roles", label: "Roles" },
+                  ],
+                  "users-export"
+                );
+                toast.success("Excel exported");
+              }}
+              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm"
+            >
+              Export Excel
+            </button>
+            <button
+              onClick={handleCreate}
+              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
+            >
+              Create User
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -244,7 +320,7 @@ const UsersPage = () => {
                   </td>
                 </tr>
               ) : (
-                users.map((user) => {
+                filteredUsers.map((user) => {
                   const district = getUserDistrict(user);
                   const isLeader = isDistrictLeader(user, district);
                   return (

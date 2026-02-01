@@ -4,6 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
+
+const defaultEnd = new Date();
+const defaultStart = new Date();
+defaultStart.setDate(defaultStart.getDate() - 30);
 
 export default function SalesListPage() {
   const router = useRouter();
@@ -12,7 +17,8 @@ export default function SalesListPage() {
   const [currentSession, setCurrentSession] = useState(null);
   const [filters, setFilters] = useState({
     sessionId: null,
-    date: new Date().toISOString().split('T')[0],
+    dateFrom: defaultStart.toISOString().split("T")[0],
+    dateTo: defaultEnd.toISOString().split("T")[0],
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalSale, setPaymentModalSale] = useState(null);
@@ -36,7 +42,8 @@ export default function SalesListPage() {
       // Get sales
       const params = {};
       if (session) params.sessionId = session.id;
-      if (filters.date) params.date = filters.date;
+      if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+      if (filters.dateTo) params.dateTo = filters.dateTo;
 
       const salesRes = await apiClient.sales.getAll(params);
       setSales(salesRes.data || []);
@@ -105,25 +112,65 @@ export default function SalesListPage() {
           </h1>
           <p className="text-gray-600 mt-1">View and manage all sales</p>
         </div>
-        <Link
-          href="/dashboard/sales/new"
-          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
-        >
-          New Sale
-        </Link>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const rows = sales.map((s) => ({
+                saleNumber: s.saleNumber,
+                date: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
+                itemsCount: s.items?.length ?? 0,
+                totalAmount: parseFloat(s.totalAmount || 0),
+                paymentStatus: s.paymentStatus,
+              }));
+              exportToExcel(
+                rows,
+                [
+                  { key: "saleNumber", label: "Sale #" },
+                  { key: "date", label: "Date" },
+                  { key: "itemsCount", label: "Items" },
+                  { key: "totalAmount", label: "Total (KES)" },
+                  { key: "paymentStatus", label: "Payment" },
+                ],
+                "sales-export"
+              );
+              toast.success("Excel exported");
+            }}
+            className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm"
+          >
+            Export Excel
+          </button>
+          <Link
+            href="/dashboard/sales/new"
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
+          >
+            New Sale
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date
+              From Date
             </label>
             <input
               type="date"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              To Date
+            </label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
