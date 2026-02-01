@@ -184,11 +184,11 @@ ssh user@your-server
 cd /var/www/toshacity
 
 # Pull latest code
-git pull origin main
+git pull origin development
 
 # Run deployment script
-chmod +x deploy.sh
-./deploy.sh
+chmod +x .deployment.sh
+./.deployment.sh
 ```
 
 ### Method 3: Direct Docker Compose
@@ -336,7 +336,7 @@ docker-compose -f docker-compose.prod.yml down
 git checkout <previous-commit-hash>
 
 # Redeploy
-./deploy.sh
+./.deployment.sh
 ```
 
 ## Security Checklist
