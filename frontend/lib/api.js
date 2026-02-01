@@ -173,6 +173,12 @@ export const apiClient = {
     update: (data) => api.put('/users/me', data),
     changePassword: (data) => api.post('/auth/change-password', data),
   },
+
+  // Roles (admin only - for user management)
+  roles: {
+    getAll: () => api.get('/roles'),
+    getById: (id) => api.get(`/roles/${id}`),
+  },
 };
 
 export default apiClient;

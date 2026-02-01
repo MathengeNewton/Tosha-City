@@ -1,38 +1,37 @@
 "use client";
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import { useAuth } from "../../contexts/AuthContext";
 
 import SideBar from "./SideBar";
 import DashBoardHeader from "./DashboardHeader";
 import DashboardFooter from "./DashboardFooter";
 import {
-  BellIcon,
-  BriefcaseIcon,
-  ChartBarIcon,
-  ChatBubbleLeftRightIcon,
-  PencilSquareIcon,
   HomeIcon,
+  ClipboardDocumentListIcon,
+  CreditCardIcon,
+  ChartBarIcon,
+  DocumentChartBarIcon,
+  CubeIcon,
+  TruckIcon,
   UserIcon,
+  UserGroupIcon,
   CogIcon,
   Bars3Icon,
   XMarkIcon,
-  FolderOpenIcon,
-  ClipboardDocumentListIcon,
-  CalendarIcon,
-  EnvelopeIcon,
-  CreditCardIcon,
-  LifebuoyIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { hasRole } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Cashier menu - Butchery Operations
+  // Cashier menu - Stock session, sales, dashboard only (no admin pages)
   const cashierMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
@@ -40,23 +39,31 @@ export default function DashboardLayout({ children }) {
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
   ];
 
-  // Admin menu - Butchery Admin
+  // Admin menu - Full access
   const adminMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
-    { name: "Reports", href: "/dashboard/reports", icon: ChartBarIcon },
-    { name: "Products", href: "/admin/products", icon: BriefcaseIcon },
-    { name: "Suppliers", href: "/admin/suppliers", icon: BriefcaseIcon },
+    { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
+    { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
-    { name: "Users", href: "/admin/users", icon: UserIcon },
+    { name: "Users", href: "/admin/users", icon: UserGroupIcon },
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
 
-  // Determine menu based on user role (for now, use adminMenu)
-  // TODO: Get user role from context and show appropriate menu
-  const menuItems = adminMenu;
+  const isAdmin = hasRole("admin");
+  const menuItems = isAdmin ? adminMenu : cashierMenu;
+
+  // Redirect cashier away from admin pages and reports
+  useEffect(() => {
+    if (isAdmin === false && pathname) {
+      if (pathname.startsWith("/admin") || pathname === "/dashboard/reports") {
+        router.replace("/dashboard");
+      }
+    }
+  }, [isAdmin, pathname, router]);
 
   return (
     <ProtectedRoute>

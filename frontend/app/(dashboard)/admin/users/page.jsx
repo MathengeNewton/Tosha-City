@@ -83,13 +83,13 @@ const UsersPage = () => {
   };
 
   const loadRoles = async () => {
-    // Note: You may need to add a roles endpoint to your API
-    // For now, we'll use common roles
-    setRoles([
-      { id: 1, name: "admin" },
-      { id: 2, name: "member" },
-      { id: 3, name: "group-leader" },
-    ]);
+    try {
+      const response = await apiClient.roles.getAll();
+      setRoles(response.data || []);
+    } catch (error) {
+      console.error("Error loading roles:", error);
+      toast.error("Failed to load roles");
+    }
   };
 
   const handleCreate = () => {
