@@ -24,8 +24,9 @@ COPY . .
 # Set production environment for build
 ENV NODE_ENV=production
 
-# Set API URL for build (can be overridden at runtime via env var)
-ARG NEXT_PUBLIC_API_URL=https://apis.toshacity.co.ke/api
+# Set API URL for build (can be overridden via build arg)
+# Default to localhost for local development
+ARG NEXT_PUBLIC_API_URL=http://localhost:4515/api
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Build the Next.js app (standalone mode for production)

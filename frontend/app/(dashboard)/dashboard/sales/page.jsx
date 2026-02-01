@@ -14,6 +14,11 @@ export default function SalesListPage() {
     sessionId: null,
     date: new Date().toISOString().split('T')[0],
   });
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentModalSale, setPaymentModalSale] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [mpesaReference, setMpesaReference] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -44,33 +49,42 @@ export default function SalesListPage() {
     }
   };
 
-  const handleRecordPayment = async (saleId, totalAmount) => {
-    const method = prompt("Enter payment method (CASH or MPESA):");
-    if (!method || !['CASH', 'MPESA'].includes(method.toUpperCase())) {
-      toast.error("Invalid payment method");
+  const openRecordPaymentModal = (sale) => {
+    setPaymentModalSale({ saleId: sale.id, totalAmount: sale.totalAmount });
+    setPaymentMethod('CASH');
+    setMpesaReference('');
+    setShowPaymentModal(true);
+  };
+
+  const closePaymentModal = () => {
+    setShowPaymentModal(false);
+    setPaymentModalSale(null);
+    setPaymentMethod('CASH');
+    setMpesaReference('');
+  };
+
+  const handleRecordPaymentSubmit = async (e) => {
+    e.preventDefault();
+    if (!paymentModalSale) return;
+    if (paymentMethod === 'MPESA' && !mpesaReference.trim()) {
+      toast.error("MPESA reference is required");
       return;
     }
-
-    let mpesaReference = null;
-    if (method.toUpperCase() === 'MPESA') {
-      mpesaReference = prompt("Enter MPESA reference:");
-      if (!mpesaReference) {
-        toast.error("MPESA reference is required");
-        return;
-      }
-    }
-
     try {
+      setSubmitting(true);
       await apiClient.payments.create({
-        saleId,
-        amount: totalAmount,
-        method: method.toUpperCase(),
-        mpesaReference: mpesaReference || undefined,
+        saleId: paymentModalSale.saleId,
+        amount: paymentModalSale.totalAmount,
+        method: paymentMethod,
+        mpesaReference: paymentMethod === 'MPESA' ? mpesaReference.trim() : undefined,
       });
       toast.success("Payment recorded successfully");
+      closePaymentModal();
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to record payment");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -171,7 +185,7 @@ export default function SalesListPage() {
                         </Link>
                         {sale.paymentStatus === 'PENDING' && (
                           <button
-                            onClick={() => handleRecordPayment(sale.id, sale.totalAmount)}
+                            onClick={() => openRecordPaymentModal(sale)}
                             className="text-green-600 hover:text-green-800"
                           >
                             Record Payment
@@ -186,6 +200,64 @@ export default function SalesListPage() {
           </table>
         </div>
       </div>
+
+      {/* Record Payment Modal */}
+      {showPaymentModal && paymentModalSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Record Payment</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Amount: KES {parseFloat(paymentModalSale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+            </p>
+            <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    if (e.target.value === 'CASH') setMpesaReference('');
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="MPESA">MPESA</option>
+                </select>
+              </div>
+              {paymentMethod === 'MPESA' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">MPESA Reference *</label>
+                  <input
+                    type="text"
+                    value={mpesaReference}
+                    onChange={(e) => setMpesaReference(e.target.value)}
+                    placeholder="e.g. ABC123XYZ"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required={paymentMethod === 'MPESA'}
+                  />
+                </div>
+              )}
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={closePaymentModal}
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+                >
+                  {submitting ? 'Recording...' : 'Record Payment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

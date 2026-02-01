@@ -3,3 +3,27 @@
 body {
   font-family: var(--font-albert-sans), sans-serif;
 }
+
+/* Print: hide dashboard chrome, show only receipt */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .receipt-print-only,
+  .receipt-print-only * {
+    visibility: visible;
+  }
+  .receipt-print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 1rem;
+    box-shadow: none;
+    border: none;
+    background: white;
+    font-size: 12pt;
+  }
+}

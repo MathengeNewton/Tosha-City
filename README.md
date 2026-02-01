@@ -22,26 +22,22 @@ A comprehensive management system for small to medium-sized butcheries to track 
 ### Development
 
 ```bash
-# Start all services
+# Start all services locally (uses localhost URLs)
+./.dev.sh
+
+# Or use docker-compose directly
 docker-compose up
 
-# Or use the sequential startup script (better for low-resource environments)
-./start-services.sh --dev
-
-# Frontend communicates with backend via network (apis.toshacity.co.ke):
-# Backend API: https://apis.toshacity.co.ke/api
-# Frontend: https://admin.toshacity.co.ke
-# API Docs: https://apis.toshacity.co.ke/api/docs
-
-# Note: Services communicate via production domains
-# Configure nginx on host to route traffic appropriately
+# Services run on:
+# Backend API: http://localhost:4515/api
+# Frontend: http://localhost:3015
 ```
 
 ### Production Deployment
 
 ```bash
-# Use the sequential startup script with health checks
-./start-services.sh
+# Deploy to production server (uses domain URLs)
+./.deployment.sh
 
 # Or use docker-compose directly
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
@@ -54,17 +50,28 @@ See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for complete deployment instructions.
 2. Set up SSH keys (see [`SSH_SETUP_GUIDE.md`](./SSH_SETUP_GUIDE.md))
 3. Push to `development` branch to trigger deployment
 
-## Sequential Startup Script
+## Deployment Scripts
 
-For resource-constrained environments, use `start-services.sh`:
+Two deployment scripts are available:
 
+### `.dev.sh` - Local Development
 ```bash
-# Production
-./start-services.sh
-
-# Development
-./start-services.sh --dev
+./.dev.sh
 ```
+- Uses `docker-compose.yml` (localhost URLs)
+- Uses `.env` file (optional, has defaults)
+- Health checks via `http://localhost:4515` and `http://localhost:3015`
+- Starts services sequentially with proper logging
+
+### `.deployment.sh` - Production Deployment
+```bash
+./.deployment.sh
+```
+- Uses `docker-compose.prod.yml` (domain URLs)
+- Requires `.env.production` file
+- Pulls latest code from `development` branch
+- Health checks via production domains
+- Starts services sequentially with proper logging
 
 **Features:**
 - ✅ Starts services sequentially (one after another)
