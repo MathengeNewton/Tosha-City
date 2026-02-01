@@ -3,6 +3,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { ReportsService } from './reports.service';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../roles/entities/role.entity';
 
 @ApiTags('Reports')
 @Controller('reports')
@@ -12,7 +15,9 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('sales')
-  @ApiOperation({ summary: 'Get sales report' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get sales report (Admin only)' })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'productId', required: false, type: Number })
@@ -22,7 +27,9 @@ export class ReportsController {
   }
 
   @Get('stock')
-  @ApiOperation({ summary: 'Get stock report' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get stock report (Admin only)' })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'productId', required: false, type: Number })
@@ -32,7 +39,9 @@ export class ReportsController {
   }
 
   @Get('wastage')
-  @ApiOperation({ summary: 'Get wastage report' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get wastage report (Admin only)' })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'productId', required: false, type: Number })
@@ -41,13 +50,17 @@ export class ReportsController {
   }
 
   @Get('weekly-comparison')
-  @ApiOperation({ summary: 'Get weekly sales comparison' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get weekly sales comparison (Admin only)' })
   getWeeklyComparison() {
     return this.reportsService.getWeeklyComparison();
   }
 
   @Get('daily-summary')
-  @ApiOperation({ summary: 'Get daily summary' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get daily summary (Admin only)' })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
   getDailySummary(@Query('date') date?: string) {
     return this.reportsService.getDailySummary(date);
