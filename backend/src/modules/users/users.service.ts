@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger, BadRequestException } from '@nes
 import { Role } from '../roles/entities/role.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { User } from './entities/user.entity';
 import { UserRole } from '../roles/entities/role.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -53,10 +54,11 @@ export class UsersService {
       finalEmail = emailAttempt;
     }
 
+    const hashedPassword = await bcrypt.hash(createDto.password, 10);
     const user = this.userRepo.create({
       username: createDto.username,
       email: finalEmail,
-      password: createDto.password,
+      password: hashedPassword,
       roles,
     });
     
@@ -74,7 +76,11 @@ export class UsersService {
   }
 
   async update(id: number, data: Partial<User>): Promise<User> {
-    await this.userRepo.update(id, data);
+    const updateData = { ...data };
+    if (updateData.password) {
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    }
+    await this.userRepo.update(id, updateData);
     return await this.findOne(id);
   }
 

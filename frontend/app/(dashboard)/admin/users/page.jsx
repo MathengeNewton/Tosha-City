@@ -189,7 +189,7 @@ const UsersPage = () => {
           Users Management
         </h1>
         <p className="text-gray-600 mt-1">
-          Manage PCEA church users and roles
+          Manage users and roles
         </p>
       </div>
 
