@@ -102,6 +102,7 @@ export const apiClient = {
     getAll: (params) => api.get('/sales', { params }),
     getById: (id) => api.get(`/sales/${id}`),
     getPayment: (id) => api.get(`/sales/${id}/payment`),
+    getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),
     create: (data) => api.post('/sales', data),
     update: (id, data) => api.patch(`/sales/${id}`, data),
     delete: (id) => api.delete(`/sales/${id}`),

@@ -85,8 +85,54 @@ export default function SaleDetailsPage() {
     }
   };
 
-  const handlePrintReceipt = () => {
-    window.print();
+  const handlePrintReceipt = async () => {
+    try {
+      // Fetch plain text receipt from backend
+      const response = await apiClient.sales.getReceipt(saleId);
+      const receiptText = response.data;
+
+      // Create a new window with the plain text receipt
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow popups to print receipt');
+        return;
+      }
+
+      // Write plain text with monospace font for proper formatting
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Receipt - ${sale.saleNumber}</title>
+          <style>
+            body {
+              font-family: 'Courier New', monospace;
+              font-size: 12pt;
+              margin: 20px;
+              white-space: pre;
+            }
+            @media print {
+              body { margin: 0; }
+            }
+          </style>
+        </head>
+        <body>${receiptText.replace(/\n/g, '<br>')}</body>
+        </html>
+      `);
+      printWindow.document.close();
+
+      // Wait for content to load, then print
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+          // Close window after printing (optional)
+          // printWindow.close();
+        }, 250);
+      };
+    } catch (error) {
+      console.error('Error printing receipt:', error);
+      toast.error(error.response?.data?.message || 'Failed to print receipt');
+    }
   };
 
   if (loading) {

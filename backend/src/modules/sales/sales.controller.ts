@@ -9,7 +9,9 @@ import {
   Query,
   UseGuards,
   Request,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -64,6 +66,14 @@ export class SalesController {
   @ApiOperation({ summary: 'Get payment for a sale' })
   getPayment(@Param('id') id: string) {
     return this.salesService.getPaymentForSale(+id);
+  }
+
+  @Get(':id/receipt')
+  @ApiOperation({ summary: 'Get plain text receipt for a paid sale' })
+  async getReceipt(@Param('id') id: string, @Res() res: Response) {
+    const receiptText = await this.salesService.generatePlainTextReceipt(+id);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(receiptText);
   }
 
   @Patch(':id')
