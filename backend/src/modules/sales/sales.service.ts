@@ -192,6 +192,82 @@ export class SalesService {
     return sale.payment || null;
   }
 
+  async generatePlainTextReceipt(saleId: number): Promise<string> {
+    const sale = await this.findOne(saleId);
+
+    if (sale.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException('Receipt can only be generated for paid sales');
+    }
+
+    // Extract sale number (remove SALE-YYYY- prefix to get just the number)
+    // Example: "SALE-2026-0001" -> "00001"
+    const saleNumberMatch = sale.saleNumber.match(/(\d+)$/);
+    const saleNumber = saleNumberMatch ? saleNumberMatch[1].padStart(5, '0') : sale.saleNumber;
+
+    // Format date as DD/MM/YYYY HH:MM (24-hour format)
+    const soldAt = new Date(sale.soldAt);
+    const day = String(soldAt.getDate()).padStart(2, '0');
+    const month = String(soldAt.getMonth() + 1).padStart(2, '0');
+    const year = soldAt.getFullYear();
+    const hours = String(soldAt.getHours()).padStart(2, '0');
+    const minutes = String(soldAt.getMinutes()).padStart(2, '0');
+    const dateTimeStr = `${day}/${month}/${year} ${hours}:${minutes}`;
+
+    // Build receipt lines
+    const lines: string[] = [];
+    
+    // Header
+    lines.push('TOSHA CITY BUTCHERY');
+    lines.push('----------------------------');
+    lines.push(`SALE #${saleNumber}`);
+    lines.push(dateTimeStr);
+    lines.push('');
+
+    // Items
+    if (sale.items && sale.items.length > 0) {
+      sale.items.forEach((item) => {
+        const productName = item.product?.name || 'N/A';
+        const quantity = parseFloat(item.quantity.toString());
+        const unit = item.product?.unit || 'kg';
+        const unitPrice = parseFloat(item.unitPrice?.toString() || '0');
+        const totalPrice = parseFloat(item.totalPrice?.toString() || (quantity * unitPrice).toString());
+        
+        // Format: "Beef 0.10kg      152.00"
+        // Target width: 28 characters total
+        const namePart = `${productName} ${quantity.toFixed(2)}${unit}`;
+        const pricePart = totalPrice.toFixed(2);
+        const targetWidth = 28;
+        const padding = ' '.repeat(Math.max(1, targetWidth - namePart.length - pricePart.length));
+        lines.push(`${namePart}${padding}${pricePart}`);
+      });
+    }
+
+    // Separator
+    lines.push('----------------------------');
+
+    // Total - format: "TOTAL            152.00"
+    const totalAmount = parseFloat(sale.totalAmount.toString());
+    const totalLabel = 'TOTAL';
+    const totalPriceStr = totalAmount.toFixed(2);
+    const totalPadding = ' '.repeat(28 - totalLabel.length - totalPriceStr.length);
+    lines.push(`${totalLabel}${totalPadding}${totalPriceStr}`);
+
+    // Payment method
+    const paymentMethod = sale.paymentMethod || 'CASH';
+    lines.push(`PAYMENT: ${paymentMethod}`);
+
+    // MPESA reference if applicable
+    if (sale.payment && sale.payment.method === 'MPESA' && sale.payment.mpesaReference) {
+      lines.push(`MPESA REF: ${sale.payment.mpesaReference}`);
+    }
+
+    // Footer
+    lines.push('');
+    lines.push('THANK YOU');
+
+    return lines.join('\n');
+  }
+
   async update(id: number, updateSaleDto: UpdateSaleDto, userId: number): Promise<Sale> {
     const sale = await this.findOne(id);
 
