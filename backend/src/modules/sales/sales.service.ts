@@ -57,9 +57,6 @@ export class SalesService {
       }
     }
 
-    // Generate sale number
-    const saleNumber = await this.generateSaleNumber();
-
     // Calculate totals and validate stock
     let totalAmount = 0;
     const itemsToCreate: Partial<SaleItem>[] = [];
@@ -86,43 +83,69 @@ export class SalesService {
       });
     }
 
-    // Create sale and items in a transaction
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // Retry logic for handling race conditions with sale number generation
+    const maxRetries = 3;
+    let lastError: any;
 
-    try {
-      const sale = queryRunner.manager.create(Sale, {
-        sessionId: createSaleDto.sessionId,
-        saleNumber,
-        totalAmount,
-        customerId: createSaleDto.customerId || null,
-        paymentMethod: createSaleDto.paymentMethod,
-        paymentStatus: PaymentStatus.PENDING,
-        soldById: userId,
-      });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Create sale and items in a transaction
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
 
-      const savedSale = await queryRunner.manager.save(Sale, sale);
+      try {
+        // Generate sale number inside transaction to avoid race conditions
+        const saleNumber = await this.generateSaleNumberInTransaction(queryRunner);
 
-      // Create sale items
-      for (const item of itemsToCreate) {
-        const saleItem = queryRunner.manager.create(SaleItem, {
-          ...item,
-          saleId: savedSale.id,
+        const sale = queryRunner.manager.create(Sale, {
+          sessionId: createSaleDto.sessionId,
+          saleNumber,
+          totalAmount,
+          customerId: createSaleDto.customerId || null,
+          paymentMethod: createSaleDto.paymentMethod,
+          paymentStatus: PaymentStatus.PENDING,
+          soldById: userId,
         });
-        await queryRunner.manager.save(SaleItem, saleItem);
+
+        const savedSale = await queryRunner.manager.save(Sale, sale);
+
+        // Create sale items
+        for (const item of itemsToCreate) {
+          const saleItem = queryRunner.manager.create(SaleItem, {
+            ...item,
+            saleId: savedSale.id,
+          });
+          await queryRunner.manager.save(SaleItem, saleItem);
+        }
+
+        await queryRunner.commitTransaction();
+
+        // Return sale with items
+        return await this.findOne(savedSale.id);
+      } catch (error: any) {
+        await queryRunner.rollbackTransaction();
+        lastError = error;
+
+        // Check if it's a duplicate key error (PostgreSQL error code 23505)
+        // If so, retry with a new sale number
+        if (error?.code === '23505' && error?.constraint === 'UQ_e573deaf1d34ddc5ed48612d2d0') {
+          // This is a duplicate sale number error, retry
+          if (attempt < maxRetries - 1) {
+            // Wait a small random amount before retrying to reduce collision probability
+            await new Promise((resolve) => setTimeout(resolve, Math.random() * 100));
+            continue;
+          }
+        }
+
+        // If it's not a duplicate key error or we've exhausted retries, throw
+        throw error;
+      } finally {
+        await queryRunner.release();
       }
-
-      await queryRunner.commitTransaction();
-
-      // Return sale with items
-      return await this.findOne(savedSale.id);
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
     }
+
+    // If we get here, all retries failed
+    throw lastError;
   }
 
   async findAll(
@@ -209,6 +232,42 @@ export class SalesService {
 
     const sequence = String(count + 1).padStart(4, '0');
     return `SALE-${year}-${sequence}`;
+  }
+
+  /**
+   * Generate sale number within a transaction to avoid race conditions.
+   * This method finds the highest existing sale number for the current year
+   * and increments it atomically.
+   */
+  private async generateSaleNumberInTransaction(queryRunner: any): Promise<string> {
+    const year = new Date().getFullYear();
+    const yearPrefix = `SALE-${year}-`;
+
+    // Find the highest sale number for this year
+    const result = await queryRunner.manager
+      .createQueryBuilder()
+      .select('sale.saleNumber', 'saleNumber')
+      .from(Sale, 'sale')
+      .where('sale.saleNumber LIKE :pattern', { pattern: `${yearPrefix}%` })
+      .orderBy('sale.saleNumber', 'DESC')
+      .limit(1)
+      .getRawOne();
+
+    let nextSequence = 1;
+
+    if (result && result.saleNumber) {
+      // Extract the sequence number from the existing sale number
+      const existingNumber = result.saleNumber;
+      const sequencePart = existingNumber.replace(yearPrefix, '');
+      const existingSequence = parseInt(sequencePart, 10);
+      
+      if (!isNaN(existingSequence)) {
+        nextSequence = existingSequence + 1;
+      }
+    }
+
+    const sequence = String(nextSequence).padStart(4, '0');
+    return `${yearPrefix}${sequence}`;
   }
 
   private async getAvailableStock(sessionId: number, productId: number): Promise<number> {
