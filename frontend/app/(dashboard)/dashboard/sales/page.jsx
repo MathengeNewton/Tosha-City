@@ -104,15 +104,15 @@ export default function SalesListPage() {
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex justify-between items-center">
+    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
+      <div className="mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
             Sales
           </h1>
-          <p className="text-gray-600 mt-1">View and manage all sales</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">View and manage all sales</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => {
@@ -136,13 +136,13 @@ export default function SalesListPage() {
               );
               toast.success("Excel exported");
             }}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm"
+            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
           >
             Export Excel
           </button>
           <Link
             href="/dashboard/sales/new"
-            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
+            className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm text-center min-h-[44px] flex items-center justify-center"
           >
             New Sale
           </Link>
@@ -160,7 +160,7 @@ export default function SalesListPage() {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
             />
           </div>
           <div>
@@ -171,7 +171,7 @@ export default function SalesListPage() {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
             />
           </div>
         </div>
@@ -183,37 +183,38 @@ export default function SalesListPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale #</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Items</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {sales.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
                     No sales found
                   </td>
                 </tr>
               ) : (
                 sales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {sale.saleNumber}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(sale.soldAt).toLocaleString()}
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="sm:hidden">{new Date(sale.soldAt).toLocaleDateString()}</span>
+                      <span className="hidden sm:inline">{new Date(sale.soldAt).toLocaleString()}</span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
                       {sale.items?.length || 0} item(s)
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                       KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         sale.paymentStatus === 'PAID' 
                           ? 'bg-green-100 text-green-800' 
@@ -222,18 +223,18 @@ export default function SalesListPage() {
                         {sale.paymentStatus}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <Link
                           href={`/dashboard/sales/${sale.id}`}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="text-blue-600 hover:text-blue-800 min-h-[44px] flex items-center"
                         >
                           View
                         </Link>
                         {sale.paymentStatus === 'PENDING' && (
                           <button
                             onClick={() => openRecordPaymentModal(sale)}
-                            className="text-green-600 hover:text-green-800"
+                            className="text-green-600 hover:text-green-800 min-h-[44px] text-left sm:text-left"
                           >
                             Record Payment
                           </button>
@@ -250,9 +251,9 @@ export default function SalesListPage() {
 
       {/* Record Payment Modal */}
       {showPaymentModal && paymentModalSale && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Record Payment</h2>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-4">Record Payment</h2>
             <p className="text-sm text-gray-600 mb-4">
               Amount: KES {parseFloat(paymentModalSale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
             </p>
@@ -265,7 +266,7 @@ export default function SalesListPage() {
                     setPaymentMethod(e.target.value);
                     if (e.target.value === 'CASH') setMpesaReference('');
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                   required
                 >
                   <option value="CASH">Cash</option>
@@ -280,23 +281,23 @@ export default function SalesListPage() {
                     value={mpesaReference}
                     onChange={(e) => setMpesaReference(e.target.value)}
                     placeholder="e.g. ABC123XYZ"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                     required={paymentMethod === 'MPESA'}
                   />
                 </div>
               )}
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   type="button"
                   onClick={closePaymentModal}
-                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+                  className="flex-1 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 min-h-[44px] text-base"
                 >
                   {submitting ? 'Recording...' : 'Record Payment'}
                 </button>

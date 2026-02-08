@@ -156,26 +156,26 @@ export default function NewSalePage() {
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex justify-between items-center">
+    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
+      <div className="mb-4 sm:mb-8">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
             New Sale
           </h1>
-          <p className="text-gray-600 mt-1">Create a new sale and generate receipt</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Create a new sale and generate receipt</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <div className="space-y-6">
           {/* Sale Items */}
           <div>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Sale Items</h2>
               <button
                 type="button"
                 onClick={addItem}
-                className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
+                className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px] w-full sm:w-auto"
               >
                 Add Item
               </button>
@@ -188,15 +188,15 @@ export default function NewSalePage() {
             ) : (
               <div className="space-y-4">
                 {saleItems.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-4 p-4 border border-gray-200 rounded-lg">
-                    <div className="col-span-4">
+                  <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-4 p-4 border border-gray-200 rounded-lg">
+                    <div className="sm:col-span-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product *
                       </label>
                       <select
                         value={item.productId}
                         onChange={(e) => updateItem(index, 'productId', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                         required
                       >
                         <option value="">Select product</option>
@@ -208,7 +208,7 @@ export default function NewSalePage() {
                       </select>
                     </div>
 
-                    <div className="col-span-3">
+                    <div className="sm:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Quantity *
                       </label>
@@ -217,12 +217,12 @@ export default function NewSalePage() {
                         step="0.01"
                         value={item.quantity}
                         onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                         required
                       />
                     </div>
 
-                    <div className="col-span-3">
+                    <div className="sm:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Price per Unit *
                       </label>
@@ -231,22 +231,22 @@ export default function NewSalePage() {
                         step="0.01"
                         value={item.price}
                         onChange={(e) => updateItem(index, 'price', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                         required
                       />
                     </div>
 
-                    <div className="col-span-1 flex items-end">
+                    <div className="sm:col-span-1 flex items-end">
                       <button
                         type="button"
                         onClick={() => removeItem(index)}
-                        className="w-full bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition-colors text-sm"
+                        className="w-full bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition-colors text-sm min-h-[44px]"
                       >
                         Remove
                       </button>
                     </div>
 
-                    <div className="col-span-1 flex items-end">
+                    <div className="sm:col-span-1 flex items-end">
                       <p className="text-sm font-semibold text-gray-900">
                         KES {((parseFloat(item.quantity || 0) * parseFloat(item.price || 0)).toFixed(2))}
                       </p>
@@ -269,7 +269,7 @@ export default function NewSalePage() {
                     setCustomerId('');
                   }
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                 required
               >
                 <option value="CASH">Cash</option>
@@ -283,7 +283,7 @@ export default function NewSalePage() {
                 <select
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                   required
                 >
                   <option value="">Select a customer</option>
@@ -308,17 +308,17 @@ export default function NewSalePage() {
           </div>
 
           {/* Submit Button */}
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <button
               type="button"
               onClick={() => router.back()}
-              className="flex-1 bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors"
+              className="flex-1 bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors min-h-[44px] text-base"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition-colors"
+              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition-colors min-h-[44px] text-base"
             >
               Create Sale
             </button>

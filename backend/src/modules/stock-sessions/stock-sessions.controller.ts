@@ -4,16 +4,18 @@ import {
   Post,
   Param,
   Body,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StockSessionsService } from './stock-sessions.service';
 import { OpenSessionDto } from './dto/open-session.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
+import { SessionStatus } from './entities/stock-session.entity';
 
 @ApiTags('Stock Sessions')
 @Controller('stock-sessions')
@@ -39,8 +41,19 @@ export class StockSessionsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all stock sessions' })
-  findAll() {
+  @ApiOperation({ summary: 'Get all stock sessions with optional filters and statistics' })
+  @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date in YYYY-MM-DD format' })
+  @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date in YYYY-MM-DD format' })
+  @ApiQuery({ name: 'status', required: false, enum: SessionStatus, description: 'Filter by session status' })
+  findAll(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('status') status?: SessionStatus,
+  ) {
+    // If any filter is provided, use findAllWithStats, otherwise use simple findAll
+    if (dateFrom || dateTo || status) {
+      return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status);
+    }
     return this.stockSessionsService.findAll();
   }
 

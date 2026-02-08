@@ -5,6 +5,7 @@ import { StockSession, SessionStatus } from './entities/stock-session.entity';
 import { OpenSessionDto } from './dto/open-session.dto';
 import { Sale, PaymentStatus } from '../sales/entities/sale.entity';
 import { PaymentMethod } from '../sales/entities/payment.enums';
+import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 
 @Injectable()
 export class StockSessionsService {
@@ -13,6 +14,8 @@ export class StockSessionsService {
     private sessionRepository: Repository<StockSession>,
     @InjectRepository(Sale)
     private saleRepository: Repository<Sale>,
+    @InjectRepository(StockEntry)
+    private stockEntryRepository: Repository<StockEntry>,
   ) {}
 
   async openSession(openSessionDto: OpenSessionDto, userId: number): Promise<StockSession> {
@@ -108,6 +111,89 @@ export class StockSessionsService {
       where: { date: sessionDate },
       relations: ['openedBy', 'stockEntries', 'sales'],
     });
+  }
+
+  async findAllWithStats(
+    dateFrom?: string,
+    dateTo?: string,
+    status?: SessionStatus,
+  ): Promise<any[]> {
+    const queryBuilder = this.sessionRepository
+      .createQueryBuilder('session')
+      .leftJoinAndSelect('session.openedBy', 'openedBy')
+      .orderBy('session.date', 'DESC');
+
+    // Apply filters
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      queryBuilder.andWhere('session.date >= :dateFrom', { dateFrom: fromDate });
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      queryBuilder.andWhere('session.date <= :dateTo', { dateTo: toDate });
+    }
+
+    if (status) {
+      queryBuilder.andWhere('session.status = :status', { status });
+    }
+
+    const sessions = await queryBuilder.getMany();
+
+    // Get statistics for each session
+    const sessionsWithStats = await Promise.all(
+      sessions.map(async (session) => {
+        // Count opening stock entries
+        const openingCount = await this.stockEntryRepository.count({
+          where: {
+            sessionId: session.id,
+            type: StockEntryType.OPENING,
+          },
+        });
+
+        // Count incoming stock entries
+        const incomingCount = await this.stockEntryRepository.count({
+          where: {
+            sessionId: session.id,
+            type: StockEntryType.INCOMING,
+          },
+        });
+
+        // Count sales
+        const salesCount = await this.saleRepository.count({
+          where: {
+            sessionId: session.id,
+          },
+        });
+
+        // Calculate total revenue (sum of paid sales)
+        const paidSales = await this.saleRepository.find({
+          where: {
+            sessionId: session.id,
+            paymentStatus: PaymentStatus.PAID,
+          },
+        });
+
+        const totalRevenue = paidSales.reduce(
+          (sum, sale) => sum + parseFloat(sale.totalAmount.toString()),
+          0,
+        );
+
+        return {
+          ...session,
+          stats: {
+            openingStockCount: openingCount,
+            incomingStockCount: incomingCount,
+            salesCount,
+            totalRevenue,
+          },
+        };
+      }),
+    );
+
+    return sessionsWithStats;
   }
 }
 

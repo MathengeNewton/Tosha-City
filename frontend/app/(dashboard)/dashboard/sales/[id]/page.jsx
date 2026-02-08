@@ -152,20 +152,20 @@ export default function SaleDetailsPage() {
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
+    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
       {/* Header and actions - hidden when printing */}
-      <div className="no-print mb-8 flex justify-between items-center">
+      <div className="no-print mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
             Sale Details
           </h1>
-          <p className="text-gray-600 mt-1">Sale #{sale.saleNumber}</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Sale #{sale.saleNumber}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {sale.paymentStatus === "PAID" && (
             <button
               onClick={handlePrintReceipt}
-              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
+              className="flex-1 sm:flex-none bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
             >
               Print Receipt
             </button>
@@ -173,7 +173,7 @@ export default function SaleDetailsPage() {
           {sale.paymentStatus === "PENDING" && (
             <button
               onClick={openRecordPaymentModal}
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
+              className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm min-h-[44px]"
             >
               Record Payment
             </button>
@@ -195,7 +195,7 @@ export default function SaleDetailsPage() {
       <div className="no-print flex gap-4">
         <Link
           href="/dashboard/sales"
-          className="bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors"
+          className="bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors min-h-[44px] flex items-center justify-center text-base"
         >
           Back to Sales
         </Link>
@@ -203,9 +203,9 @@ export default function SaleDetailsPage() {
 
       {/* Record Payment Modal */}
       {showPaymentModal && sale && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Record Payment</h2>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-4">Record Payment</h2>
             <p className="text-sm text-gray-600 mb-4">
               Amount: KES{" "}
               {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", {
@@ -223,7 +223,7 @@ export default function SaleDetailsPage() {
                     setPaymentMethod(e.target.value);
                     if (e.target.value === "CASH") setMpesaReference("");
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                   required
                 >
                   <option value="CASH">Cash</option>
@@ -240,23 +240,23 @@ export default function SaleDetailsPage() {
                     value={mpesaReference}
                     onChange={(e) => setMpesaReference(e.target.value)}
                     placeholder="e.g. ABC123XYZ"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                     required={paymentMethod === "MPESA"}
                   />
                 </div>
               )}
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   type="button"
                   onClick={closePaymentModal}
-                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
+                  className="flex-1 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 min-h-[44px] text-base"
                 >
                   {submitting ? "Recording..." : "Record Payment"}
                 </button>

@@ -81,7 +81,7 @@ export const apiClient = {
 
   // Stock Sessions
   stockSessions: {
-    getAll: () => api.get('/stock-sessions'),
+    getAll: (params) => api.get('/stock-sessions', { params }),
     getCurrent: () => api.get('/stock-sessions/current'),
     getById: (id) => api.get(`/stock-sessions/${id}`),
     open: (data) => api.post('/stock-sessions/open', data),
@@ -136,7 +136,14 @@ export const apiClient = {
         },
       });
     },
-    getFile: (filename) => `${API_BASE_URL}/uploads/${filename}`,
+    getFile: (filename) => {
+      // If it's already a full URL (Cloudinary), return it directly
+      if (filename && (filename.startsWith('http://') || filename.startsWith('https://'))) {
+        return filename;
+      }
+      // Otherwise, construct the API URL for local files
+      return `${API_BASE_URL}/uploads/${filename}`;
+    },
   },
 
   // Reports
