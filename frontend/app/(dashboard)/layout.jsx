@@ -79,7 +79,7 @@ export default function DashboardLayout({ children }) {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <DashBoardHeader />
-          <main className="flex-1 overflow-y-auto p-6 bg-white/50">
+          <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-white/50">
             {children}
           </main>
           <DashboardFooter />
@@ -107,7 +107,8 @@ export default function DashboardLayout({ children }) {
         {/* Mobile Toggle Button */}
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="cursor-pointer md:hidden fixed bottom-4 right-4 z-50 bg-blue-900 hover:bg-[#1e88b5] text-white p-3 rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900"
+          className="cursor-pointer md:hidden fixed bottom-4 right-4 z-50 bg-blue-900 hover:bg-[#1e88b5] text-white p-3 rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Toggle menu"
         >
           {isMobileOpen ? (
             <XMarkIcon className="h-6 w-6" />

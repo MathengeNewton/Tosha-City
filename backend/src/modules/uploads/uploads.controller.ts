@@ -43,6 +43,14 @@ export class UploadsController {
   })
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
     const filePath = await this.uploadsService.saveFile(file);
+    // If it's a Cloudinary URL, return it directly
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+      return {
+        filename: filePath,
+        url: filePath,
+      };
+    }
+    // Otherwise, return local path
     return {
       filename: filePath,
       url: `/api/uploads/${filePath.split('/').pop()}`,
@@ -52,8 +60,15 @@ export class UploadsController {
   @Get(':filename')
   @ApiOperation({ summary: 'Get an uploaded file' })
   async getFile(@Param('filename') filename: string, @Res() res: Response) {
-    const fileStream = this.uploadsService.getFileStream(`uploads/wastage/${filename}`);
-    fileStream.pipe(res);
+    const fileStreamOrUrl = this.uploadsService.getFileStream(`uploads/wastage/${filename}`);
+    
+    // If it's a Cloudinary URL, redirect to it
+    if (typeof fileStreamOrUrl === 'string') {
+      return res.redirect(fileStreamOrUrl);
+    }
+    
+    // Otherwise, stream the local file
+    fileStreamOrUrl.pipe(res);
   }
 }
 
