@@ -125,6 +125,25 @@ export class ReportsService {
 
     const entries = await query.orderBy('entry.recordedAt', 'DESC').getMany();
 
+    // Get sales for the same date range to include sales by price and by kgs
+    const salesQuery = this.saleRepository
+      .createQueryBuilder('sale')
+      .leftJoinAndSelect('sale.items', 'items')
+      .leftJoinAndSelect('items.product', 'product');
+
+    if (filters.startDate && filters.endDate) {
+      salesQuery.where('DATE(sale.soldAt) BETWEEN :startDate AND :endDate', {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
+    }
+
+    if (filters.sessionId) {
+      salesQuery.andWhere('sale.sessionId = :sessionId', { sessionId: filters.sessionId });
+    }
+
+    const sales = await salesQuery.getMany();
+
     // Group by product and type
     const stockByProduct = {};
     entries.forEach((entry) => {
@@ -136,6 +155,8 @@ export class ReportsService {
           incoming: 0,
           closing: 0,
           wastage: 0,
+          salesByPrice: 0,
+          salesByKgs: 0,
         };
       }
 
@@ -155,8 +176,44 @@ export class ReportsService {
       }
     });
 
+    // Add sales data by product
+    sales.forEach((sale) => {
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach((item) => {
+          const productName = item.product?.name || 'Unknown';
+          if (!stockByProduct[productName]) {
+            stockByProduct[productName] = {
+              productId: item.product?.id,
+              opening: 0,
+              incoming: 0,
+              closing: 0,
+              wastage: 0,
+              salesByPrice: 0,
+              salesByKgs: 0,
+            };
+          }
+          const quantity = parseFloat(item.quantity?.toString() || '0');
+          const totalPrice = parseFloat(item.totalPrice?.toString() || '0');
+          stockByProduct[productName].salesByPrice += totalPrice;
+          stockByProduct[productName].salesByKgs += quantity;
+        });
+      }
+    });
+
+    // Calculate totals
+    let totalSalesByPrice = 0;
+    let totalSalesByKgs = 0;
+    Object.values(stockByProduct).forEach((product: any) => {
+      totalSalesByPrice += product.salesByPrice || 0;
+      totalSalesByKgs += product.salesByKgs || 0;
+    });
+
     return {
       stockByProduct,
+      summary: {
+        totalSalesByPrice,
+        totalSalesByKgs,
+      },
       entries: entries.map((e) => ({
         id: e.id,
         product: e.product?.name,
@@ -335,6 +392,39 @@ export class ReportsService {
     const paidSales = sales.filter((s) => s.paymentStatus === PaymentStatus.PAID);
     const totalRevenue = paidSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
 
+    // Calculate sales by price (total revenue) and by kgs (total quantity)
+    let totalQuantity = 0;
+    let totalRevenueByPrice = 0;
+    
+    sales.forEach((sale) => {
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach((item) => {
+          const quantity = parseFloat(item.quantity?.toString() || '0');
+          const totalPrice = parseFloat(item.totalPrice?.toString() || '0');
+          totalQuantity += quantity;
+          totalRevenueByPrice += totalPrice;
+        });
+      }
+    });
+
+    // Calculate sales by product (by price and by kgs)
+    const salesByProduct = {};
+    sales.forEach((sale) => {
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach((item) => {
+          const productName = item.product?.name || 'Unknown';
+          if (!salesByProduct[productName]) {
+            salesByProduct[productName] = {
+              revenue: 0,
+              quantity: 0,
+            };
+          }
+          salesByProduct[productName].revenue += parseFloat(item.totalPrice?.toString() || '0');
+          salesByProduct[productName].quantity += parseFloat(item.quantity?.toString() || '0');
+        });
+      }
+    });
+
     return {
       date: targetDate.toISOString().split('T')[0],
       sales: {
@@ -342,6 +432,9 @@ export class ReportsService {
         paid: paidSales.length,
         unpaid: sales.length - paidSales.length,
         revenue: totalRevenue,
+        totalByPrice: totalRevenueByPrice,
+        totalByKgs: totalQuantity,
+        byProduct: salesByProduct,
       },
       stock: {
         entries: stockEntries.length,

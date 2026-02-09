@@ -242,6 +242,24 @@ function SalesReportView({ data }) {
 function StockReportView({ data }) {
   return (
     <div className="space-y-6">
+      {/* Summary Cards */}
+      {data.summary && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-green-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Total Sales by Price</p>
+            <p className="text-2xl font-bold text-gray-900">
+              KES {parseFloat(data.summary.totalSalesByPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Total Sales by Kgs</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {parseFloat(data.summary.totalSalesByKgs || 0).toFixed(2)} kg
+            </p>
+          </div>
+        </div>
+      )}
+
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock by Product</h3>
         <div className="overflow-x-auto">
@@ -253,16 +271,24 @@ function StockReportView({ data }) {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Incoming</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Closing</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Wastage</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sales by Price</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sales by Kgs</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {Object.entries(data.stockByProduct || {}).map(([product, stats]) => (
                 <tr key={product}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.opening}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.incoming}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.closing}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">{stats.wastage}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.opening?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.incoming?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.closing?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">{stats.wastage?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    KES {parseFloat(stats.salesByPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {parseFloat(stats.salesByKgs || 0).toFixed(2)} kg
+                  </td>
                 </tr>
               ))}
             </tbody>
