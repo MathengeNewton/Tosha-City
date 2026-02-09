@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -33,6 +34,8 @@ export default function StockManagementPage() {
   const searchParams = useSearchParams();
   const sessionIdParam = searchParams.get('sessionId');
   const viewParam = searchParams.get('view');
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('admin');
   
   const [loading, setLoading] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
@@ -41,7 +44,8 @@ export default function StockManagementPage() {
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [sales, setSales] = useState([]);
+  const [activeTab, setActiveTab] = useState('opening');
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('stockViewMode') || (viewParam || 'list');
@@ -115,13 +119,25 @@ export default function StockManagementPage() {
     try {
       setLoading(true);
       
+      // Get all sessions for list/calendar views first (this also helps us get stats)
+      await loadSessions();
+
       // Get current session
       const sessionRes = await apiClient.stockSessions.getCurrent();
       const session = sessionRes.data;
-      setCurrentSession(session);
-
-      // Get all sessions for list/calendar views
-      await loadSessions();
+      
+      if (session) {
+        // Fetch stats for current session by getting all sessions for that date
+        const allSessionsRes = await apiClient.stockSessions.getAll({
+          dateFrom: new Date(session.date).toISOString().split("T")[0],
+          dateTo: new Date(session.date).toISOString().split("T")[0],
+        });
+        const sessionsWithStats = allSessionsRes.data || [];
+        const sessionWithStats = sessionsWithStats.find(s => s.id === session.id);
+        setCurrentSession(sessionWithStats || session);
+      } else {
+        setCurrentSession(null);
+      }
 
       // Get products
       const productsRes = await apiClient.products.getActive();
@@ -130,13 +146,6 @@ export default function StockManagementPage() {
       // Get suppliers
       const suppliersRes = await apiClient.suppliers.getAll({ activeOnly: true });
       setSuppliers(suppliersRes.data || []);
-
-      // Get stock entries if session exists
-      const sessionToLoad = sessionIdParam ? selectedSession : session;
-      if (sessionToLoad) {
-        const entriesRes = await apiClient.stockEntries.getAll({ sessionId: sessionToLoad.id });
-        setStockEntries(entriesRes.data || []);
-      }
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -152,6 +161,10 @@ export default function StockManagementPage() {
       setSelectedSession(sessionRes.data);
       const entriesRes = await apiClient.stockEntries.getAll({ sessionId });
       setStockEntries(entriesRes.data || []);
+      
+      // Load sales for this session
+      const salesRes = await apiClient.sales.getAll({ sessionId });
+      setSales(salesRes.data || []);
     } catch (error) {
       console.error("Error loading session:", error);
       toast.error("Failed to load session details");
@@ -284,6 +297,9 @@ export default function StockManagementPage() {
 
   // If sessionId is in URL, show session details
   if (sessionIdParam && selectedSession) {
+    const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
+    const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
+
     return (
       <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
         <div className="mb-8 flex justify-between items-center">
@@ -303,11 +319,10 @@ export default function StockManagementPage() {
           </div>
         </div>
 
+        {/* Session Information Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Session Information
-            </h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Session Information</h3>
+          <div className="mb-4 space-y-2">
             <p className="text-sm text-gray-600">
               Opened by: {selectedSession.openedBy?.username || selectedSession.openedBy?.email || 'N/A'}
             </p>
@@ -319,13 +334,94 @@ export default function StockManagementPage() {
               </span>
             </p>
           </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Opening Stock</p>
+              <p className="text-2xl font-bold text-gray-900">{openingEntries.length} entries</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Incoming Stock</p>
+              <p className="text-2xl font-bold text-gray-900">{stockEntries.filter(e => e.type === 'INCOMING').length} entries</p>
+            </div>
+            <div className="bg-yellow-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Closing Stock</p>
+              <p className="text-2xl font-bold text-gray-900">{closingEntries.length} entries</p>
+            </div>
+            <div className="bg-red-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Wastage</p>
+              <p className="text-2xl font-bold text-gray-900">{stockEntries.filter(e => e.type === 'WASTAGE').length} entries</p>
+            </div>
+          </div>
+        </div>
 
-          <StockOverview 
-            session={selectedSession} 
-            products={products} 
-            stockEntries={stockEntries}
-            onRefresh={loadData}
-          />
+        {/* Stock Entries with Tabs */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="border-b border-gray-200">
+            <nav className="flex -mb-px overflow-x-auto">
+              {['opening', 'closing', 'sales', 'production'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 sm:px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap ${
+                    activeTab === tab
+                      ? 'border-blue-900 text-blue-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {tab === 'opening' ? 'Opening Stock' : 
+                   tab === 'closing' ? 'Closing Stock' :
+                   tab === 'sales' ? 'Sales' :
+                   'Production'}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {activeTab === 'opening' && (
+              <div>
+                {isAdmin && (
+                  <StockEntryForm 
+                    session={selectedSession} 
+                    products={products} 
+                    type="OPENING"
+                    onSuccess={() => loadSessionDetails(selectedSession.id)}
+                  />
+                )}
+                <div className={isAdmin ? "mt-6" : ""}>
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                </div>
+              </div>
+            )}
+            {activeTab === 'closing' && (
+              <div>
+                {isAdmin && (
+                  <StockEntryForm 
+                    session={selectedSession} 
+                    products={products} 
+                    type="CLOSING"
+                    onSuccess={() => loadSessionDetails(selectedSession.id)}
+                  />
+                )}
+                <div className={isAdmin ? "mt-6" : ""}>
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                </div>
+              </div>
+            )}
+            {activeTab === 'sales' && (
+              <SalesTable sales={sales} />
+            )}
+            {activeTab === 'production' && (
+              <div className="text-center py-12">
+                <div className="max-w-md mx-auto">
+                  <div className="text-6xl mb-4">🚧</div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Coming Soon</h3>
+                  <p className="text-gray-600">Production tracking feature is under development.</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -382,26 +478,41 @@ export default function StockManagementPage() {
         </div>
       </div>
 
-      {/* Session Status */}
-      {currentSession && (
-        <div className={`p-6 rounded-xl shadow-sm border-2 ${
-          currentSession.status === 'OPEN' 
-            ? 'bg-green-50 border-green-200' 
-            : 'bg-gray-50 border-gray-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div>
+      {/* Current Open Session Banner */}
+      {currentSession && currentSession.status === 'OPEN' && (
+        <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex-1">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Current Session: {new Date(currentSession.date).toLocaleDateString()}
+                Current Open Session: {new Date(currentSession.date).toLocaleDateString()}
               </h3>
-              <p className="text-sm text-gray-600">
-                Status: <span className={`font-semibold ${
-                  currentSession.status === 'OPEN' ? 'text-green-600' : 'text-gray-600'
-                }`}>
-                  {currentSession.status}
-                </span>
-              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                <div>
+                  <p className="text-xs text-gray-600">Opening Stock</p>
+                  <p className="text-xl font-bold text-gray-900">{currentSession.stats?.openingStockCount || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Incoming Stock</p>
+                  <p className="text-xl font-bold text-gray-900">{currentSession.stats?.incomingStockCount || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Sales</p>
+                  <p className="text-xl font-bold text-gray-900">{currentSession.stats?.salesCount || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Revenue</p>
+                  <p className="text-xl font-bold text-gray-900">
+                    KES {parseFloat(currentSession.stats?.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
             </div>
+            <button
+              onClick={() => handleViewSession(currentSession)}
+              className="bg-blue-900 text-white px-6 py-3 rounded-md hover:bg-[#1e88b5] transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"
+            >
+              View Stock Session
+            </button>
           </div>
         </div>
       )}
@@ -420,6 +531,7 @@ export default function StockManagementPage() {
           totalSessions={filteredSessions.length}
           onViewSession={handleViewSession}
           onRefresh={loadData}
+          allSessions={filteredSessions}
         />
       ) : (
         <CalendarView
@@ -447,124 +559,6 @@ export default function StockManagementPage() {
         />
       )}
 
-      {/* Current Session Tabs - Only show if current session is open and no sessionId param */}
-      {currentSession && currentSession.status === 'OPEN' && !sessionIdParam && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          {/* Date range filter - applies to overview table */}
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-                <input
-                  type="date"
-                  value={filters.dateFrom}
-                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-                <input
-                  type="date"
-                  value={filters.dateTo}
-                  onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                />
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const rows = filteredStockEntries.map((e) => ({
-                      product: e.product?.name || "N/A",
-                      type: e.type,
-                      quantity: e.quantity,
-                      unit: e.unit || "kg",
-                      date: e.recordedAt ? new Date(e.recordedAt).toLocaleString() : "",
-                    }));
-                    exportToExcel(
-                      rows,
-                      [
-                        { key: "product", label: "Product" },
-                        { key: "type", label: "Type" },
-                        { key: "quantity", label: "Quantity" },
-                        { key: "unit", label: "Unit" },
-                        { key: "date", label: "Date" },
-                      ],
-                      "stock-entries-export"
-                    );
-                    toast.success("Excel exported");
-                  }}
-                  className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm min-h-[44px] w-full"
-                >
-                  Export Excel
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="border-b border-gray-200">
-            <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'wastage', 'closing'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 sm:px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap ${
-                    activeTab === tab
-                      ? 'border-blue-900 text-blue-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  {tab === 'wastage' ? 'Wastage' : tab.charAt(0).toUpperCase() + tab.slice(1) + ' Stock'}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          <div className="p-6">
-            {activeTab === 'overview' && (
-              <StockOverview 
-                session={currentSession} 
-                products={products} 
-                stockEntries={filteredStockEntries}
-                onRefresh={loadData}
-              />
-            )}
-            {activeTab === 'opening' && (
-              <StockEntryForm 
-                session={currentSession} 
-                products={products} 
-                type="OPENING"
-                onSuccess={loadData}
-              />
-            )}
-            {activeTab === 'incoming' && (
-              <StockEntryForm 
-                session={currentSession} 
-                products={products}
-                suppliers={suppliers}
-                type="INCOMING"
-                onSuccess={loadData}
-              />
-            )}
-            {activeTab === 'wastage' && (
-              <StockEntryForm 
-                session={currentSession} 
-                products={products} 
-                type="WASTAGE"
-                onSuccess={loadData}
-              />
-            )}
-            {activeTab === 'closing' && (
-              <StockEntryForm 
-                session={currentSession} 
-                products={products} 
-                type="CLOSING"
-                onSuccess={loadData}
-              />
-            )}
-          </div>
-        </div>
-      )}
 
       {!currentSession && !sessionIdParam && (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
@@ -582,57 +576,145 @@ export default function StockManagementPage() {
 }
 
 // List View Component
-function ListView({ sessions, filters, setFilters, listPage, setListPage, listPageSize, setListPageSize, totalPages, totalSessions, onViewSession, onRefresh }) {
+function ListView({ sessions, filters, setFilters, listPage, setListPage, listPageSize, setListPageSize, totalPages, totalSessions, onViewSession, onRefresh, allSessions }) {
+  // Calculate date range aggregated metrics
+  const dateRangeMetrics = useMemo(() => {
+    const totalOpeningStock = allSessions.reduce((sum, s) => sum + (s.stats?.openingStockCount || 0), 0);
+    const totalIncomingStock = allSessions.reduce((sum, s) => sum + (s.stats?.incomingStockCount || 0), 0);
+    const totalSales = allSessions.reduce((sum, s) => sum + (s.stats?.salesCount || 0), 0);
+    const totalRevenue = allSessions.reduce((sum, s) => sum + parseFloat(s.stats?.totalRevenue || 0), 0);
+    return { totalOpeningStock, totalIncomingStock, totalSales, totalRevenue };
+  }, [allSessions]);
+
+  const handleClearFilters = () => {
+    setFilters({
+      dateFrom: defaultStart.toISOString().split("T")[0],
+      dateTo: defaultEnd.toISOString().split("T")[0],
+      status: '',
+      search: '',
+    });
+  };
+
+  const handleExport = () => {
+    const rows = allSessions.map((s) => ({
+      date: new Date(s.date).toLocaleDateString(),
+      openedBy: s.openedBy?.username || s.openedBy?.email || 'N/A',
+      status: s.status,
+      openingStock: s.stats?.openingStockCount || 0,
+      incomingStock: s.stats?.incomingStockCount || 0,
+      sales: s.stats?.salesCount || 0,
+      revenue: parseFloat(s.stats?.totalRevenue || 0),
+    }));
+    exportToExcel(
+      rows,
+      [
+        { key: "date", label: "Date" },
+        { key: "openedBy", label: "Opened By" },
+        { key: "status", label: "Status" },
+        { key: "openingStock", label: "Opening Stock" },
+        { key: "incomingStock", label: "Incoming Stock" },
+        { key: "sales", label: "Sales" },
+        { key: "revenue", label: "Revenue (KES)" },
+      ],
+      "stock-sessions-export"
+    );
+    toast.success("Excel exported");
+  };
+
+  const hasActiveFilters = filters.status || filters.search || 
+    filters.dateFrom !== defaultStart.toISOString().split("T")[0] ||
+    filters.dateTo !== defaultEnd.toISOString().split("T")[0];
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-      {/* Filters */}
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-            />
+    <div className="space-y-6">
+      {/* Date Range Metrics Overview */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Date Range Overview</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Total Opening Stock</p>
+            <p className="text-2xl font-bold text-gray-900">{dateRangeMetrics.totalOpeningStock} entries</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-            />
+          <div className="bg-green-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Total Incoming Stock</p>
+            <p className="text-2xl font-bold text-gray-900">{dateRangeMetrics.totalIncomingStock} entries</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-            >
-              <option value="">All</option>
-              <option value="OPEN">Open</option>
-              <option value="CLOSED">Closed</option>
-            </select>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Total Sales</p>
+            <p className="text-2xl font-bold text-gray-900">{dateRangeMetrics.totalSales}</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-            <input
-              type="text"
-              placeholder="Search by user..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-            />
+          <div className="bg-yellow-50 p-4 rounded-lg">
+            <p className="text-sm text-gray-600">Total Revenue</p>
+            <p className="text-2xl font-bold text-gray-900">KES {dateRangeMetrics.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        {/* Filters */}
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+              >
+                <option value="">All</option>
+                <option value="OPEN">Open</option>
+                <option value="CLOSED">Closed</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+              <input
+                type="text"
+                placeholder="Search by user..."
+                value={filters.search}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExport}
+              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
+            >
+              Export Excel
+            </button>
+            {hasActiveFilters && (
+              <button
+                onClick={handleClearFilters}
+                className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors text-sm min-h-[44px]"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -696,44 +778,45 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-700">Show</span>
-          <select
-            value={listPageSize}
-            onChange={(e) => {
-              setListPageSize(parseInt(e.target.value));
-              setListPage(1);
-            }}
-            className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-          </select>
-          <span className="text-sm text-gray-700">of {totalSessions} sessions</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setListPage(Math.max(1, listPage - 1))}
-            disabled={listPage === 1}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-h-[44px]"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-700">
-            Page {listPage} of {totalPages || 1}
-          </span>
-          <button
-            onClick={() => setListPage(Math.min(totalPages, listPage + 1))}
-            disabled={listPage >= totalPages}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-h-[44px]"
-          >
-            Next
-          </button>
+
+        {/* Pagination */}
+        <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-700">Show</span>
+            <select
+              value={listPageSize}
+              onChange={(e) => {
+                setListPageSize(parseInt(e.target.value));
+                setListPage(1);
+              }}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+            <span className="text-sm text-gray-700">of {totalSessions} sessions</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setListPage(Math.max(1, listPage - 1))}
+              disabled={listPage === 1}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-h-[44px]"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-700">
+              Page {listPage} of {totalPages || 1}
+            </span>
+            <button
+              onClick={() => setListPage(Math.min(totalPages, listPage + 1))}
+              disabled={listPage >= totalPages}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-h-[44px]"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -898,82 +981,140 @@ function SessionPopup({ session, onClose, onViewMore }) {
   );
 }
 
-// Stock Overview Component
-function StockOverview({ session, products, stockEntries, onRefresh }) {
-  const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
-  const incomingEntries = stockEntries.filter(e => e.type === 'INCOMING');
-  const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
-  const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
+// Stock Entries Table Component
+function StockEntriesTable({ stockEntries, canEdit = false, onEdit }) {
+  const handleDelete = async (entryId) => {
+    if (!confirm('Are you sure you want to delete this entry?')) return;
+    try {
+      await apiClient.stockEntries.delete(entryId);
+      toast.success('Entry deleted successfully');
+      if (onEdit) onEdit();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete entry');
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <p className="text-sm text-gray-600">Opening Stock</p>
-          <p className="text-2xl font-bold text-gray-900">{openingEntries.length} entries</p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-lg">
-          <p className="text-sm text-gray-600">Incoming Stock</p>
-          <p className="text-2xl font-bold text-gray-900">{incomingEntries.length} entries</p>
-        </div>
-        <div className="bg-yellow-50 p-4 rounded-lg">
-          <p className="text-sm text-gray-600">Closing Stock</p>
-          <p className="text-2xl font-bold text-gray-900">{closingEntries.length} entries</p>
-        </div>
-        <div className="bg-red-50 p-4 rounded-lg">
-          <p className="text-sm text-gray-600">Wastage</p>
-          <p className="text-2xl font-bold text-gray-900">{wastageEntries.length} entries</p>
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Entries</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {stockEntries.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-4 sm:px-6 py-4 text-center text-gray-500">
-                    No stock entries yet
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+            {canEdit && (
+              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            )}
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {stockEntries.length === 0 ? (
+            <tr>
+              <td colSpan={canEdit ? 5 : 4} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                No stock entries yet
+              </td>
+            </tr>
+          ) : (
+            stockEntries.map((entry) => (
+              <tr key={entry.id}>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {entry.product?.name || 'N/A'}
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                    entry.type === 'OPENING' ? 'bg-blue-100 text-blue-800' :
+                    entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
+                    entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {entry.type}
+                  </span>
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {entry.quantity} {entry.unit}
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(entry.recordedAt).toLocaleString()}
+                </td>
+                {canEdit && (
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      className="text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Delete
+                    </button>
                   </td>
-                </tr>
-              ) : (
-                stockEntries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {entry.product?.name || 'N/A'}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        entry.type === 'OPENING' ? 'bg-blue-100 text-blue-800' :
-                        entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
-                        entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {entry.type}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {entry.quantity} {entry.unit}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(entry.recordedAt).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                )}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Sales Table Component
+function SalesTable({ sales }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale Number</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {sales.length === 0 ? (
+            <tr>
+              <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                No sales found for this session
+              </td>
+            </tr>
+          ) : (
+            sales.map((sale) => (
+              <tr key={sale.id} className="hover:bg-gray-50">
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {sale.saleNumber}
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(sale.soldAt).toLocaleString()}
+                </td>
+                <td className="px-4 sm:px-6 py-4 text-sm text-gray-900">
+                  {sale.items?.length || 0} item(s)
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                  KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                    sale.paymentStatus === 'PAID' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {sale.paymentStatus}
+                  </span>
+                </td>
+                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                  <button
+                    onClick={() => window.location.href = `/dashboard/sales/${sale.id}`}
+                    className="text-blue-900 hover:text-blue-700 font-medium"
+                  >
+                    View
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
