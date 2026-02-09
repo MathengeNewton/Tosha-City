@@ -567,17 +567,6 @@ export default function StockManagementPage() {
       )}
 
 
-      {!currentSession && !sessionIdParam && (
-        <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
-          <p className="text-gray-600 mb-4">No active stock session. Open a session to start managing stock.</p>
-          <button
-            onClick={handleOpenSession}
-            className="bg-blue-900 text-white px-6 py-3 rounded-md hover:bg-[#1e88b5] transition-colors min-h-[44px]"
-          >
-            Open Stock Session
-          </button>
-        </div>
-      )}
     </div>
   );
 }
