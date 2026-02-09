@@ -71,7 +71,7 @@ export default function NewSalePage() {
   };
 
   const addItem = () => {
-    setSaleItems([...saleItems, { productId: '', quantity: '', price: '' }]);
+    setSaleItems([...saleItems, { productId: '', amount: '', price: '', quantity: '' }]);
   };
 
   const removeItem = (index) => {
@@ -80,14 +80,36 @@ export default function NewSalePage() {
 
   const updateItem = (index, field, value) => {
     const updated = [...saleItems];
-    updated[index] = { ...updated[index], [field]: value };
+    const item = updated[index];
     
-    // Auto-fill price when product is selected
     if (field === 'productId') {
       const product = products.find(p => p.id === parseInt(value));
       if (product) {
-        updated[index].price = product.defaultPrice || product.pricePerUnit || 0;
+        item.productId = value;
+        item.price = product.defaultPrice || product.pricePerUnit || 0;
+        // Recalculate quantity if amount exists
+        if (item.amount) {
+          const amount = parseFloat(item.amount || 0);
+          const unitPrice = parseFloat(item.price || 0);
+          item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+        }
       }
+    } else if (field === 'amount') {
+      item.amount = value;
+      // Auto-calculate quantity from amount and unit price
+      const amount = parseFloat(value || 0);
+      const unitPrice = parseFloat(item.price || 0);
+      item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+    } else if (field === 'price') {
+      item.price = value;
+      // Recalculate quantity if amount exists
+      if (item.amount) {
+        const amount = parseFloat(item.amount || 0);
+        const unitPrice = parseFloat(value || 0);
+        item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+      }
+    } else {
+      item[field] = value;
     }
     
     setSaleItems(updated);
@@ -95,9 +117,8 @@ export default function NewSalePage() {
 
   const calculateTotal = () => {
     return saleItems.reduce((sum, item) => {
-      const quantity = parseFloat(item.quantity || 0);
-      const price = parseFloat(item.price || 0);
-      return sum + (quantity * price);
+      const amount = parseFloat(item.amount || 0);
+      return sum + amount;
     }, 0);
   };
 
@@ -111,8 +132,13 @@ export default function NewSalePage() {
 
     // Validate items
     for (const item of saleItems) {
-      if (!item.productId || !item.quantity || !item.price) {
+      if (!item.productId || !item.amount || !item.price || !item.quantity) {
         toast.error("Please fill in all fields for all items");
+        return;
+      }
+      const quantity = parseFloat(item.quantity);
+      if (quantity <= 0) {
+        toast.error("Invalid quantity calculated. Please check the amount and price.");
         return;
       }
     }
@@ -126,11 +152,17 @@ export default function NewSalePage() {
 
       const saleData = {
         sessionId: currentSession.id,
-        items: saleItems.map(item => ({
-          productId: parseInt(item.productId),
-          quantity: parseFloat(item.quantity),
-          unitPrice: parseFloat(item.price), // Backend expects unitPrice, not pricePerUnit
-        })),
+        items: saleItems.map(item => {
+          const quantity = parseFloat(item.quantity || 0);
+          const unitPrice = parseFloat(item.price || 0);
+          // Ensure quantity is calculated correctly from amount
+          const calculatedQuantity = unitPrice > 0 ? (parseFloat(item.amount || 0) / unitPrice) : quantity;
+          return {
+            productId: parseInt(item.productId),
+            quantity: calculatedQuantity,
+            unitPrice: unitPrice,
+          };
+        }),
         paymentMethod: paymentMethod,
         customerId: paymentMethod === 'CREDIT' && customerId ? parseInt(customerId) : undefined,
       };
@@ -210,13 +242,13 @@ export default function NewSalePage() {
 
                     <div className="sm:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Quantity *
+                        Amount (KES) *
                       </label>
                       <input
                         type="number"
                         step="0.01"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                        value={item.amount}
+                        onChange={(e) => updateItem(index, 'amount', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                         required
                       />
@@ -224,7 +256,7 @@ export default function NewSalePage() {
 
                     <div className="sm:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Price per Unit *
+                        Price per Unit (KES) *
                       </label>
                       <input
                         type="number"
@@ -233,6 +265,19 @@ export default function NewSalePage() {
                         onChange={(e) => updateItem(index, 'price', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                         required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Quantity (kg)
+                      </label>
+                      <input
+                        type="text"
+                        value={item.quantity || ''}
+                        readOnly
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-base min-h-[44px] cursor-not-allowed"
+                        placeholder="Auto-calculated"
                       />
                     </div>
 
@@ -248,7 +293,7 @@ export default function NewSalePage() {
 
                     <div className="sm:col-span-1 flex items-end">
                       <p className="text-sm font-semibold text-gray-900">
-                        KES {((parseFloat(item.quantity || 0) * parseFloat(item.price || 0)).toFixed(2))}
+                        KES {parseFloat(item.amount || 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
