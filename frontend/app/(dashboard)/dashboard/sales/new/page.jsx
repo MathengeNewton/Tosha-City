@@ -86,6 +86,7 @@ export default function NewSalePage() {
       const product = products.find(p => p.id === parseInt(value));
       if (product) {
         item.productId = value;
+        // Auto-fill price from product's defaultPrice
         item.price = product.defaultPrice || product.pricePerUnit || 0;
         // Recalculate quantity if amount exists
         if (item.amount) {
@@ -101,6 +102,7 @@ export default function NewSalePage() {
       const unitPrice = parseFloat(item.price || 0);
       item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
     } else if (field === 'price') {
+      // Allow manual override of price if needed
       item.price = value;
       // Recalculate quantity if amount exists
       if (item.amount) {
@@ -263,8 +265,9 @@ export default function NewSalePage() {
                         step="0.01"
                         value={item.price}
                         onChange={(e) => updateItem(index, 'price', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px] bg-gray-50"
+                        placeholder="Auto-filled from product"
+                        title="Auto-filled from product default price. You can override if needed."
                       />
                     </div>
 
