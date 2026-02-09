@@ -9,6 +9,7 @@ export default function CashierDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
+  const [currentSessionSales, setCurrentSessionSales] = useState([]);
   const [stats, setStats] = useState({
     todaySales: 0,
     todayRevenue: 0,
@@ -27,13 +28,21 @@ export default function CashierDashboard() {
       // Get current session
       const sessionRes = await apiClient.stockSessions.getCurrent();
       const session = sessionRes.data;
-      setCurrentSession(session);
-
+      
       if (session) {
-        // Get today's sales
-        const today = new Date().toISOString().split('T')[0];
-        const salesRes = await apiClient.sales.getAll({ sessionId: session.id, date: today });
+        // Fetch stats for current session
+        const allSessionsRes = await apiClient.stockSessions.getAll({
+          dateFrom: new Date(session.date).toISOString().split("T")[0],
+          dateTo: new Date(session.date).toISOString().split("T")[0],
+        });
+        const sessionsWithStats = allSessionsRes.data || [];
+        const sessionWithStats = sessionsWithStats.find(s => s.id === session.id);
+        setCurrentSession(sessionWithStats || session);
+        
+        // Get all sales for current session
+        const salesRes = await apiClient.sales.getAll({ sessionId: session.id });
         const sales = salesRes.data || [];
+        setCurrentSessionSales(sales);
         
         const paidSales = sales.filter(s => s.paymentStatus === 'PAID');
         const unpaidSales = sales.filter(s => s.paymentStatus === 'PENDING');
@@ -44,6 +53,9 @@ export default function CashierDashboard() {
           unpaidSales: unpaidSales.length,
           activeProducts: 0, // Will be loaded separately
         });
+      } else {
+        setCurrentSession(null);
+        setCurrentSessionSales([]);
       }
 
       // Get active products count
@@ -99,62 +111,35 @@ export default function CashierDashboard() {
         </div>
       </div>
 
-      {/* Session Status Card */}
-      <div className={`p-6 rounded-xl shadow-sm border-2 ${
-        currentSession 
-          ? currentSession.status === 'OPEN' 
-            ? 'bg-green-50 border-green-200' 
-            : 'bg-gray-50 border-gray-200'
-          : 'bg-yellow-50 border-yellow-200'
-      }`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Stock Session Status
-            </h3>
-            {currentSession ? (
-              <div className="space-y-1">
-                <p className="text-sm text-gray-600">
-                  Date: {new Date(currentSession.sessionDate).toLocaleDateString()}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Status: <span className={`font-semibold ${
-                    currentSession.status === 'OPEN' ? 'text-green-600' : 'text-gray-600'
-                  }`}>
-                    {currentSession.status}
-                  </span>
-                </p>
-                {currentSession.status === 'OPEN' && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Session opened by: {currentSession.openedBy?.name || 'N/A'}
-                  </p>
-                )}
-              </div>
-            ) : (
+      {/* Current Open Session Banner */}
+      {currentSession && currentSession.status === 'OPEN' && (
+        <CurrentSessionBanner 
+          session={currentSession} 
+          sales={currentSessionSales}
+          onViewSession={() => router.push(`/dashboard/stock?sessionId=${currentSession.id}`)}
+        />
+      )}
+
+      {!currentSession && (
+        <div className="bg-yellow-50 border-2 border-yellow-200 p-6 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No Active Session
+              </h3>
               <p className="text-sm text-gray-600">
-                No active session. Open a stock session to start selling.
+                Open a stock session to start selling.
               </p>
-            )}
-          </div>
-          <div className="text-right">
-            {currentSession && currentSession.status === 'OPEN' ? (
-              <Link
-                href="/dashboard/stock"
-                className="inline-block bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
-              >
-                Manage Stock
-              </Link>
-            ) : (
-              <button
-                onClick={handleOpenSession}
-                className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors text-sm"
-              >
-                Open Session
-              </button>
-            )}
+            </div>
+            <button
+              onClick={handleOpenSession}
+              className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors text-sm"
+            >
+              Open Session
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -253,3 +238,57 @@ export default function CashierDashboard() {
   );
 }
 
+// Current Session Banner Component (reused from stock page)
+function CurrentSessionBanner({ session, sales, onViewSession }) {
+  // Calculate simple sales statistics
+  const salesStats = useMemo(() => {
+    const totalSales = sales.length;
+    const paidSales = sales.filter(s => s.paymentStatus === 'PAID');
+    const totalRevenue = paidSales.reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), 0);
+    
+    return {
+      totalSales,
+      totalRevenue,
+    };
+  }, [sales]);
+
+  return (
+    <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Current Open Session: {new Date(session.date).toLocaleDateString()}
+          </h3>
+          
+          {/* Key Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
+              <p className="text-xs text-gray-600 mb-1">Opening Stock</p>
+              <p className="text-xl font-bold text-gray-900">{session.stats?.openingStockCount || 0}</p>
+            </div>
+            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
+              <p className="text-xs text-gray-600 mb-1">Incoming Stock</p>
+              <p className="text-xl font-bold text-gray-900">{session.stats?.incomingStockCount || 0}</p>
+            </div>
+            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
+              <p className="text-xs text-gray-600 mb-1">Total Sales</p>
+              <p className="text-xl font-bold text-gray-900">{salesStats.totalSales}</p>
+            </div>
+            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
+              <p className="text-xs text-gray-600 mb-1">Total Revenue</p>
+              <p className="text-xl font-bold text-gray-900">
+                KES {salesStats.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={onViewSession}
+          className="bg-blue-900 text-white px-6 py-3 rounded-md hover:bg-[#1e88b5] transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap w-full sm:w-auto"
+        >
+          View Stock Session
+        </button>
+      </div>
+    </div>
+  );
+}
