@@ -59,7 +59,7 @@ export class ReportsService {
       .filter((s) => s.paymentStatus === PaymentStatus.PENDING)
       .reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
 
-    // Sales by product
+    // Sales by product with price range breakdown
     const salesByProduct = {};
     sales.forEach((sale) => {
       sale.items?.forEach((item) => {
@@ -69,11 +69,42 @@ export class ReportsService {
             productId: item.product?.id,
             quantity: 0,
             revenue: 0,
+            priceRanges: {},
           };
         }
-        salesByProduct[productName].quantity += item.quantity;
+        const itemQuantity = Number(item.quantity || 0);
+        const itemTotalPrice = itemQuantity * Number(item.unitPrice || 0);
+        
+        salesByProduct[productName].quantity += itemQuantity;
         if (sale.paymentStatus === PaymentStatus.PAID) {
-          salesByProduct[productName].revenue += item.quantity * Number(item.unitPrice || 0);
+          salesByProduct[productName].revenue += itemTotalPrice;
+        }
+
+        // Group by price ranges (200 KES increments: 1-200, 201-400, 401-600, etc.)
+        let rangeKey;
+        if (itemTotalPrice <= 0) {
+          rangeKey = '0';
+        } else if (itemTotalPrice <= 200) {
+          rangeKey = '1-200';
+        } else {
+          // Calculate which 200-range bucket: 201-400, 401-600, etc.
+          const rangeIndex = Math.floor((itemTotalPrice - 1) / 200);
+          const rangeStart = rangeIndex * 200 + 1;
+          const rangeEnd = (rangeIndex + 1) * 200;
+          rangeKey = `${rangeStart}-${rangeEnd}`;
+        }
+        
+        if (!salesByProduct[productName].priceRanges[rangeKey]) {
+          salesByProduct[productName].priceRanges[rangeKey] = {
+            count: 0,
+            quantity: 0,
+            revenue: 0,
+          };
+        }
+        salesByProduct[productName].priceRanges[rangeKey].count += 1;
+        salesByProduct[productName].priceRanges[rangeKey].quantity += itemQuantity;
+        if (sale.paymentStatus === PaymentStatus.PAID) {
+          salesByProduct[productName].priceRanges[rangeKey].revenue += itemTotalPrice;
         }
       });
     });
