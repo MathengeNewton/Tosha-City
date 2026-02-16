@@ -11,7 +11,7 @@ import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { ProductsService } from '../products/products.service';
 import { StockEntriesService } from '../stock-entries/stock-entries.service';
 import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
-import { StockEntryType } from '../stock-entries/entities/stock-entry.entity';
+import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { CustomersService } from '../customers/customers.service';
 
 @Injectable()
@@ -23,6 +23,8 @@ export class SalesService {
     private saleItemRepository: Repository<SaleItem>,
     @InjectRepository(SalePayment)
     private paymentRepository: Repository<SalePayment>,
+    @InjectRepository(StockEntry)
+    private stockEntryRepository: Repository<StockEntry>,
     private dataSource: DataSource,
     private stockSessionsService: StockSessionsService,
     private productsService: ProductsService,
@@ -60,6 +62,7 @@ export class SalesService {
     // Calculate totals and validate stock
     let totalAmount = 0;
     const itemsToCreate: Partial<SaleItem>[] = [];
+    const byproductStockEntries: Array<{ productId: number; quantity: number; unit: string }> = [];
 
     for (const itemDto of createSaleDto.items) {
       const product = await this.productsService.findOne(itemDto.productId);
@@ -67,11 +70,17 @@ export class SalesService {
       const itemTotal = itemDto.quantity * unitPrice;
       totalAmount += itemTotal;
 
-      // Check available stock
-      const availableStock = await this.getAvailableStock(createSaleDto.sessionId, itemDto.productId);
+      // If this is a byproduct, check parent product stock instead
+      const stockProductId = product.parentProductId || itemDto.productId;
+      const stockProduct = product.parentProductId 
+        ? await this.productsService.findOne(product.parentProductId)
+        : product;
+
+      // Check available stock (from parent if byproduct)
+      const availableStock = await this.getAvailableStock(createSaleDto.sessionId, stockProductId);
       if (availableStock < itemDto.quantity) {
         throw new BadRequestException(
-          `Insufficient stock for ${product.name}. Available: ${availableStock} ${product.unit}, Requested: ${itemDto.quantity} ${product.unit}`,
+          `Insufficient stock for ${product.name}. Available: ${availableStock} ${stockProduct.unit}, Requested: ${itemDto.quantity} ${stockProduct.unit}`,
         );
       }
 
@@ -81,6 +90,15 @@ export class SalesService {
         unitPrice,
         totalPrice: itemTotal,
       });
+
+      // If this is a byproduct, record it for stock deduction
+      if (product.parentProductId) {
+        byproductStockEntries.push({
+          productId: product.parentProductId,
+          quantity: itemDto.quantity,
+          unit: stockProduct.unit,
+        });
+      }
     }
 
     // Retry logic for handling race conditions with sale number generation
@@ -116,6 +134,20 @@ export class SalesService {
             saleId: savedSale.id,
           });
           await queryRunner.manager.save(SaleItem, saleItem);
+        }
+
+        // Create stock entries for byproducts (deduct from parent product)
+        for (const byproductEntry of byproductStockEntries) {
+          const stockEntry = queryRunner.manager.create(StockEntry, {
+            sessionId: createSaleDto.sessionId,
+            productId: byproductEntry.productId,
+            type: StockEntryType.WASTAGE,
+            quantity: byproductEntry.quantity,
+            unit: byproductEntry.unit,
+            notes: 'Auto-deducted from byproduct sale',
+            recordedById: userId,
+          });
+          await queryRunner.manager.save(StockEntry, stockEntry);
         }
 
         await queryRunner.commitTransaction();

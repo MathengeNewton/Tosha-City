@@ -42,6 +42,7 @@ export default function ProductsPage() {
     pricePerUnit: '',
     description: '',
     isActive: true,
+    parentProductId: '',
   });
 
   const filteredProducts = useMemo(
@@ -80,6 +81,7 @@ export default function ProductsPage() {
         pricePerUnit: (product.defaultPrice || product.pricePerUnit || 0).toString(),
         description: product.description || '',
         isActive: product.isActive,
+        parentProductId: product.parentProductId ? product.parentProductId.toString() : '',
       });
     } else {
       setEditingProduct(null);
@@ -89,6 +91,7 @@ export default function ProductsPage() {
         pricePerUnit: '',
         description: '',
         isActive: true,
+        parentProductId: '',
       });
     }
     setShowModal(true);
@@ -123,6 +126,7 @@ export default function ProductsPage() {
         unit: formData.unit.trim(),
         defaultPrice: price,
         isActive: formData.isActive,
+        parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
       };
 
       console.log("Sending product data:", data); // Debug log
@@ -377,6 +381,27 @@ export default function ProductsPage() {
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Parent Product (for byproducts)
+                </label>
+                <select
+                  value={formData.parentProductId}
+                  onChange={(e) => setFormData({ ...formData, parentProductId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                >
+                  <option value="">None (Main Product)</option>
+                  {products.filter(p => p.isActive && (!editingProduct || p.id !== editingProduct.id)).map(product => (
+                    <option key={product.id} value={product.id.toString()}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select a parent product if this is a byproduct (e.g., select "Beef" for "Minced Meat")
+                </p>
               </div>
 
               <div>
