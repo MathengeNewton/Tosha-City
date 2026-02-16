@@ -3,6 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -32,6 +34,15 @@ export class Product {
   @Column({ default: true })
   isActive: boolean;
 
+  @ApiProperty({ description: 'Parent product ID for byproducts', example: 1, required: false })
+  @Column({ nullable: true })
+  parentProductId: number | null;
+
+  @ApiProperty({ description: 'Parent product (if this is a byproduct)', required: false })
+  @ManyToOne(() => Product, (product) => product.byproducts, { nullable: true })
+  @JoinColumn({ name: 'parentProductId' })
+  parentProduct: Product | null;
+
   @ApiProperty({ description: 'Date created' })
   @CreateDateColumn()
   createdAt: Date;
@@ -46,5 +57,8 @@ export class Product {
 
   @OneToMany(() => SaleItem, (item) => item.product)
   saleItems: SaleItem[];
+
+  @OneToMany(() => Product, (product) => product.parentProduct)
+  byproducts: Product[];
 }
 

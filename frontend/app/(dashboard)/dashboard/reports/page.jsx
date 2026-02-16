@@ -279,10 +279,10 @@ function StockReportView({ data }) {
               {Object.entries(data.stockByProduct || {}).map(([product, stats]) => (
                 <tr key={product}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.opening?.toFixed(2) || '0.00'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.incoming?.toFixed(2) || '0.00'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{stats.closing?.toFixed(2) || '0.00'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">{stats.wastage?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parseFloat(stats.opening || 0).toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parseFloat(stats.incoming || 0).toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parseFloat(stats.closing || 0).toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">{parseFloat(stats.wastage || 0).toFixed(2)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                     KES {parseFloat(stats.salesByPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                   </td>

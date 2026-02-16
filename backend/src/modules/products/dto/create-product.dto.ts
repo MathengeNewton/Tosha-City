@@ -21,5 +21,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiProperty({ description: 'Parent product ID for byproducts (e.g., Beef for Minced Meat)', example: 1, required: false })
+  @IsOptional()
+  @IsNumber()
+  parentProductId?: number;
 }
 
