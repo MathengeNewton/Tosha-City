@@ -311,6 +311,22 @@ export default function StockManagementPage() {
     const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
     const incomingEntries = stockEntries.filter(e => e.type === 'INCOMING');
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
+    const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
+
+    const handleCloseSession = async () => {
+      if (!confirm("Are you sure you want to close this session? Make sure all sales are paid and closing stock is recorded.")) {
+        return;
+      }
+
+      try {
+        await apiClient.stockSessions.close(selectedSession.id);
+        toast.success("Stock session closed successfully");
+        loadSessionDetails(selectedSession.id);
+        loadData();
+      } catch (error) {
+        toast.error(error.response?.data?.message || "Failed to close session");
+      }
+    };
 
     return (
       <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
@@ -329,6 +345,14 @@ export default function StockManagementPage() {
               {new Date(selectedSession.date).toLocaleDateString()}
             </p>
           </div>
+          {selectedSession.status === 'OPEN' && isAdmin && (
+            <button
+              onClick={handleCloseSession}
+              className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"
+            >
+              Close Session
+            </button>
+          )}
         </div>
 
         {/* Session Information Card */}
@@ -371,7 +395,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'closing', 'sales', 'production'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'sales', 'production'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -385,6 +409,7 @@ export default function StockManagementPage() {
                    tab === 'opening' ? 'Opening Stock' : 
                    tab === 'incoming' ? 'Incoming Stock' :
                    tab === 'closing' ? 'Closing Stock' :
+                   tab === 'wastages' ? 'Wastages' :
                    tab === 'sales' ? 'Sales' :
                    'Production'}
                 </button>
@@ -443,6 +468,21 @@ export default function StockManagementPage() {
                 )}
                 <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
                   <StockEntriesTable stockEntries={closingEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                </div>
+              </div>
+            )}
+            {activeTab === 'wastages' && (
+              <div>
+                {isAdmin && selectedSession.status === 'OPEN' && (
+                  <StockEntryForm 
+                    session={selectedSession} 
+                    products={products} 
+                    type="WASTAGE"
+                    onSuccess={() => loadSessionDetails(selectedSession.id)}
+                  />
+                )}
+                <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
                 </div>
               </div>
             )}
@@ -1123,6 +1163,83 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
       }
     });
 
+    // Product breakdown: quantities sold and remaining per product
+    const productBreakdown = {};
+    
+    // Get all unique products from stock entries
+    const allProducts = new Set();
+    stockEntries.forEach(entry => {
+      if (entry.product) {
+        allProducts.add(entry.product.id);
+      }
+    });
+    sales.forEach(sale => {
+      sale.items?.forEach(item => {
+        if (item.product) {
+          allProducts.add(item.product.id);
+        }
+      });
+    });
+
+    // Calculate for each product
+    allProducts.forEach(productId => {
+      // Find product name
+      let productName = 'Unknown';
+      const entryWithProduct = stockEntries.find(e => e.product?.id === productId);
+      if (entryWithProduct) {
+        productName = entryWithProduct.product.name;
+      } else {
+        sales.forEach(sale => {
+          sale.items?.forEach(item => {
+            if (item.product?.id === productId) {
+              productName = item.product.name;
+            }
+          });
+        });
+      }
+
+      // Calculate opening stock
+      const opening = openingEntries
+        .filter(e => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+
+      // Calculate incoming stock
+      const incoming = incomingEntries
+        .filter(e => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+
+      // Calculate total available
+      const totalAvailable = opening + incoming;
+
+      // Calculate sold quantity
+      let sold = 0;
+      sales.forEach(sale => {
+        sale.items?.forEach(item => {
+          if (item.product?.id === productId) {
+            sold += parseFloat(item.quantity || 0);
+          }
+        });
+      });
+
+      // Calculate wastage
+      const wastage = wastageEntries
+        .filter(e => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+
+      // Calculate remaining
+      const remaining = totalAvailable - sold - wastage;
+
+      productBreakdown[productId] = {
+        name: productName,
+        opening,
+        incoming,
+        totalAvailable,
+        sold,
+        wastage,
+        remaining,
+      };
+    });
+
     return {
       stock: {
         opening: { entries: openingEntries.length, quantity: totalOpeningQty },
@@ -1141,6 +1258,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
       },
       products: topProducts,
       paymentMethods,
+      productBreakdown: Object.values(productBreakdown),
     };
   }, [stockEntries, sales]);
 
@@ -1216,6 +1334,43 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
           </div>
         </div>
       </div>
+
+      {/* Product Breakdown: Quantities Sold and Remaining */}
+      {analytics.productBreakdown.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h4 className="text-sm font-semibold text-gray-900 mb-3">Product Breakdown: Quantities Sold and Remaining</h4>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opening (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Incoming (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Available (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sold (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wastage (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (kg)</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {analytics.productBreakdown.map((product, idx) => (
+                  <tr key={idx} className={product.remaining < 0 ? 'bg-red-50' : ''}>
+                    <td className="px-4 py-2 text-sm font-medium text-gray-900">{product.name}</td>
+                    <td className="px-4 py-2 text-sm text-gray-600">{product.opening.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-gray-600">{product.incoming.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">{product.totalAvailable.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-gray-600">{product.sold.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
+                    <td className={`px-4 py-2 text-sm font-semibold ${product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                      {product.remaining.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Sales by Product */}
       {analytics.products.length > 0 ? (
