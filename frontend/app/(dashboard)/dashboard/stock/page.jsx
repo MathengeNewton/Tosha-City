@@ -1335,74 +1335,89 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
         </div>
       </div>
 
-      {/* Detailed Sales Breakdown by Product */}
-      {sales.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Detailed Sales Breakdown (Kgs Sold by Product)</h4>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sale #</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {sales.flatMap(sale => 
-                  sale.items?.map((item, itemIdx) => (
-                    <tr key={`${sale.id}-${itemIdx}`}>
-                      <td className="px-4 py-2 text-sm text-gray-900">{sale.saleNumber}</td>
+      {/* Aggregated Sales Breakdown by Product */}
+      {sales.length > 0 && (() => {
+        // Aggregate sales by product
+        const aggregatedByProduct = {};
+        sales.forEach(sale => {
+          sale.items?.forEach(item => {
+            const productName = item.product?.name || 'N/A';
+            if (!aggregatedByProduct[productName]) {
+              aggregatedByProduct[productName] = {
+                name: productName,
+                totalQuantity: 0,
+                totalRevenue: 0,
+                salesCount: 0,
+              };
+            }
+            aggregatedByProduct[productName].totalQuantity += parseFloat(item.quantity || 0);
+            aggregatedByProduct[productName].totalRevenue += parseFloat(item.totalPrice || 0);
+            aggregatedByProduct[productName].salesCount += 1;
+          });
+        });
+
+        const aggregatedProducts = Object.values(aggregatedByProduct)
+          .sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+        return (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Sales Breakdown by Product (Aggregated)</h4>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Quantity (kg)</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Sales (KES)</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sales Count</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Avg Price/kg</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {aggregatedProducts.map((product, idx) => (
+                    <tr key={idx}>
+                      <td className="px-4 py-2 text-sm font-medium text-gray-900">{product.name}</td>
                       <td className="px-4 py-2 text-sm text-gray-600">
-                        {new Date(sale.soldAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-2 text-sm font-medium text-gray-900">
-                        {item.product?.name || 'N/A'}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {parseFloat(item.quantity || 0).toFixed(2)} kg
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        KES {parseFloat(item.unitPrice || 0).toFixed(2)}
+                        {product.totalQuantity.toFixed(2)} kg
                       </td>
                       <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                        KES {parseFloat(item.totalPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                        KES {product.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-4 py-2 text-sm">
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                          sale.paymentStatus === 'PAID' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {sale.paymentStatus}
-                        </span>
+                      <td className="px-4 py-2 text-sm text-gray-600">{product.salesCount}</td>
+                      <td className="px-4 py-2 text-sm text-gray-600">
+                        KES {product.totalQuantity > 0 
+                          ? (product.totalRevenue / product.totalQuantity).toFixed(2)
+                          : '0.00'}
                       </td>
                     </tr>
-                  )) || []
-                )}
-              </tbody>
-              <tfoot className="bg-gray-50">
-                <tr>
-                  <td colSpan="3" className="px-4 py-2 text-sm font-semibold text-gray-900 text-right">
-                    Total:
-                  </td>
-                  <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                    {analytics.sales.totalQuantity.toFixed(2)} kg
-                  </td>
-                  <td colSpan="2" className="px-4 py-2 text-sm font-semibold text-gray-900">
-                    KES {analytics.sales.totalRevenueAll.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50">
+                  <tr>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900 text-right">
+                      Total:
+                    </td>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
+                      {analytics.sales.totalQuantity.toFixed(2)} kg
+                    </td>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
+                      KES {analytics.sales.totalRevenueAll.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
+                      {analytics.sales.total}
+                    </td>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
+                      KES {analytics.sales.totalQuantity > 0 
+                        ? (analytics.sales.totalRevenueAll / analytics.sales.totalQuantity).toFixed(2)
+                        : '0.00'}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Product Breakdown: Quantities Sold and Remaining */}
       {analytics.productBreakdown.length > 0 && (
