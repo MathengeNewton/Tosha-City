@@ -1456,44 +1456,6 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
         </div>
       )}
 
-      {/* Sales by Product */}
-      {analytics.products.length > 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Sales by Product</h4>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Avg Price/kg</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sales Count</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {analytics.products.map((product, idx) => (
-                  <tr key={idx}>
-                    <td className="px-4 py-2 text-sm font-medium text-gray-900">{product.name}</td>
-                    <td className="px-4 py-2 text-sm text-gray-600">{product.quantity.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                      KES {product.revenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-600">
-                      KES {product.avgPrice.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-600">{product.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <p className="text-gray-600">No sales recorded for this session yet</p>
-        </div>
-      )}
 
       {/* Payment Methods */}
       {Object.keys(analytics.paymentMethods).length > 0 && (
