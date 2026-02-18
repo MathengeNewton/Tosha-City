@@ -5,6 +5,7 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
+import CurrentSessionBanner from "../../components/CurrentSessionBanner";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -894,12 +895,15 @@ function CalendarView({ weekDays, weekSessions, getSessionForDay, calendarWeek, 
         {weekDays.map((day, idx) => {
           const session = getSessionForDay(day);
           const isToday = day.toDateString() === new Date().toDateString();
+          const opening = session?.stats?.openingStockCount ?? 0;
+          const salesCount = session?.stats?.salesCount ?? 0;
+          const revenue = parseFloat(session?.stats?.totalRevenue || 0);
           
           return (
             <div
               key={idx}
               onClick={() => session && onDayClick(session)}
-              className={`min-h-[80px] sm:min-h-[100px] p-2 border rounded-lg cursor-pointer transition-colors ${
+              className={`min-h-[80px] sm:min-h-[110px] p-2 border rounded-lg cursor-pointer transition-colors ${
                 session
                   ? session.status === 'OPEN'
                     ? 'bg-green-50 border-green-300 hover:bg-green-100'
@@ -911,11 +915,15 @@ function CalendarView({ weekDays, weekSessions, getSessionForDay, calendarWeek, 
                 {day.getDate()}
               </div>
               {session && (
-                <div className="text-xs">
-                  <div className={`inline-block px-2 py-1 rounded ${
+                <div className="text-xs space-y-1">
+                  <div className={`inline-block px-2 py-0.5 rounded ${
                     session.status === 'OPEN' ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-800'
                   }`}>
                     {session.status}
+                  </div>
+                  <div className="text-gray-600 leading-tight">
+                    <div>Opening: {opening}</div>
+                    <div>Sales: {salesCount} · KES {revenue.toLocaleString('en-KE', { maximumFractionDigits: 0 })}</div>
                   </div>
                 </div>
               )}
@@ -1474,61 +1482,6 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Current Session Banner Component
-function CurrentSessionBanner({ session, sales, onViewSession }) {
-  // Calculate simple sales statistics
-  const salesStats = useMemo(() => {
-    const totalSales = sales.length;
-    const paidSales = sales.filter(s => s.paymentStatus === 'PAID');
-    const totalRevenue = paidSales.reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), 0);
-    
-    return {
-      totalSales,
-      totalRevenue,
-    };
-  }, [sales]);
-
-  return (
-    <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Current Open Session: {new Date(session.date).toLocaleDateString()}
-          </h3>
-          
-          {/* Key Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Opening Stock</p>
-              <p className="text-xl font-bold text-gray-900">{session.stats?.openingStockCount || 0}</p>
-            </div>
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Incoming Stock</p>
-              <p className="text-xl font-bold text-gray-900">{session.stats?.incomingStockCount || 0}</p>
-            </div>
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Total Sales</p>
-              <p className="text-xl font-bold text-gray-900">{salesStats.totalSales}</p>
-            </div>
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Total Revenue</p>
-              <p className="text-xl font-bold text-gray-900">
-                KES {salesStats.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={onViewSession}
-          className="bg-blue-900 text-white px-6 py-3 rounded-md hover:bg-[#1e88b5] transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap w-full sm:w-auto"
-        >
-          View Stock Session
-        </button>
-      </div>
     </div>
   );
 }
