@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../lib/api";
 import { toast } from "react-toastify";
 import Link from "next/link";
+import CurrentSessionBanner from "../components/CurrentSessionBanner";
 
 export default function CashierDashboard() {
   const router = useRouter();
@@ -233,61 +234,6 @@ export default function CashierDashboard() {
           <h3 className="font-semibold text-gray-900 mb-2">View Sales</h3>
           <p className="text-sm text-gray-600">View all sales and manage payments</p>
         </Link>
-      </div>
-    </div>
-  );
-}
-
-// Current Session Banner Component (reused from stock page)
-function CurrentSessionBanner({ session, sales, onViewSession }) {
-  // Calculate simple sales statistics
-  const salesStats = useMemo(() => {
-    const totalSales = sales.length;
-    const paidSales = sales.filter(s => s.paymentStatus === 'PAID');
-    const totalRevenue = paidSales.reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), 0);
-    
-    return {
-      totalSales,
-      totalRevenue,
-    };
-  }, [sales]);
-
-  return (
-    <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl shadow-sm border-2 border-blue-200 p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Current Open Session: {new Date(session.date).toLocaleDateString()}
-          </h3>
-          
-          {/* Key Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Opening Stock</p>
-              <p className="text-xl font-bold text-gray-900">{session.stats?.openingStockCount || 0}</p>
-            </div>
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Incoming Stock</p>
-              <p className="text-xl font-bold text-gray-900">{session.stats?.incomingStockCount || 0}</p>
-            </div>
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Total Sales</p>
-              <p className="text-xl font-bold text-gray-900">{salesStats.totalSales}</p>
-            </div>
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-gray-600 mb-1">Total Revenue</p>
-              <p className="text-xl font-bold text-gray-900">
-                KES {salesStats.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={onViewSession}
-          className="bg-blue-900 text-white px-6 py-3 rounded-md hover:bg-[#1e88b5] transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap w-full sm:w-auto"
-        >
-          View Stock Session
-        </button>
       </div>
     </div>
   );

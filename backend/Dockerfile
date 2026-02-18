@@ -1,5 +1,5 @@
-# Use Node.js 20 LTS as the base image
-FROM node:20-slim
+# Use full Node.js 20 image (slim can cause bus errors with @swc/core native bindings)
+FROM node:20
 
 # Set working directory
 WORKDIR /app
@@ -8,7 +8,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy package files and install all dependencies (needed for build)
+# Extra memory for @swc/core postinstall; avoid bus error in Docker
 COPY package*.json ./
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm ci && npm cache clean --force
 
 # Copy the rest of the project files
