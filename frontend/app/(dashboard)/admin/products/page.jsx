@@ -215,11 +215,11 @@ export default function ProductsPage() {
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
-                "products-export"
+                `products-export-${new Date().toISOString().split("T")[0]}`
               );
               toast.success("Excel exported");
             }}
-            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm min-h-[44px]"
+            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm font-medium min-h-[44px]"
           >
             Export Excel
           </button>

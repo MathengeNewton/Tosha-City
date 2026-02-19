@@ -5,11 +5,14 @@ import Link from "next/link";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import ReceiptView from "../ReceiptView";
+import { useAuth } from "../../../../../contexts/AuthContext";
 
 export default function SaleDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const saleId = params.id;
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [sale, setSale] = useState(null);
   const [payment, setPayment] = useState(null);
@@ -17,6 +20,9 @@ export default function SaleDetailsPage() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [mpesaReference, setMpesaReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
+  const [submittingEdit, setSubmittingEdit] = useState(false);
 
   useEffect(() => {
     if (saleId) {
@@ -82,6 +88,37 @@ export default function SaleDetailsPage() {
       toast.error(error.response?.data?.message || "Failed to record payment");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleOpenEditModal = () => {
+    setEditPaymentMethod(sale.paymentMethod || "CASH");
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmittingEdit(true);
+      await apiClient.sales.update(sale.id, { paymentMethod: editPaymentMethod });
+      toast.success("Sale updated");
+      setShowEditModal(false);
+      loadSaleData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update sale");
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const handleDeleteSale = async () => {
+    if (!confirm(`Delete sale ${sale.saleNumber}? Only unpaid sales can be deleted.`)) return;
+    try {
+      await apiClient.sales.delete(sale.id);
+      toast.success("Sale deleted");
+      router.push("/dashboard/sales");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete sale");
     }
   };
 
@@ -178,6 +215,22 @@ export default function SaleDetailsPage() {
               Record Payment
             </button>
           )}
+          {isAdmin && sale.paymentStatus === "PENDING" && (
+            <button
+              onClick={handleOpenEditModal}
+              className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
+            >
+              Edit Sale
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={handleDeleteSale}
+              className="flex-1 sm:flex-none bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors text-sm min-h-[44px]"
+            >
+              Delete Sale
+            </button>
+          )}
         </div>
       </div>
 
@@ -200,6 +253,47 @@ export default function SaleDetailsPage() {
           Back to Sales
         </Link>
       </div>
+
+      {/* Edit Sale Modal (admin, unpaid only) */}
+      {showEditModal && sale && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
+            <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Sale {sale.saleNumber}</h2>
+            <p className="text-sm text-gray-600 mb-4">Change payment method (unpaid sales only).</p>
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                <select
+                  value={editPaymentMethod}
+                  onChange={(e) => setEditPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                  required
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="MPESA">MPESA</option>
+                  <option value="CREDIT">Credit</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-blue-800 disabled:opacity-50 min-h-[44px] text-base"
+                >
+                  {submittingEdit ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Record Payment Modal */}
       {showPaymentModal && sale && (

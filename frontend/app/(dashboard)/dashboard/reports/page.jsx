@@ -107,13 +107,15 @@ export default function ReportsPage() {
               <button
                 type="button"
                 onClick={() => {
+                  const dateStr = new Date().toISOString().split('T')[0];
+                  const range = `${filters.startDate || ''}-to-${filters.endDate || ''}`.replace(/^\-to\-$/, '');
                   if (activeTab === 'sales' && salesReport?.salesByProduct) {
                     const rows = Object.entries(salesReport.salesByProduct).map(([product, stats]) => ({
                       product,
                       quantity: stats.quantity,
                       revenue: parseFloat(stats.revenue || 0),
                     }));
-                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity' }, { key: 'revenue', label: 'Revenue (KES)' }], 'sales-report');
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity (kg)' }, { key: 'revenue', label: 'Revenue (KES)' }], `sales-report-${range || dateStr}`);
                     toast.success('Excel exported');
                   } else if (activeTab === 'stock' && stockReport?.stockByProduct) {
                     const rows = Object.entries(stockReport.stockByProduct).map(([product, stats]) => ({
@@ -123,7 +125,7 @@ export default function ReportsPage() {
                       closing: stats.closing,
                       wastage: stats.wastage,
                     }));
-                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'opening', label: 'Opening' }, { key: 'incoming', label: 'Incoming' }, { key: 'closing', label: 'Closing' }, { key: 'wastage', label: 'Wastage' }], 'stock-report');
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'opening', label: 'Opening (kg)' }, { key: 'incoming', label: 'Incoming (kg)' }, { key: 'closing', label: 'Closing (kg)' }, { key: 'wastage', label: 'Wastage (kg)' }], `stock-report-${range || dateStr}`);
                     toast.success('Excel exported');
                   } else if (activeTab === 'wastage' && wastageReport?.wastageByProduct) {
                     const rows = Object.entries(wastageReport.wastageByProduct).map(([product, stats]) => ({
@@ -131,7 +133,7 @@ export default function ReportsPage() {
                       quantity: stats.quantity,
                       entries: stats.entries?.length ?? 0,
                     }));
-                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity' }, { key: 'entries', label: 'Entries' }], 'wastage-report');
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity (kg)' }, { key: 'entries', label: 'Entries' }], `wastage-report-${range || dateStr}`);
                     toast.success('Excel exported');
                   } else if (activeTab === 'weekly' && weeklyComparison) {
                     const rows = [
@@ -142,13 +144,13 @@ export default function ReportsPage() {
                       { metric: 'Revenue Change %', value: weeklyComparison.comparison?.revenueChange ?? 0 },
                       { metric: 'Sales Change %', value: weeklyComparison.comparison?.salesChange ?? 0 },
                     ];
-                    exportToExcel(rows, [{ key: 'metric', label: 'Metric' }, { key: 'value', label: 'Value' }], 'weekly-report');
+                    exportToExcel(rows, [{ key: 'metric', label: 'Metric' }, { key: 'value', label: 'Value' }], `weekly-report-${dateStr}`);
                     toast.success('Excel exported');
                   } else {
                     toast.info('Load the report first');
                   }
                 }}
-                className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm"
+                className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm font-medium min-h-[44px]"
               >
                 Export Excel
               </button>

@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
-import { exportToExcel } from "../../../../lib/exportExcel";
+import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
 
@@ -314,6 +314,10 @@ export default function StockManagementPage() {
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
 
+    const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const soldKg = sales.reduce((total, s) => total + (s.items || []).reduce((sum, it) => sum + parseFloat(it.quantity || 0), 0), 0);
+    const availableKg = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+
     const handleCloseSession = async () => {
       if (!confirm("Are you sure you want to close this session? Make sure all sales are paid and closing stock is recorded.")) {
         return;
@@ -327,6 +331,85 @@ export default function StockManagementPage() {
       } catch (error) {
         toast.error(error.response?.data?.message || "Failed to close session");
       }
+    };
+
+    const handleDeleteSession = async () => {
+      if (!confirm(`Delete this session (${new Date(selectedSession.date).toLocaleDateString()})? Only allowed if it has no stock entries or sales.`)) return;
+      try {
+        await apiClient.stockSessions.delete(selectedSession.id);
+        toast.success('Session deleted');
+        handleBackToList();
+        loadData();
+      } catch (error) {
+        toast.error(error.response?.data?.message || 'Failed to delete session');
+      }
+    };
+
+    const handleExportSession = () => {
+      const sessionDate = new Date(selectedSession.date).toISOString().split("T")[0];
+      const summaryRows = [
+        { field: "Date", value: new Date(selectedSession.date).toLocaleDateString() },
+        { field: "Opened by", value: selectedSession.openedBy?.username || selectedSession.openedBy?.email || "N/A" },
+        { field: "Status", value: selectedSession.status },
+        { field: "Incoming stock (kg)", value: incomingKg.toFixed(2) },
+        { field: "Stock sold (kg)", value: soldKg.toFixed(2) },
+        { field: "Available stock (kg)", value: availableKg.toFixed(2) },
+        { field: "Wastage entries", value: wastageEntries.length },
+      ];
+      const entryRows = stockEntries.map((e) => ({
+        product: e.product?.name || "N/A",
+        type: e.type,
+        quantity: parseFloat(e.quantity || 0),
+        unit: e.unit || "kg",
+        recordedAt: e.recordedAt ? new Date(e.recordedAt).toLocaleString() : "",
+        notes: e.notes || "",
+      }));
+      const salesRows = sales.map((s) => ({
+        saleNumber: s.saleNumber,
+        soldAt: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
+        totalAmount: parseFloat(s.totalAmount || 0),
+        paymentMethod: s.paymentMethod || "",
+        paymentStatus: s.paymentStatus || "",
+        itemsCount: s.items?.length ?? 0,
+      }));
+      exportToExcelMultiSheet(
+        [
+          {
+            sheetName: "Session summary",
+            rows: summaryRows,
+            columns: [
+              { key: "field", label: "Field" },
+              { key: "value", label: "Value" },
+            ],
+          },
+          {
+            sheetName: "Stock entries",
+            rows: entryRows,
+            columns: [
+              { key: "product", label: "Product" },
+              { key: "type", label: "Type" },
+              { key: "quantity", label: "Quantity" },
+              { key: "unit", label: "Unit" },
+              { key: "recordedAt", label: "Recorded at" },
+              { key: "notes", label: "Notes" },
+            ],
+          },
+          {
+            sheetName: "Sales",
+            rows: salesRows,
+            columns: [
+              { key: "saleNumber", label: "Sale #" },
+              { key: "soldAt", label: "Sold at" },
+              { key: "totalAmount", label: "Total (KES)" },
+              { key: "paymentMethod", label: "Payment method" },
+              { key: "paymentStatus", label: "Payment status" },
+              { key: "itemsCount", label: "Items" },
+            ],
+          },
+        ],
+        `session-${sessionDate}`
+      );
+      toast.success("Session exported to Excel");
     };
 
     return (
@@ -346,14 +429,30 @@ export default function StockManagementPage() {
               {new Date(selectedSession.date).toLocaleDateString()}
             </p>
           </div>
-          {selectedSession.status === 'OPEN' && isAdmin && (
+          <div className="flex flex-wrap gap-2">
             <button
-              onClick={handleCloseSession}
-              className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"
+              onClick={handleExportSession}
+              className="bg-gray-700 text-white px-6 py-3 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"
             >
-              Close Session
+              Export Excel
             </button>
-          )}
+            {isAdmin && (
+              <button
+                onClick={handleDeleteSession}
+                className="bg-red-500 text-white px-6 py-3 rounded-md hover:bg-red-600 transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"
+              >
+                Delete Session
+              </button>
+            )}
+            {selectedSession.status === 'OPEN' && isAdmin && (
+              <button
+                onClick={handleCloseSession}
+                className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"
+              >
+                Close Session
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Session Information Card */}
@@ -374,16 +473,16 @@ export default function StockManagementPage() {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Opening Stock</p>
-              <p className="text-2xl font-bold text-gray-900">{openingEntries.length} entries</p>
+              <p className="text-sm text-gray-600">Incoming stock (kg)</p>
+              <p className="text-2xl font-bold text-gray-900">{incomingKg.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Incoming Stock</p>
-              <p className="text-2xl font-bold text-gray-900">{stockEntries.filter(e => e.type === 'INCOMING').length} entries</p>
+              <p className="text-sm text-gray-600">Stock sold (kg)</p>
+              <p className="text-2xl font-bold text-gray-900">{soldKg.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div className="bg-yellow-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Closing Stock</p>
-              <p className="text-2xl font-bold text-gray-900">{closingEntries.length} entries</p>
+              <p className="text-sm text-gray-600">Available stock</p>
+              <p className="text-2xl font-bold text-gray-900">{availableKg.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div className="bg-red-50 p-4 rounded-lg">
               <p className="text-sm text-gray-600">Wastage</p>
@@ -437,7 +536,12 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  <StockEntriesTable stockEntries={openingEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                    </p>
+                  )}
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
             )}
@@ -453,7 +557,12 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  <StockEntriesTable stockEntries={incomingEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                    </p>
+                  )}
+                  <StockEntriesTable stockEntries={incomingEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
             )}
@@ -468,7 +577,12 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  <StockEntriesTable stockEntries={closingEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                    </p>
+                  )}
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
             )}
@@ -483,7 +597,12 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  <StockEntriesTable stockEntries={wastageEntries} canEdit={isAdmin} onEdit={() => loadSessionDetails(selectedSession.id)} />
+                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                    </p>
+                  )}
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
             )}
@@ -501,6 +620,7 @@ export default function StockManagementPage() {
             )}
           </div>
         </div>
+
       </div>
     );
   }
@@ -580,6 +700,7 @@ export default function StockManagementPage() {
           onViewSession={handleViewSession}
           onRefresh={loadData}
           allSessions={filteredSessions}
+          isAdmin={isAdmin}
         />
       ) : (
         <CalendarView
@@ -613,7 +734,18 @@ export default function StockManagementPage() {
 }
 
 // List View Component
-function ListView({ sessions, filters, setFilters, listPage, setListPage, listPageSize, setListPageSize, totalPages, totalSessions, onViewSession, onRefresh, allSessions }) {
+function ListView({ sessions, filters, setFilters, listPage, setListPage, listPageSize, setListPageSize, totalPages, totalSessions, onViewSession, onRefresh, allSessions, isAdmin }) {
+  const handleDeleteSession = async (session) => {
+    if (!confirm(`Delete session for ${new Date(session.date).toLocaleDateString()}? This is only allowed if it has no stock entries or sales.`)) return;
+    try {
+      await apiClient.stockSessions.delete(session.id);
+      toast.success('Session deleted');
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete session');
+    }
+  };
+
   // Calculate date range aggregated metrics
   const dateRangeMetrics = useMemo(() => {
     const totalOpeningStock = allSessions.reduce((sum, s) => sum + (s.stats?.openingStockCount || 0), 0);
@@ -642,6 +774,9 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
       sales: s.stats?.salesCount || 0,
       revenue: parseFloat(s.stats?.totalRevenue || 0),
     }));
+    const from = (filters.dateFrom || '').replace(/-/g, '');
+    const to = (filters.dateTo || '').replace(/-/g, '');
+    const filename = from && to ? `stock-sessions-${from}-to-${to}` : `stock-sessions-export-${new Date().toISOString().split('T')[0]}`;
     exportToExcel(
       rows,
       [
@@ -653,7 +788,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
         { key: "sales", label: "Sales" },
         { key: "revenue", label: "Revenue (KES)" },
       ],
-      "stock-sessions-export"
+      filename
     );
     toast.success("Excel exported");
   };
@@ -735,7 +870,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
           <div className="flex gap-2">
             <button
               onClick={handleExport}
-              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
+              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium min-h-[44px]"
             >
               Export Excel
             </button>
@@ -803,12 +938,23 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
                     KES {parseFloat(session.stats?.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => onViewSession(session)}
-                      className="text-blue-900 hover:text-blue-700 font-medium min-h-[44px] px-3"
-                    >
-                      View
-                    </button>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        onClick={() => onViewSession(session)}
+                        className="text-blue-900 hover:text-blue-700 font-medium min-h-[44px] px-3"
+                      >
+                        View
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteSession(session)}
+                          className="text-red-600 hover:text-red-800 font-medium min-h-[44px] px-3"
+                          title="Delete session (only if no entries/sales)"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1026,7 +1172,53 @@ function SessionPopup({ session, onClose, onViewMore }) {
 }
 
 // Stock Entries Table Component
-function StockEntriesTable({ stockEntries, canEdit = false, onEdit }) {
+function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [], suppliers = [], entryType }) {
+  const [entryToEdit, setEntryToEdit] = useState(null);
+  const [editForm, setEditForm] = useState({ productId: '', quantity: '', unit: 'kg', notes: '', supplierId: '' });
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  const handleOpenEdit = (entry) => {
+    setEntryToEdit(entry);
+    setEditForm({
+      productId: String(entry.product?.id ?? entry.productId ?? ''),
+      quantity: String(entry.quantity ?? ''),
+      unit: entry.unit || 'kg',
+      notes: entry.notes || '',
+      supplierId: entry.supplierId ? String(entry.supplierId) : '',
+    });
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!entryToEdit) return;
+    const productId = parseInt(editForm.productId, 10);
+    const quantity = parseFloat(editForm.quantity);
+    if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+      toast.error('Product and quantity are required');
+      return;
+    }
+    try {
+      setSubmittingEdit(true);
+      const payload = {
+        productId,
+        quantity,
+        unit: editForm.unit || 'kg',
+        notes: editForm.notes || undefined,
+      };
+      if (entryType === 'INCOMING' && editForm.supplierId) {
+        payload.supplierId = parseInt(editForm.supplierId, 10);
+      }
+      await apiClient.stockEntries.update(entryToEdit.id, payload);
+      toast.success('Entry updated');
+      setEntryToEdit(null);
+      if (onEdit) onEdit();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update entry');
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
   const handleDelete = async (entryId) => {
     if (!confirm('Are you sure you want to delete this entry?')) return;
     try {
@@ -1039,64 +1231,162 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit }) {
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-            {canEdit && (
-              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            )}
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {stockEntries.length === 0 ? (
+    <>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
             <tr>
-              <td colSpan={canEdit ? 5 : 4} className="px-4 sm:px-6 py-4 text-center text-gray-500">
-                No stock entries yet
-              </td>
+              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+              {canEdit && (
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              )}
             </tr>
-          ) : (
-            stockEntries.map((entry) => (
-              <tr key={entry.id}>
-                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {entry.product?.name || 'N/A'}
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {stockEntries.length === 0 ? (
+              <tr>
+                <td colSpan={canEdit ? 5 : 4} className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                  No stock entries yet
                 </td>
-                <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                    entry.type === 'OPENING' ? 'bg-blue-100 text-blue-800' :
-                    entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
-                    entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {entry.type}
-                  </span>
-                </td>
-                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {entry.quantity} {entry.unit}
-                </td>
-                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(entry.recordedAt).toLocaleString()}
-                </td>
-                {canEdit && (
-                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => handleDelete(entry.id)}
-                      className="text-red-600 hover:text-red-800 font-medium"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                )}
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            ) : (
+              stockEntries.map((entry) => (
+                <tr key={entry.id}>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {entry.product?.name || 'N/A'}
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      entry.type === 'OPENING' ? 'bg-blue-100 text-blue-800' :
+                      entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
+                      entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {entry.type}
+                    </span>
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {entry.quantity} {entry.unit}
+                  </td>
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(entry.recordedAt).toLocaleString()}
+                  </td>
+                  {canEdit && (
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleOpenEdit(entry)}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(entry.id)}
+                          className="text-red-600 hover:text-red-800 font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Edit entry modal */}
+      {entryToEdit && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit {entryType} entry</h3>
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
+                <select
+                  value={editForm.productId}
+                  onChange={(e) => setEditForm({ ...editForm, productId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select product</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>
+                  ))}
+                </select>
+              </div>
+              {entryType === 'INCOMING' && suppliers.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+                  <select
+                    value={editForm.supplierId}
+                    onChange={(e) => setEditForm({ ...editForm, supplierId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editForm.quantity}
+                    onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                  <input
+                    type="text"
+                    value={editForm.unit}
+                    onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={2}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEntryToEdit(null)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className="flex-1 px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-blue-800 disabled:opacity-50"
+                >
+                  {submittingEdit ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

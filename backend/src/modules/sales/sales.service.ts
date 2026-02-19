@@ -13,6 +13,7 @@ import { StockEntriesService } from '../stock-entries/stock-entries.service';
 import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { CustomersService } from '../customers/customers.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 @Injectable()
 export class SalesService {
@@ -30,6 +31,7 @@ export class SalesService {
     private productsService: ProductsService,
     private stockEntriesService: StockEntriesService,
     private customersService: CustomersService,
+    private activityLog: ActivityLogService,
   ) {}
 
   async create(createSaleDto: CreateSaleDto, userId: number): Promise<Sale> {
@@ -152,10 +154,27 @@ export class SalesService {
 
         await queryRunner.commitTransaction();
 
-        // Return sale with items
-        return await this.findOne(savedSale.id);
+        const saleWithItems = await this.findOne(savedSale.id);
+        await this.activityLog.log({
+          userId,
+          action: 'SALE_CREATED',
+          entityType: 'sale',
+          entityId: savedSale.id,
+          details: { sessionId: createSaleDto.sessionId, saleNumber: saleWithItems.saleNumber, totalAmount: totalAmount },
+          success: true,
+        });
+        return saleWithItems;
       } catch (error: any) {
         await queryRunner.rollbackTransaction();
+        await this.activityLog.log({
+          userId,
+          action: 'SALE_CREATED',
+          entityType: 'sale',
+          entityId: null,
+          details: { sessionId: createSaleDto.sessionId },
+          success: false,
+          errorMessage: error?.message ?? String(error),
+        });
         lastError = error;
 
         // Check if it's a duplicate key error (PostgreSQL error code 23505)
@@ -301,29 +320,69 @@ export class SalesService {
   }
 
   async update(id: number, updateSaleDto: UpdateSaleDto, userId: number): Promise<Sale> {
-    const sale = await this.findOne(id);
+    try {
+      const sale = await this.findOne(id);
 
-    if (sale.paymentStatus === PaymentStatus.PAID) {
-      throw new BadRequestException('Cannot update a paid sale');
+      if (sale.paymentStatus === PaymentStatus.PAID) {
+        throw new BadRequestException('Cannot update a paid sale');
+      }
+
+      if (updateSaleDto.paymentMethod) {
+        sale.paymentMethod = updateSaleDto.paymentMethod;
+      }
+
+      const saved = await this.saleRepository.save(sale);
+      await this.activityLog.log({
+        userId,
+        action: 'SALE_UPDATED',
+        entityType: 'sale',
+        entityId: id,
+        details: { ...updateSaleDto } as Record<string, unknown>,
+        success: true,
+      });
+      return saved;
+    } catch (e: any) {
+      await this.activityLog.log({
+        userId,
+        action: 'SALE_UPDATED',
+        entityType: 'sale',
+        entityId: id,
+        details: { ...updateSaleDto } as Record<string, unknown>,
+        success: false,
+        errorMessage: e?.message ?? String(e),
+      });
+      throw e;
     }
-
-    // If updating items, need to recalculate
-    // For now, just update payment method if provided
-    if (updateSaleDto.paymentMethod) {
-      sale.paymentMethod = updateSaleDto.paymentMethod;
-    }
-
-    return await this.saleRepository.save(sale);
   }
 
-  async remove(id: number): Promise<void> {
-    const sale = await this.findOne(id);
+  async remove(id: number, userId?: number): Promise<void> {
+    try {
+      const sale = await this.findOne(id);
 
-    if (sale.paymentStatus === PaymentStatus.PAID) {
-      throw new BadRequestException('Cannot delete a paid sale');
+      if (sale.paymentStatus === PaymentStatus.PAID) {
+        throw new BadRequestException('Cannot delete a paid sale');
+      }
+
+      await this.saleRepository.remove(sale);
+      await this.activityLog.log({
+        userId: userId ?? null,
+        action: 'SALE_DELETED',
+        entityType: 'sale',
+        entityId: id,
+        details: { saleNumber: sale.saleNumber },
+        success: true,
+      });
+    } catch (e: any) {
+      await this.activityLog.log({
+        userId: userId ?? null,
+        action: 'SALE_DELETED',
+        entityType: 'sale',
+        entityId: id,
+        success: false,
+        errorMessage: e?.message ?? String(e),
+      });
+      throw e;
     }
-
-    await this.saleRepository.remove(sale);
   }
 
   private async generateSaleNumber(): Promise<string> {

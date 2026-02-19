@@ -157,11 +157,11 @@ export default function SuppliersPage() {
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
-                "suppliers-export"
+                `suppliers-export-${new Date().toISOString().split("T")[0]}`
               );
               toast.success("Excel exported");
             }}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm"
+            className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm font-medium min-h-[44px]"
           >
             Export Excel
           </button>
