@@ -12,6 +12,7 @@ import { StockSessionsModule } from '../stock-sessions/stock-sessions.module';
 import { ProductsModule } from '../products/products.module';
 import { StockEntriesModule } from '../stock-entries/stock-entries.module';
 import { CustomersModule } from '../customers/customers.module';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CustomersModule } from '../customers/customers.module';
     ProductsModule,
     StockEntriesModule,
     CustomersModule,
+    ActivityLogModule,
   ],
   controllers: [SalesController, PaymentsController],
   providers: [SalesService, PaymentsService],

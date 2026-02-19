@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -12,6 +13,8 @@ defaultStart.setDate(defaultStart.getDate() - 30);
 
 export default function SalesListPage() {
   const router = useRouter();
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
@@ -25,6 +28,9 @@ export default function SalesListPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [mpesaReference, setMpesaReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [saleToEdit, setSaleToEdit] = useState(null);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
+  const [submittingEdit, setSubmittingEdit] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -95,6 +101,38 @@ export default function SalesListPage() {
     }
   };
 
+  const handleOpenEditSale = (sale) => {
+    setSaleToEdit(sale);
+    setEditPaymentMethod(sale.paymentMethod || 'CASH');
+  };
+
+  const handleSaveEditSale = async (e) => {
+    e.preventDefault();
+    if (!saleToEdit) return;
+    try {
+      setSubmittingEdit(true);
+      await apiClient.sales.update(saleToEdit.id, { paymentMethod: editPaymentMethod });
+      toast.success("Sale updated");
+      setSaleToEdit(null);
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update sale");
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const handleDeleteSale = async (sale) => {
+    if (!confirm(`Delete sale ${sale.saleNumber}? Only unpaid sales can be deleted.`)) return;
+    try {
+      await apiClient.sales.delete(sale.id);
+      toast.success("Sale deleted");
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete sale");
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
@@ -121,8 +159,10 @@ export default function SalesListPage() {
                 date: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
                 itemsCount: s.items?.length ?? 0,
                 totalAmount: parseFloat(s.totalAmount || 0),
+                paymentMethod: s.paymentMethod || "",
                 paymentStatus: s.paymentStatus,
               }));
+              const dateStr = new Date().toISOString().split("T")[0];
               exportToExcel(
                 rows,
                 [
@@ -130,13 +170,14 @@ export default function SalesListPage() {
                   { key: "date", label: "Date" },
                   { key: "itemsCount", label: "Items" },
                   { key: "totalAmount", label: "Total (KES)" },
-                  { key: "paymentStatus", label: "Payment" },
+                  { key: "paymentMethod", label: "Payment method" },
+                  { key: "paymentStatus", label: "Payment status" },
                 ],
-                "sales-export"
+                `sales-export-${dateStr}`
               );
               toast.success("Excel exported");
             }}
-            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
+            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium min-h-[44px]"
           >
             Export Excel
           </button>
@@ -239,6 +280,23 @@ export default function SalesListPage() {
                             Record Payment
                           </button>
                         )}
+                        {isAdmin && sale.paymentStatus === 'PENDING' && (
+                          <button
+                            onClick={() => handleOpenEditSale(sale)}
+                            className="text-gray-700 hover:text-gray-900 min-h-[44px] text-left sm:text-left"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteSale(sale)}
+                            className="text-red-600 hover:text-red-800 min-h-[44px] text-left sm:text-left"
+                            title="Only unpaid sales can be deleted"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -248,6 +306,47 @@ export default function SalesListPage() {
           </table>
         </div>
       </div>
+
+      {/* Edit Sale Modal (admin only) */}
+      {saleToEdit && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
+            <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Sale {saleToEdit.saleNumber}</h2>
+            <p className="text-sm text-gray-600 mb-4">Unpaid sales: change payment method only.</p>
+            <form onSubmit={handleSaveEditSale} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                <select
+                  value={editPaymentMethod}
+                  onChange={(e) => setEditPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                  required
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="MPESA">MPESA</option>
+                  <option value="CREDIT">Credit</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSaleToEdit(null)}
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-blue-800 disabled:opacity-50 min-h-[44px] text-base"
+                >
+                  {submittingEdit ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Record Payment Modal */}
       {showPaymentModal && paymentModalSale && (

@@ -78,18 +78,18 @@ export class SalesController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Update a sale (Cashier/Admin)' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update a sale (Admin only)' })
   update(@Param('id') id: string, @Body() updateSaleDto: UpdateSaleDto, @Request() req) {
     return this.salesService.update(+id, updateSaleDto, req.user.userId);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Delete a sale (Cashier/Admin)' })
-  remove(@Param('id') id: string) {
-    return this.salesService.remove(+id);
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete a sale (Admin only)' })
+  remove(@Param('id') id: string, @Request() req) {
+    return this.salesService.remove(+id, req.user?.userId);
   }
 }
 

@@ -22,6 +22,7 @@ import {
   CogIcon,
   Bars3Icon,
   XMarkIcon,
+  DocumentTextIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
@@ -46,6 +47,7 @@ export default function DashboardLayout({ children }) {
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
     { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
+    { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },

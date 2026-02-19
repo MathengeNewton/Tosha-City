@@ -2,8 +2,10 @@ import {
   Controller,
   Get,
   Post,
-  Param,
   Body,
+  Patch,
+  Param,
+  Delete,
   Query,
   UseGuards,
   Request,
@@ -11,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StockSessionsService } from './stock-sessions.service';
 import { OpenSessionDto } from './dto/open-session.dto';
+import { UpdateSessionDto } from './dto/update-session.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -34,10 +37,26 @@ export class StockSessionsController {
 
   @Post(':id/close')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Close a stock session (Cashier/Admin)' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Close a stock session (Admin only)' })
   async closeSession(@Param('id') id: string, @Request() req) {
     return await this.stockSessionsService.closeSession(+id, req.user.userId);
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update a stock session (Admin only)' })
+  async update(@Param('id') id: string, @Body() updateSessionDto: UpdateSessionDto, @Request() req) {
+    return await this.stockSessionsService.update(+id, updateSessionDto, req.user?.userId);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete a stock session (Admin only, only if no entries/sales)' })
+  async remove(@Param('id') id: string, @Request() req) {
+    await this.stockSessionsService.remove(+id, req.user?.userId);
   }
 
   @Get()

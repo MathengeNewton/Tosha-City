@@ -86,6 +86,8 @@ export const apiClient = {
     getById: (id) => api.get(`/stock-sessions/${id}`),
     open: (data) => api.post('/stock-sessions/open', data),
     close: (id) => api.post(`/stock-sessions/${id}/close`),
+    update: (id, data) => api.patch(`/stock-sessions/${id}`, data),
+    delete: (id) => api.delete(`/stock-sessions/${id}`),
   },
 
   // Stock Entries
@@ -186,6 +188,11 @@ export const apiClient = {
   roles: {
     getAll: () => api.get('/roles'),
     getById: (id) => api.get(`/roles/${id}`),
+  },
+
+  // Activity log (admin only)
+  activityLog: {
+    getAll: (params) => api.get('/activity-log', { params }),
   },
 };
 
