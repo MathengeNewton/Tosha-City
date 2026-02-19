@@ -7,10 +7,6 @@ import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 
-const defaultEnd = new Date();
-const defaultStart = new Date();
-defaultStart.setDate(defaultStart.getDate() - 30);
-
 export default function SalesListPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
@@ -20,8 +16,8 @@ export default function SalesListPage() {
   const [currentSession, setCurrentSession] = useState(null);
   const [filters, setFilters] = useState({
     sessionId: null,
-    dateFrom: defaultStart.toISOString().split("T")[0],
-    dateTo: defaultEnd.toISOString().split("T")[0],
+    dateFrom: "", // empty = no date filter, show all sales for session
+    dateTo: "",
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalSale, setPaymentModalSale] = useState(null);
@@ -45,14 +41,17 @@ export default function SalesListPage() {
       const session = sessionRes.data;
       setCurrentSession(session);
 
-      // Get sales
+      // Get sales: only add date filter when both from/to are set
       const params = {};
       if (session) params.sessionId = session.id;
-      if (filters.dateFrom) params.dateFrom = filters.dateFrom;
-      if (filters.dateTo) params.dateTo = filters.dateTo;
+      if (filters.dateFrom && filters.dateTo) {
+        params.dateFrom = filters.dateFrom;
+        params.dateTo = filters.dateTo;
+      }
 
       const salesRes = await apiClient.sales.getAll(params);
-      setSales(salesRes.data || []);
+      const list = Array.isArray(salesRes?.data) ? salesRes.data : (salesRes?.data ? [salesRes.data] : []);
+      setSales(list);
 
     } catch (error) {
       console.error("Error loading sales:", error);
@@ -192,8 +191,8 @@ export default function SalesListPage() {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[140px]">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               From Date
             </label>
@@ -204,7 +203,7 @@ export default function SalesListPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
             />
           </div>
-          <div>
+          <div className="min-w-[140px]">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               To Date
             </label>
@@ -215,6 +214,16 @@ export default function SalesListPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setFilters({ ...filters, dateFrom: "", dateTo: "" })}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium min-h-[44px]"
+          >
+            Clear filters
+          </button>
+          {(!filters.dateFrom || !filters.dateTo) && (
+            <p className="text-sm text-gray-500 self-center">Showing all sales for current session</p>
+          )}
         </div>
       </div>
 
