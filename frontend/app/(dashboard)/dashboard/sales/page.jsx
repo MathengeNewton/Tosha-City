@@ -13,10 +13,8 @@ export default function SalesListPage() {
   const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
-  const [currentSession, setCurrentSession] = useState(null);
   const [filters, setFilters] = useState({
-    sessionId: null,
-    dateFrom: "", // empty = no date filter, show all sales for session
+    dateFrom: "", // empty = no date filter, show all sales
     dateTo: "",
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -35,15 +33,9 @@ export default function SalesListPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Get current session
-      const sessionRes = await apiClient.stockSessions.getCurrent();
-      const session = sessionRes.data;
-      setCurrentSession(session);
 
-      // Get sales: only add date filter when both from/to are set
+      // Get all sales; only add date filter when both from/to are set (no session filter)
       const params = {};
-      if (session) params.sessionId = session.id;
       if (filters.dateFrom && filters.dateTo) {
         params.dateFrom = filters.dateFrom;
         params.dateTo = filters.dateTo;
@@ -222,7 +214,7 @@ export default function SalesListPage() {
             Clear filters
           </button>
           {(!filters.dateFrom || !filters.dateTo) && (
-            <p className="text-sm text-gray-500 self-center">Showing all sales for current session</p>
+            <p className="text-sm text-gray-500 self-center">Showing all sales</p>
           )}
         </div>
       </div>
