@@ -1,0 +1,9 @@
+-- Run this once if your DB already has the stock_entry table (PostgreSQL).
+-- Adds the BYPRODUCT_SALE value to the StockEntryType enum.
+--
+-- 1. Find the enum type name: SELECT typname FROM pg_type WHERE typtype = 'e' AND typname LIKE '%stock%';
+-- 2. Then run (replace TYPE_NAME with the result, e.g. stock_entry_type_enum):
+--    ALTER TYPE TYPE_NAME ADD VALUE 'BYPRODUCT_SALE';
+--
+-- If you use synchronize: true and the table was created before this change, TypeORM may fail to add
+-- the new value automatically; run the ALTER above manually.

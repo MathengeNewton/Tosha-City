@@ -39,17 +39,20 @@ export class SalesController {
   @Get()
   @ApiOperation({ summary: 'Get all sales (with optional filters)' })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  @ApiQuery({ name: 'productId', required: false, type: Number, description: 'Filter by product (sale contains this product)' })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
   @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date YYYY-MM-DD' })
   @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date YYYY-MM-DD' })
   findAll(
     @Query('sessionId') sessionId?: string,
+    @Query('productId') productId?: string,
     @Query('date') date?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ) {
     return this.salesService.findAll(
       sessionId ? +sessionId : undefined,
+      productId ? +productId : undefined,
       date,
       dateFrom,
       dateTo,

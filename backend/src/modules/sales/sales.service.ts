@@ -138,15 +138,15 @@ export class SalesService {
           await queryRunner.manager.save(SaleItem, saleItem);
         }
 
-        // Create stock entries for byproducts (deduct from parent product)
+        // Create stock entries for byproducts (deduct from parent product) – use BYPRODUCT_SALE so it doesn't appear as wastage
         for (const byproductEntry of byproductStockEntries) {
           const stockEntry = queryRunner.manager.create(StockEntry, {
             sessionId: createSaleDto.sessionId,
             productId: byproductEntry.productId,
-            type: StockEntryType.WASTAGE,
+            type: StockEntryType.BYPRODUCT_SALE,
             quantity: byproductEntry.quantity,
             unit: byproductEntry.unit,
-            notes: 'Auto-deducted from byproduct sale',
+            notes: 'Byproduct sale (deducted from parent stock)',
             recordedById: userId,
           });
           await queryRunner.manager.save(StockEntry, stockEntry);
@@ -201,6 +201,7 @@ export class SalesService {
 
   async findAll(
     sessionId?: number,
+    productId?: number,
     date?: string,
     dateFrom?: string,
     dateTo?: string,
@@ -213,6 +214,13 @@ export class SalesService {
 
     if (sessionId) {
       query.where('sale.sessionId = :sessionId', { sessionId });
+    }
+
+    if (productId) {
+      query.andWhere(
+        'EXISTS (SELECT 1 FROM sale_item si WHERE si."saleId" = sale.id AND si."productId" = :productId)',
+        { productId },
+      );
     }
 
     if (dateFrom && dateTo) {
@@ -456,11 +464,15 @@ export class SalesService {
       .getRawOne();
     const soldStock = soldStockResult ? Number(soldStockResult.total) : 0;
 
-    // Get wastage
+    // Get wastage (real wastage only)
     const wastageEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.WASTAGE);
     const wastage = wastageEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
 
-    return openingStock + incomingStock - soldStock - wastage;
+    // Get byproduct sales (deducted from this parent product)
+    const byproductSaleEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.BYPRODUCT_SALE);
+    const byproductSaleQty = byproductSaleEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
+    return openingStock + incomingStock - soldStock - wastage - byproductSaleQty;
   }
 }
 

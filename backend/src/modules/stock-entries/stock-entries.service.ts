@@ -23,6 +23,9 @@ export class StockEntriesService {
   ) {}
 
   async create(createEntryDto: CreateStockEntryDto, userId: number): Promise<StockEntry> {
+    if (createEntryDto.type === StockEntryType.BYPRODUCT_SALE) {
+      throw new BadRequestException('BYPRODUCT_SALE entries are created automatically by the system.');
+    }
     // Verify session exists and is open (for opening/incoming entries)
     const session = await this.stockSessionsService.findOne(createEntryDto.sessionId);
 

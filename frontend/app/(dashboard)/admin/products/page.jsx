@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -28,6 +29,8 @@ function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
 }
 
 export default function ProductsPage() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -303,24 +306,29 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          onClick={() => handleOpenModal(product)}
-                          className="text-blue-600 hover:text-blue-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(product)}
-                          className="text-yellow-600 hover:text-yellow-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
-                        >
-                          {product.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
-                        >
-                          Delete
-                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => handleOpenModal(product)}
+                              className="text-blue-600 hover:text-blue-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleToggleActive(product)}
+                              className="text-yellow-600 hover:text-yellow-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
+                            >
+                              {product.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(product.id)}
+                              className="text-red-600 hover:text-red-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                        {!isAdmin && <span className="text-gray-400 text-sm">View only</span>}
                       </div>
                     </td>
                   </tr>
