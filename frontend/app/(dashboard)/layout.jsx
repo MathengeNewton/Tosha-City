@@ -32,12 +32,15 @@ export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Cashier menu - Stock session, sales, dashboard only (no admin pages)
+  // Cashier menu - Dashboard, stock, sales, and read+create for products/suppliers/customers
   const cashierMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
+    { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
+    { name: "Customers", href: "/admin/customers", icon: UserIcon },
   ];
 
   // Admin menu - Full access
@@ -58,14 +61,18 @@ export default function DashboardLayout({ children }) {
   const isAdmin = hasRole("admin");
   const menuItems = isAdmin ? adminMenu : cashierMenu;
 
-  // Redirect cashier away from admin pages and reports
+  // Redirect cashier away from admin-only pages (allow products, suppliers, customers for read+create)
+  const cashierAllowedAdminPaths = ["/admin/products", "/admin/suppliers", "/admin/customers"];
+  const isCashierAllowedPath = pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
   useEffect(() => {
     if (isAdmin === false && pathname) {
-      if (pathname.startsWith("/admin") || pathname === "/dashboard/reports") {
+      if (pathname === "/dashboard/reports") {
+        router.replace("/dashboard");
+      } else if (pathname.startsWith("/admin") && !isCashierAllowedPath) {
         router.replace("/dashboard");
       }
     }
-  }, [isAdmin, pathname, router]);
+  }, [isAdmin, pathname, router, isCashierAllowedPath]);
 
   return (
     <ProtectedRoute>

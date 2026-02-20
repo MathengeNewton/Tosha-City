@@ -60,16 +60,16 @@ export class StockEntriesController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update a stock entry (Admin only)' })
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Update a stock entry (Admin/Cashier)' })
   update(@Param('id') id: string, @Body() updateEntryDto: UpdateStockEntryDto, @Request() req) {
     return this.stockEntriesService.update(+id, updateEntryDto, req.user.userId);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Delete a stock entry (Admin only)' })
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Delete a stock entry (Admin/Cashier)' })
   remove(@Param('id') id: string, @Request() req) {
     return this.stockEntriesService.remove(+id, req.user?.userId);
   }

@@ -13,8 +13,10 @@ export default function SalesListPage() {
   const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
+  const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState({
-    dateFrom: "", // empty = no date filter, show all sales
+    productId: "",
+    dateFrom: "",
     dateTo: "",
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -30,12 +32,16 @@ export default function SalesListPage() {
     loadData();
   }, [filters]);
 
+  useEffect(() => {
+    apiClient.products.getAll().then((res) => setProducts(res.data || [])).catch(() => {});
+  }, []);
+
   const loadData = async () => {
     try {
       setLoading(true);
 
-      // Get all sales; only add date filter when both from/to are set (no session filter)
       const params = {};
+      if (filters.productId) params.productId = filters.productId;
       if (filters.dateFrom && filters.dateTo) {
         params.dateFrom = filters.dateFrom;
         params.dateTo = filters.dateTo;
@@ -184,6 +190,21 @@ export default function SalesListPage() {
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
         <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[160px]">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product
+            </label>
+            <select
+              value={filters.productId}
+              onChange={(e) => setFilters({ ...filters, productId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+            >
+              <option value="">All products</option>
+              {(products || []).filter((p) => p.isActive !== false).map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.name}</option>
+              ))}
+            </select>
+          </div>
           <div className="min-w-[140px]">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               From Date
@@ -208,12 +229,12 @@ export default function SalesListPage() {
           </div>
           <button
             type="button"
-            onClick={() => setFilters({ ...filters, dateFrom: "", dateTo: "" })}
+            onClick={() => setFilters({ productId: "", dateFrom: "", dateTo: "" })}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium min-h-[44px]"
           >
             Clear filters
           </button>
-          {(!filters.dateFrom || !filters.dateTo) && (
+          {!filters.productId && !filters.dateFrom && !filters.dateTo && (
             <p className="text-sm text-gray-500 self-center">Showing all sales</p>
           )}
         </div>
@@ -227,7 +248,7 @@ export default function SalesListPage() {
               <tr>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale #</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Items</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-[180px] max-w-[220px]">Products</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -250,8 +271,17 @@ export default function SalesListPage() {
                       <span className="sm:hidden">{new Date(sale.soldAt).toLocaleDateString()}</span>
                       <span className="hidden sm:inline">{new Date(sale.soldAt).toLocaleString()}</span>
                     </td>
-                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                      {sale.items?.length || 0} item(s)
+                    <td className="px-4 sm:px-6 py-4 text-sm w-[180px] max-w-[220px]">
+                      <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto overflow-x-hidden border border-gray-100 rounded-md p-1.5 bg-gray-50/50">
+                        {(sale.items || []).map((item) => (
+                          <span
+                            key={item.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 whitespace-nowrap"
+                          >
+                            {item.product?.name || "Unknown"}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                       KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}

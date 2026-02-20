@@ -37,6 +37,7 @@ export default function StockManagementPage() {
   const viewParam = searchParams.get('view');
   const { hasRole } = useAuth();
   const isAdmin = hasRole('admin');
+  const canManageEntries = isAdmin || hasRole('cashier'); // Cashiers can add/edit stock entries
   
   const [loading, setLoading] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
@@ -523,11 +524,12 @@ export default function StockManagementPage() {
                 session={selectedSession}
                 stockEntries={stockEntries}
                 sales={sales}
+                products={products}
               />
             )}
             {activeTab === 'opening' && (
               <div>
-                {isAdmin && selectedSession.status === 'OPEN' && (
+                {canManageEntries && selectedSession.status === 'OPEN' && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -535,19 +537,19 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
                     <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={openingEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
             )}
             {activeTab === 'incoming' && (
               <div>
-                {isAdmin && selectedSession.status === 'OPEN' && (
+                {canManageEntries && selectedSession.status === 'OPEN' && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products}
@@ -556,19 +558,19 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
                     <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={incomingEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
+                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
             )}
             {activeTab === 'closing' && (
               <div>
-                {isAdmin && selectedSession.status === 'OPEN' && (
+                {canManageEntries && selectedSession.status === 'OPEN' && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -576,19 +578,19 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
                     <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={closingEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
             )}
             {activeTab === 'wastages' && (
               <div>
-                {isAdmin && selectedSession.status === 'OPEN' && (
+                {canManageEntries && selectedSession.status === 'OPEN' && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -596,13 +598,13 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={isAdmin && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && isAdmin && (
+                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
                     <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={wastageEntries} canEdit={isAdmin && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
             )}
@@ -1391,13 +1393,14 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
 }
 
 // Session Overview Analytics Component
-function SessionOverviewAnalytics({ session, stockEntries, sales }) {
+function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] }) {
   // Calculate comprehensive analytics
   const analytics = useMemo(() => {
     const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
     const incomingEntries = stockEntries.filter(e => e.type === 'INCOMING');
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
+    const byproductSaleEntries = stockEntries.filter(e => e.type === 'BYPRODUCT_SALE');
 
     // Sales statistics
     const totalSales = sales.length;
@@ -1411,6 +1414,13 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
     const totalIncomingQty = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const totalClosingQty = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const totalWastageQty = wastageEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const byproductSaleQtyByProduct = {};
+    byproductSaleEntries.forEach(e => {
+      const pid = e.product?.id ?? e.productId;
+      if (pid) {
+        byproductSaleQtyByProduct[pid] = (byproductSaleQtyByProduct[pid] || 0) + parseFloat(e.quantity || 0);
+      }
+    });
 
     // Sales by product
     const salesByProduct = {};
@@ -1509,7 +1519,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
       // Calculate total available
       const totalAvailable = opening + incoming;
 
-      // Calculate sold quantity
+      // Calculate sold quantity (direct sales of this product)
       let sold = 0;
       sales.forEach(sale => {
         sale.items?.forEach(item => {
@@ -1518,14 +1528,19 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
           }
         });
       });
+      // Add byproduct sales deducted from this parent product
+      const byproductSold = byproductSaleQtyByProduct[productId] || 0;
+      const soldInclByproduct = sold + byproductSold;
 
-      // Calculate wastage
+      // Wastage: only real wastage (exclude BYPRODUCT_SALE)
       const wastage = wastageEntries
         .filter(e => e.product?.id === productId)
         .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
-      // Calculate remaining
-      const remaining = totalAvailable - sold - wastage;
+      const productMeta = products.find(p => p.id === productId);
+      const isByproduct = productMeta?.parentProductId != null;
+      // Remaining: for byproducts we don't hold stock (consumes from parent), so show —
+      const remaining = isByproduct ? null : (totalAvailable - soldInclByproduct - wastage);
 
       productBreakdown[productId] = {
         name: productName,
@@ -1533,8 +1548,11 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
         incoming,
         totalAvailable,
         sold,
+        byproductSold,
+        soldInclByproduct,
         wastage,
         remaining,
+        isByproduct,
       };
     });
 
@@ -1558,7 +1576,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
       paymentMethods,
       productBreakdown: Object.values(productBreakdown),
     };
-  }, [stockEntries, sales]);
+  }, [stockEntries, sales, products]);
 
   return (
     <div className="space-y-6">
@@ -1736,15 +1754,21 @@ function SessionOverviewAnalytics({ session, stockEntries, sales }) {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {analytics.productBreakdown.map((product, idx) => (
-                  <tr key={idx} className={product.remaining < 0 ? 'bg-red-50' : ''}>
-                    <td className="px-4 py-2 text-sm font-medium text-gray-900">{product.name}</td>
+                  <tr key={idx} className={product.remaining != null && product.remaining < 0 ? 'bg-red-50' : product.isByproduct ? 'bg-gray-50/50' : ''}>
+                    <td className="px-4 py-2 text-sm font-medium text-gray-900">
+                      {product.name}
+                      {product.isByproduct && <span className="ml-1 text-xs text-gray-500">(from parent stock)</span>}
+                    </td>
                     <td className="px-4 py-2 text-sm text-gray-600">{product.opening.toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm text-gray-600">{product.incoming.toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm font-semibold text-gray-900">{product.totalAvailable.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-gray-600">{product.sold.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-gray-600" title={product.byproductSold > 0 ? `Direct: ${product.sold.toFixed(2)}, via byproduct: ${product.byproductSold.toFixed(2)}` : ''}>
+                      {product.soldInclByproduct.toFixed(2)}
+                      {product.byproductSold > 0 && <span className="ml-1 text-xs text-gray-500">(incl. byproduct)</span>}
+                    </td>
                     <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
-                    <td className={`px-4 py-2 text-sm font-semibold ${product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {product.remaining.toFixed(2)}
+                    <td className={`px-4 py-2 text-sm font-semibold ${product.remaining == null ? 'text-gray-500' : product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                      {product.remaining == null ? '—' : product.remaining.toFixed(2)}
                     </td>
                   </tr>
                 ))}
@@ -1785,7 +1809,7 @@ function SalesTable({ sales }) {
           <tr>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale Number</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Products</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -1807,8 +1831,17 @@ function SalesTable({ sales }) {
                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(sale.soldAt).toLocaleString()}
                 </td>
-                <td className="px-4 sm:px-6 py-4 text-sm text-gray-900">
-                  {sale.items?.length || 0} item(s)
+                <td className="px-4 sm:px-6 py-4 text-sm w-[180px] max-w-[220px]">
+                  <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto overflow-x-hidden border border-gray-100 rounded-md p-1.5 bg-gray-50/50">
+                    {(sale.items || []).map((item) => (
+                      <span
+                        key={item.id}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 whitespace-nowrap"
+                      >
+                        {item.product?.name || "Unknown"}
+                      </span>
+                    ))}
+                  </div>
                 </td>
                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                   KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}

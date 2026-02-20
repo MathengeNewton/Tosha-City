@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -28,6 +29,8 @@ function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
 }
 
 export default function SuppliersPage() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -238,18 +241,24 @@ export default function SuppliersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => handleOpenModal(supplier)}
-                      className="text-blue-600 hover:text-blue-800 mr-4"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(supplier.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete
-                    </button>
+                    {isAdmin ? (
+                      <>
+                        <button
+                          onClick={() => handleOpenModal(supplier)}
+                          className="text-blue-600 hover:text-blue-800 mr-4"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(supplier.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-gray-400 text-sm">View only</span>
+                    )}
                   </td>
                 </tr>
               ))

@@ -234,6 +234,23 @@ export default function SaleDetailsPage() {
         </div>
       </div>
 
+      {/* Products in this sale – pill list, scrollable */}
+      {sale.items?.length > 0 && (
+        <div className="no-print bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">Products in this sale</p>
+          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto overflow-x-hidden rounded-md border border-gray-100 bg-gray-50/50 p-2">
+            {sale.items.map((item) => (
+              <span
+                key={item.id}
+                className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
+              >
+                {item.product?.name || "Unknown"}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* When PENDING: message only; when PAID: receipt + print button already in header */}
       {sale.paymentStatus === "PENDING" && (
         <div className="no-print bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
