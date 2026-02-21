@@ -38,6 +38,7 @@ export default function StockManagementPage() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole('admin');
   const canManageEntries = isAdmin || hasRole('cashier'); // Cashiers can add/edit stock entries
+  const canCloseSession = isAdmin || hasRole('cashier'); // Cashiers can close sessions
   
   const [loading, setLoading] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
@@ -445,7 +446,7 @@ export default function StockManagementPage() {
                 Delete Session
               </button>
             )}
-            {selectedSession.status === 'OPEN' && isAdmin && (
+            {selectedSession.status === 'OPEN' && canCloseSession && (
               <button
                 onClick={handleCloseSession}
                 className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors text-sm font-medium min-h-[44px] whitespace-nowrap"

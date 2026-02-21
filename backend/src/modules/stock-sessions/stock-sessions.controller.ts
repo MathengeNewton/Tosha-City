@@ -37,8 +37,8 @@ export class StockSessionsController {
 
   @Post(':id/close')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Close a stock session (Admin only)' })
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Close a stock session (Admin/Cashier)' })
   async closeSession(@Param('id') id: string, @Request() req) {
     return await this.stockSessionsService.closeSession(+id, req.user.userId);
   }
