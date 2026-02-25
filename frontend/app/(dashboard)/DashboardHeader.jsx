@@ -90,18 +90,18 @@ export default function DashBoardHeader() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 p-4 shadow-sm flex items-center justify-between sticky top-0 z-40">
+    <header className="bg-white border-b border-gray-200 p-2 sm:p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 sticky top-0 z-40">
       {/* Breadcrumbs */}
-      <nav className="flex" aria-label="Breadcrumb">
-        <ol className="inline-flex items-center space-x-1 md:space-x-3">
+      <nav className="flex overflow-x-auto w-full sm:w-auto" aria-label="Breadcrumb">
+        <ol className="inline-flex items-center space-x-1 md:space-x-3 min-w-0">
           {crumbs.map((crumb, index) => (
-            <li key={crumb.href} className="inline-flex items-center">
+            <li key={crumb.href} className="inline-flex items-center flex-shrink-0">
               {index !== 0 && (
-                <ChevronRightIcon className="w-4 h-4 mx-1 text-gray-400" />
+                <ChevronRightIcon className="w-4 h-4 mx-1 text-gray-400 flex-shrink-0" />
               )}
               <Link
                 href={crumb.href}
-                className={`text-sm font-medium transition-colors ${
+                className={`text-xs sm:text-sm font-medium transition-colors min-h-[44px] flex items-center ${
                   pathname.startsWith(crumb.href)
                     ? "text-gray-900 font-semibold"
                     : "text-gray-500 hover:text-[#0D47A1]"
@@ -115,17 +115,18 @@ export default function DashBoardHeader() {
       </nav>
 
       {/* User Dropdown */}
-      <div className="relative" ref={dropdownRef}>
+      <div className="relative flex-shrink-0" ref={dropdownRef}>
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="flex items-center gap-3 h-11 px-3 rounded-full bg-white shadow-md border border-gray-200 hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0D47A1]"
+          className="flex items-center gap-2 sm:gap-3 min-h-[44px] px-2 sm:px-3 rounded-full bg-white shadow-md border border-gray-200 hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0D47A1]"
+          aria-label="User menu"
         >
           <img
             src={getAvatar()}
             alt="User avatar"
-            className="w-8 h-8 rounded-full object-cover"
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover flex-shrink-0"
           />
-          <div className="hidden md:block text-left">
+          <div className="hidden sm:block text-left">
             <p className="text-sm font-semibold text-gray-900">
               {userName}
             </p>
@@ -134,7 +135,7 @@ export default function DashBoardHeader() {
             </p>
           </div>
           <ChevronDownIcon
-            className={`w-4 h-4 text-gray-500 transition-transform ${
+            className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${
               isDropdownOpen ? "rotate-180" : ""
             }`}
           />
@@ -162,7 +163,7 @@ export default function DashBoardHeader() {
                     ? "/admin/dashboard/profile"
                     : "/user/dashboard/profile"
                 }
-                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px]"
                 onClick={() => setIsDropdownOpen(false)}
               >
                 <UserIcon className="w-5 h-5" />
@@ -171,7 +172,7 @@ export default function DashBoardHeader() {
 
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"
               >
                 <ArrowRightStartOnRectangleIcon className="w-5 h-5" />
                 Logout

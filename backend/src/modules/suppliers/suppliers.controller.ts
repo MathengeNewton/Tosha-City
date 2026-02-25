@@ -29,8 +29,8 @@ export class SuppliersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create a new supplier (Admin only)' })
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Create a new supplier (Admin/Cashier)' })
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   create(@Body() createSupplierDto: CreateSupplierDto) {
     return this.suppliersService.create(createSupplierDto);

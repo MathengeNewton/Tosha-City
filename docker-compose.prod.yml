@@ -37,10 +37,12 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       FRONTEND_URL: ${FRONTEND_URL:-https://admin.toshacity.co.ke}
+    ports:
+      - "4515:3000"  # Expose backend on host port 4515
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -55,28 +57,13 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://apis.toshacity.co.ke/api}
+    ports:
+      - "3015:3000"  # Expose frontend on host port 3015
     networks:
       - app-network
     depends_on:
       - backend
 
-  proxy:
-    build:
-      context: ./proxy
-      dockerfile: Dockerfile
-    container_name: toshacity-proxy
-    restart: unless-stopped
-    ports:
-      - "80:80" 
-      - "443:443"
-    volumes:
-      - ./proxy/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./proxy/ssl:/etc/nginx/ssl:ro
-    networks:
-      - app-network
-    depends_on:
-      - backend
-      - frontend
 
 volumes:
   db_data: {}

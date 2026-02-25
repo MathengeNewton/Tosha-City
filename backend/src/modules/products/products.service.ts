@@ -25,6 +25,7 @@ export class ProductsService {
       unit: createProductDto.unit.trim(),
       defaultPrice: Number(createProductDto.defaultPrice),
       isActive: createProductDto.isActive !== undefined ? createProductDto.isActive : true,
+      parentProductId: createProductDto.parentProductId || null,
     };
     
     console.log('Product data to create:', JSON.stringify(productData, null, 2));
@@ -39,6 +40,7 @@ export class ProductsService {
 
   async findAll(): Promise<Product[]> {
     return await this.productRepository.find({
+      relations: ['parentProduct'],
       order: { name: 'ASC' },
     });
   }
@@ -46,12 +48,16 @@ export class ProductsService {
   async findActive(): Promise<Product[]> {
     return await this.productRepository.find({
       where: { isActive: true },
+      relations: ['parentProduct'],
       order: { name: 'ASC' },
     });
   }
 
   async findOne(id: number): Promise<Product> {
-    const product = await this.productRepository.findOne({ where: { id } });
+    const product = await this.productRepository.findOne({ 
+      where: { id },
+      relations: ['parentProduct', 'byproducts'],
+    });
     if (!product) {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }

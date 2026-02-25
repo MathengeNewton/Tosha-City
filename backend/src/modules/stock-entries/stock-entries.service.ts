@@ -7,17 +7,25 @@ import { UpdateStockEntryDto } from './dto/update-stock-entry.dto';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { SuppliersService } from '../suppliers/suppliers.service';
+import { Sale } from '../sales/entities/sale.entity';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 
 @Injectable()
 export class StockEntriesService {
   constructor(
     @InjectRepository(StockEntry)
     private entryRepository: Repository<StockEntry>,
+    @InjectRepository(Sale)
+    private saleRepository: Repository<Sale>,
     private stockSessionsService: StockSessionsService,
     private suppliersService: SuppliersService,
+    private activityLog: ActivityLogService,
   ) {}
 
   async create(createEntryDto: CreateStockEntryDto, userId: number): Promise<StockEntry> {
+    if (createEntryDto.type === StockEntryType.BYPRODUCT_SALE) {
+      throw new BadRequestException('BYPRODUCT_SALE entries are created automatically by the system.');
+    }
     // Verify session exists and is open (for opening/incoming entries)
     const session = await this.stockSessionsService.findOne(createEntryDto.sessionId);
 
@@ -41,12 +49,34 @@ export class StockEntriesService {
       await this.suppliersService.findOne(createEntryDto.supplierId);
     }
 
-    const entry = this.entryRepository.create({
-      ...createEntryDto,
-      recordedById: userId,
-    });
+    try {
+      const entry = this.entryRepository.create({
+        ...createEntryDto,
+        recordedById: userId,
+      });
 
-    return await this.entryRepository.save(entry);
+      const saved = await this.entryRepository.save(entry);
+      await this.activityLog.log({
+        userId,
+        action: 'STOCK_ENTRY_CREATED',
+        entityType: 'stock_entry',
+        entityId: saved.id,
+        details: { sessionId: createEntryDto.sessionId, type: createEntryDto.type, productId: createEntryDto.productId, quantity: createEntryDto.quantity },
+        success: true,
+      });
+      return saved;
+    } catch (e: any) {
+      await this.activityLog.log({
+        userId,
+        action: 'STOCK_ENTRY_CREATED',
+        entityType: 'stock_entry',
+        entityId: null,
+        details: { sessionId: createEntryDto.sessionId, type: createEntryDto.type },
+        success: false,
+        errorMessage: e?.message ?? String(e),
+      });
+      throw e;
+    }
   }
 
   async findAll(sessionId?: number, productId?: number, type?: StockEntryType): Promise<StockEntry[]> {
@@ -85,28 +115,82 @@ export class StockEntriesService {
   }
 
   async update(id: number, updateEntryDto: UpdateStockEntryDto, userId: number): Promise<StockEntry> {
-    const entry = await this.findOne(id);
+    try {
+      const entry = await this.findOne(id);
 
-    // Check if session is closed
-    const session = await this.stockSessionsService.findOne(entry.sessionId);
-    if (session.status === SessionStatus.CLOSED) {
-      throw new BadRequestException('Cannot update stock entry in a closed session');
+      const session = await this.stockSessionsService.findOne(entry.sessionId);
+      if (session.status === SessionStatus.CLOSED) {
+        throw new BadRequestException('Cannot update stock entry in a closed session');
+      }
+
+      const salesCount = await this.saleRepository.count({ where: { sessionId: entry.sessionId } });
+      if (salesCount > 0) {
+        throw new BadRequestException(
+          'Cannot edit stock entries when this session has sales. Adjust or remove sales first.',
+        );
+      }
+
+      Object.assign(entry, updateEntryDto);
+      const saved = await this.entryRepository.save(entry);
+      await this.activityLog.log({
+        userId,
+        action: 'STOCK_ENTRY_UPDATED',
+        entityType: 'stock_entry',
+        entityId: id,
+        details: { sessionId: entry.sessionId, type: entry.type, ...updateEntryDto },
+        success: true,
+      });
+      return saved;
+    } catch (e: any) {
+      await this.activityLog.log({
+        userId,
+        action: 'STOCK_ENTRY_UPDATED',
+        entityType: 'stock_entry',
+        entityId: id,
+        details: updateEntryDto as any,
+        success: false,
+        errorMessage: e?.message ?? String(e),
+      });
+      throw e;
     }
-
-    Object.assign(entry, updateEntryDto);
-    return await this.entryRepository.save(entry);
   }
 
-  async remove(id: number): Promise<void> {
-    const entry = await this.findOne(id);
+  async remove(id: number, userId?: number): Promise<void> {
+    try {
+      const entry = await this.findOne(id);
 
-    // Check if session is closed
-    const session = await this.stockSessionsService.findOne(entry.sessionId);
-    if (session.status === SessionStatus.CLOSED) {
-      throw new BadRequestException('Cannot delete stock entry in a closed session');
+      const session = await this.stockSessionsService.findOne(entry.sessionId);
+      if (session.status === SessionStatus.CLOSED) {
+        throw new BadRequestException('Cannot delete stock entry in a closed session');
+      }
+
+      const salesCount = await this.saleRepository.count({ where: { sessionId: entry.sessionId } });
+      if (salesCount > 0) {
+        throw new BadRequestException(
+          'Cannot delete stock entries when this session has sales. Adjust or remove sales first.',
+        );
+      }
+
+      await this.entryRepository.remove(entry);
+      await this.activityLog.log({
+        userId: userId ?? null,
+        action: 'STOCK_ENTRY_DELETED',
+        entityType: 'stock_entry',
+        entityId: id,
+        details: { sessionId: entry.sessionId, type: entry.type },
+        success: true,
+      });
+    } catch (e: any) {
+      await this.activityLog.log({
+        userId: userId ?? null,
+        action: 'STOCK_ENTRY_DELETED',
+        entityType: 'stock_entry',
+        entityId: id,
+        success: false,
+        errorMessage: e?.message ?? String(e),
+      });
+      throw e;
     }
-
-    await this.entryRepository.remove(entry);
   }
 }
 

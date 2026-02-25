@@ -28,9 +28,9 @@ export class ProductsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  @ApiOperation({ summary: 'Create a new product (Admin only)' })
+  @ApiOperation({ summary: 'Create a new product (Admin/Cashier)' })
   create(@Body() createProductDto: CreateProductDto) {
     console.log('ProductsController.create - Received DTO:', JSON.stringify(createProductDto, null, 2));
     return this.productsService.create(createProductDto);

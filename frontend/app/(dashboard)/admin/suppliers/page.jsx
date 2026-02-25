@@ -1,13 +1,44 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
+
+const defaultEnd = new Date();
+const defaultStart = new Date();
+defaultStart.setDate(defaultStart.getDate() - 365);
+
+function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
+  if (!dateFrom && !dateTo) return items;
+  return items.filter((item) => {
+    const d = item[dateKey] ? new Date(item[dateKey]) : null;
+    if (!d) return true;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (d > to) return false;
+    }
+    return true;
+  });
+}
 
 export default function SuppliersPage() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
+  const [filters, setFilters] = useState({
+    dateFrom: defaultStart.toISOString().split("T")[0],
+    dateTo: defaultEnd.toISOString().split("T")[0],
+  });
   const [formData, setFormData] = useState({
     name: '',
     contactPerson: '',
@@ -17,6 +48,11 @@ export default function SuppliersPage() {
     notes: '',
     isActive: true,
   });
+
+  const filteredSuppliers = useMemo(
+    () => filterByDateRange(suppliers, filters.dateFrom, filters.dateTo),
+    [suppliers, filters.dateFrom, filters.dateTo]
+  );
 
   useEffect(() => {
     loadSuppliers();
@@ -100,12 +136,69 @@ export default function SuppliersPage() {
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Suppliers</h1>
           <p className="text-gray-600 mt-1">Manage your suppliers</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
-        >
-          Add Supplier
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const rows = filteredSuppliers.map((s) => ({
+                name: s.name,
+                contactPerson: s.contactPerson || "",
+                phone: s.phone || "",
+                email: s.email || "",
+                address: s.address || "",
+                status: s.isActive ? "Active" : "Inactive",
+                createdAt: s.createdAt ? new Date(s.createdAt).toLocaleString() : "",
+              }));
+              exportToExcel(
+                rows,
+                [
+                  { key: "name", label: "Name" },
+                  { key: "contactPerson", label: "Contact" },
+                  { key: "phone", label: "Phone" },
+                  { key: "email", label: "Email" },
+                  { key: "address", label: "Address" },
+                  { key: "status", label: "Status" },
+                  { key: "createdAt", label: "Created" },
+                ],
+                `suppliers-export-${new Date().toISOString().split("T")[0]}`
+              );
+              toast.success("Excel exported");
+            }}
+            className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm font-medium min-h-[44px]"
+          >
+            Export Excel
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
+          >
+            Add Supplier
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -121,12 +214,12 @@ export default function SuppliersPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {suppliers.length === 0 ? (
+            {filteredSuppliers.length === 0 ? (
               <tr>
                 <td colSpan="6" className="px-6 py-4 text-center text-gray-500">No suppliers found</td>
               </tr>
             ) : (
-              suppliers.map((supplier) => (
+              filteredSuppliers.map((supplier) => (
                 <tr key={supplier.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {supplier.name}
@@ -148,18 +241,24 @@ export default function SuppliersPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => handleOpenModal(supplier)}
-                      className="text-blue-600 hover:text-blue-800 mr-4"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(supplier.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete
-                    </button>
+                    {isAdmin ? (
+                      <>
+                        <button
+                          onClick={() => handleOpenModal(supplier)}
+                          className="text-blue-600 hover:text-blue-800 mr-4"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(supplier.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-gray-400 text-sm">View only</span>
+                    )}
                   </td>
                 </tr>
               ))

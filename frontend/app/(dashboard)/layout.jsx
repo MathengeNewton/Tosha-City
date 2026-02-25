@@ -1,62 +1,78 @@
 "use client";
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import { useAuth } from "../../contexts/AuthContext";
 
 import SideBar from "./SideBar";
 import DashBoardHeader from "./DashboardHeader";
 import DashboardFooter from "./DashboardFooter";
 import {
-  BellIcon,
-  BriefcaseIcon,
-  ChartBarIcon,
-  ChatBubbleLeftRightIcon,
-  PencilSquareIcon,
   HomeIcon,
+  ClipboardDocumentListIcon,
+  CreditCardIcon,
+  ChartBarIcon,
+  DocumentChartBarIcon,
+  CubeIcon,
+  TruckIcon,
   UserIcon,
+  UserGroupIcon,
   CogIcon,
   Bars3Icon,
   XMarkIcon,
-  FolderOpenIcon,
-  ClipboardDocumentListIcon,
-  CalendarIcon,
-  EnvelopeIcon,
-  CreditCardIcon,
-  LifebuoyIcon,
+  DocumentTextIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { hasRole } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Cashier menu - Butchery Operations
+  // Cashier menu - Dashboard, stock, sales, and read+create for products/suppliers/customers
   const cashierMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
+    { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
+    { name: "Customers", href: "/admin/customers", icon: UserIcon },
   ];
 
-  // Admin menu - Butchery Admin
+  // Admin menu - Full access
   const adminMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
-    { name: "Reports", href: "/dashboard/reports", icon: ChartBarIcon },
-    { name: "Products", href: "/admin/products", icon: BriefcaseIcon },
-    { name: "Suppliers", href: "/admin/suppliers", icon: BriefcaseIcon },
+    { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
+    { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
+    { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
-    { name: "Users", href: "/admin/users", icon: UserIcon },
+    { name: "Users", href: "/admin/users", icon: UserGroupIcon },
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
 
-  // Determine menu based on user role (for now, use adminMenu)
-  // TODO: Get user role from context and show appropriate menu
-  const menuItems = adminMenu;
+  const isAdmin = hasRole("admin");
+  const menuItems = isAdmin ? adminMenu : cashierMenu;
+
+  // Redirect cashier away from admin-only pages (allow products, suppliers, customers for read+create)
+  const cashierAllowedAdminPaths = ["/admin/products", "/admin/suppliers", "/admin/customers"];
+  const isCashierAllowedPath = pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  useEffect(() => {
+    if (isAdmin === false && pathname) {
+      if (pathname === "/dashboard/reports") {
+        router.replace("/dashboard");
+      } else if (pathname.startsWith("/admin") && !isCashierAllowedPath) {
+        router.replace("/dashboard");
+      }
+    }
+  }, [isAdmin, pathname, router, isCashierAllowedPath]);
 
   return (
     <ProtectedRoute>
@@ -72,7 +88,7 @@ export default function DashboardLayout({ children }) {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <DashBoardHeader />
-          <main className="flex-1 overflow-y-auto p-6 bg-white/50">
+          <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-white/50">
             {children}
           </main>
           <DashboardFooter />
@@ -100,7 +116,8 @@ export default function DashboardLayout({ children }) {
         {/* Mobile Toggle Button */}
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="cursor-pointer md:hidden fixed bottom-4 right-4 z-50 bg-blue-900 hover:bg-[#1e88b5] text-white p-3 rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900"
+          className="cursor-pointer md:hidden fixed bottom-4 right-4 z-50 bg-blue-900 hover:bg-[#1e88b5] text-white p-3 rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          aria-label="Toggle menu"
         >
           {isMobileOpen ? (
             <XMarkIcon className="h-6 w-6" />

@@ -2,18 +2,23 @@ import {
   Controller,
   Get,
   Post,
-  Param,
   Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StockSessionsService } from './stock-sessions.service';
 import { OpenSessionDto } from './dto/open-session.dto';
+import { UpdateSessionDto } from './dto/update-session.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
+import { SessionStatus } from './entities/stock-session.entity';
 
 @ApiTags('Stock Sessions')
 @Controller('stock-sessions')
@@ -33,14 +38,41 @@ export class StockSessionsController {
   @Post(':id/close')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Close a stock session (Cashier/Admin)' })
+  @ApiOperation({ summary: 'Close a stock session (Admin/Cashier)' })
   async closeSession(@Param('id') id: string, @Request() req) {
     return await this.stockSessionsService.closeSession(+id, req.user.userId);
   }
 
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update a stock session (Admin only)' })
+  async update(@Param('id') id: string, @Body() updateSessionDto: UpdateSessionDto, @Request() req) {
+    return await this.stockSessionsService.update(+id, updateSessionDto, req.user?.userId);
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete a stock session (Admin only, only if no entries/sales)' })
+  async remove(@Param('id') id: string, @Request() req) {
+    await this.stockSessionsService.remove(+id, req.user?.userId);
+  }
+
   @Get()
-  @ApiOperation({ summary: 'Get all stock sessions' })
-  findAll() {
+  @ApiOperation({ summary: 'Get all stock sessions with optional filters and statistics' })
+  @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date in YYYY-MM-DD format' })
+  @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date in YYYY-MM-DD format' })
+  @ApiQuery({ name: 'status', required: false, enum: SessionStatus, description: 'Filter by session status' })
+  findAll(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('status') status?: SessionStatus,
+  ) {
+    // If any filter is provided, use findAllWithStats, otherwise use simple findAll
+    if (dateFrom || dateTo || status) {
+      return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status);
+    }
     return this.stockSessionsService.findAll();
   }
 

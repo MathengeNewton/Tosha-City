@@ -1,35 +1,68 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
+
+const defaultEnd = new Date();
+const defaultStart = new Date();
+defaultStart.setDate(defaultStart.getDate() - 365);
+
+function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
+  if (!dateFrom && !dateTo) return items;
+  return items.filter((item) => {
+    const d = item[dateKey] ? new Date(item[dateKey]) : null;
+    if (!d) return true;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (d > to) return false;
+    }
+    return true;
+  });
+}
 
 const UsersPage = () => {
   const [users, setUsers] = useState([]);
-  const [districts, setDistricts] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [selectedDistrictFilter, setSelectedDistrictFilter] = useState("");
+  const [filters, setFilters] = useState({
+    dateFrom: defaultStart.toISOString().split("T")[0],
+    dateTo: defaultEnd.toISOString().split("T")[0],
+  });
   const [formData, setFormData] = useState({
     username: "",
     email: "",
     password: "",
-    districtId: "",
     roleIds: [],
   });
 
+  const cashierRole = useMemo(
+    () => roles.find((r) => r.name?.toLowerCase() === "cashier"),
+    [roles]
+  );
+
+  const filteredUsers = useMemo(
+    () => filterByDateRange(users, filters.dateFrom, filters.dateTo),
+    [users, filters.dateFrom, filters.dateTo]
+  );
+
   useEffect(() => {
     loadUsers();
-    loadDistricts();
     loadRoles();
-  }, [selectedDistrictFilter]);
+  }, []);
 
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const params = selectedDistrictFilter ? { districtId: selectedDistrictFilter } : {};
-      const response = await apiClient.users.getAll(params);
+      const response = await apiClient.users.getAll();
       setUsers(response.data || []);
     } catch (error) {
       console.error("Error loading users:", error);
@@ -39,24 +72,14 @@ const UsersPage = () => {
     }
   };
 
-  const loadDistricts = async () => {
-    try {
-      const response = await apiClient.districts.getAll();
-      setDistricts(response.data || []);
-    } catch (error) {
-      console.error("Error loading districts:", error);
-      toast.error("Failed to load districts");
-    }
-  };
-
   const loadRoles = async () => {
-    // Note: You may need to add a roles endpoint to your API
-    // For now, we'll use common roles
-    setRoles([
-      { id: 1, name: "admin" },
-      { id: 2, name: "member" },
-      { id: 3, name: "group-leader" },
-    ]);
+    try {
+      const response = await apiClient.roles.getAll();
+      setRoles(response.data || []);
+    } catch (error) {
+      console.error("Error loading roles:", error);
+      toast.error("Failed to load roles");
+    }
   };
 
   const handleCreate = () => {
@@ -65,8 +88,7 @@ const UsersPage = () => {
       username: "",
       email: "",
       password: "",
-      districtId: "",
-      roleIds: [],
+      roleIds: cashierRole ? [cashierRole.id] : [],
     });
     setShowModal(true);
   };
@@ -76,8 +98,7 @@ const UsersPage = () => {
     setFormData({
       username: user.username || "",
       email: user.email || "",
-      password: "", // Don't pre-fill password
-      districtId: user.districtId || user.district?.id || "",
+      password: "",
       roleIds: user.roles?.map((r) => r.id) || [],
     });
     setShowModal(true);
@@ -98,9 +119,9 @@ const UsersPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.districtId) {
-      toast.error("Please select a district");
+
+    if (!editingUser && !cashierRole) {
+      toast.error("Roles are still loading. Please try again.");
       return;
     }
 
@@ -108,8 +129,7 @@ const UsersPage = () => {
       const userData = {
         username: formData.username,
         email: formData.email,
-        districtId: parseInt(formData.districtId),
-        roleIds: formData.roleIds,
+        roleIds: editingUser ? formData.roleIds : [cashierRole.id],
       };
 
       // Only include password if it's a new user or if password was changed
@@ -150,16 +170,8 @@ const UsersPage = () => {
     }));
   };
 
-  const getUserDistrict = (user) => {
-    return districts.find((d) => d.id === user.districtId);
-  };
-
   const getUserRoles = (user) => {
     return user.roles?.map((r) => r.name).join(", ") || "No roles";
-  };
-
-  const isDistrictLeader = (user, district) => {
-    return district?.leaderIds?.includes(user.id) || false;
   };
 
   if (loading) {
@@ -177,40 +189,68 @@ const UsersPage = () => {
           Users Management
         </h1>
         <p className="text-gray-600 mt-1">
-          Manage PCEA church users and roles
+          Manage users and roles
         </p>
       </div>
 
       {/* Filter Section */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700">
-            Filter by District:
-          </label>
-          <select
-            value={selectedDistrictFilter}
-            onChange={(e) => setSelectedDistrictFilter(e.target.value)}
-            className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-          >
-            <option value="">All Districts</option>
-            {districts.map((district) => (
-              <option key={district.id} value={district.id}>
-                {district.name}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-800">User List</h3>
-          <button
-            onClick={handleCreate}
-            className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors"
-          >
-            Create User
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const rows = filteredUsers.map((u) => ({
+                  username: u.username,
+                  email: u.email || "",
+                  roles: u.roles?.map((r) => r.name).join(", ") || "",
+                }));
+                exportToExcel(
+                  rows,
+                  [
+                    { key: "username", label: "Username" },
+                    { key: "email", label: "Email" },
+                    { key: "roles", label: "Roles" },
+                  ],
+                  `users-export-${new Date().toISOString().split("T")[0]}`
+                );
+                toast.success("Excel exported");
+              }}
+              className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm font-medium min-h-[44px]"
+            >
+              Export Excel
+            </button>
+            <button
+              onClick={handleCreate}
+              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
+            >
+              Create User
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -226,12 +266,6 @@ const UsersPage = () => {
                   Roles
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  District
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Leader
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -239,54 +273,38 @@ const UsersPage = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
                     No users found.
                   </td>
                 </tr>
               ) : (
-                users.map((user) => {
-                  const district = getUserDistrict(user);
-                  const isLeader = isDistrictLeader(user, district);
-                  return (
-                    <tr key={user.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {user.username}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {getUserRoles(user)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {district?.name || "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {isLeader ? (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                            Leader
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button
-                          onClick={() => handleEdit(user)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(user.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
+                filteredUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {user.username}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {getUserRoles(user)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleEdit(user)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -345,40 +363,25 @@ const UsersPage = () => {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  District *
-                </label>
-                <select
-                  name="districtId"
-                  value={formData.districtId}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-                  required
-                >
-                  <option value="">Select District</option>
-                  {districts.map((district) => (
-                    <option key={district.id} value={district.id}>
-                      {district.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Roles *
                 </label>
-                <div className="space-y-2">
-                  {roles.map((role) => (
-                    <label key={role.id} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.roleIds.includes(role.id)}
-                        onChange={() => handleRoleToggle(role.id)}
-                        className="mr-2"
-                      />
-                      <span className="text-sm capitalize">{role.name}</span>
-                    </label>
-                  ))}
-                </div>
+                {editingUser ? (
+                  <div className="space-y-2">
+                    {roles.map((role) => (
+                      <label key={role.id} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.roleIds.includes(role.id)}
+                          onChange={() => handleRoleToggle(role.id)}
+                          className="mr-2"
+                        />
+                        <span className="text-sm capitalize">{role.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 py-1">Cashier</p>
+                )}
               </div>
               <div className="flex justify-end gap-2">
                 <button

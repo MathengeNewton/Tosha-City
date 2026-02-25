@@ -71,9 +71,13 @@ export class PaymentsService {
 
       const savedPayment = await queryRunner.manager.save(SalePayment, payment);
 
-      // Update sale payment status
-      sale.paymentStatus = PaymentStatus.PAID;
-      await queryRunner.manager.save(Sale, sale);
+      // Update only paymentStatus so TypeORM does not touch the payment relation
+      // (saving the full Sale entity with payment=null would set payment.saleId to null)
+      await queryRunner.manager.update(
+        Sale,
+        { id: createPaymentDto.saleId },
+        { paymentStatus: PaymentStatus.PAID },
+      );
 
       await queryRunner.commitTransaction();
 

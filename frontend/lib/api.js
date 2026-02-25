@@ -81,11 +81,13 @@ export const apiClient = {
 
   // Stock Sessions
   stockSessions: {
-    getAll: () => api.get('/stock-sessions'),
+    getAll: (params) => api.get('/stock-sessions', { params }),
     getCurrent: () => api.get('/stock-sessions/current'),
     getById: (id) => api.get(`/stock-sessions/${id}`),
     open: (data) => api.post('/stock-sessions/open', data),
     close: (id) => api.post(`/stock-sessions/${id}/close`),
+    update: (id, data) => api.patch(`/stock-sessions/${id}`, data),
+    delete: (id) => api.delete(`/stock-sessions/${id}`),
   },
 
   // Stock Entries
@@ -102,6 +104,7 @@ export const apiClient = {
     getAll: (params) => api.get('/sales', { params }),
     getById: (id) => api.get(`/sales/${id}`),
     getPayment: (id) => api.get(`/sales/${id}/payment`),
+    getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),
     create: (data) => api.post('/sales', data),
     update: (id, data) => api.patch(`/sales/${id}`, data),
     delete: (id) => api.delete(`/sales/${id}`),
@@ -135,7 +138,14 @@ export const apiClient = {
         },
       });
     },
-    getFile: (filename) => `${API_BASE_URL}/uploads/${filename}`,
+    getFile: (filename) => {
+      // If it's already a full URL (Cloudinary), return it directly
+      if (filename && (filename.startsWith('http://') || filename.startsWith('https://'))) {
+        return filename;
+      }
+      // Otherwise, construct the API URL for local files
+      return `${API_BASE_URL}/uploads/${filename}`;
+    },
   },
 
   // Reports
@@ -172,6 +182,17 @@ export const apiClient = {
     get: () => api.get('/users/me'),
     update: (data) => api.put('/users/me', data),
     changePassword: (data) => api.post('/auth/change-password', data),
+  },
+
+  // Roles (admin only - for user management)
+  roles: {
+    getAll: () => api.get('/roles'),
+    getById: (id) => api.get(`/roles/${id}`),
+  },
+
+  // Activity log (admin only)
+  activityLog: {
+    getAll: (params) => api.get('/activity-log', { params }),
   },
 };
 

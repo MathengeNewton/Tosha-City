@@ -59,7 +59,7 @@ export class ReportsService {
       .filter((s) => s.paymentStatus === PaymentStatus.PENDING)
       .reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
 
-    // Sales by product
+    // Sales by product with price range breakdown
     const salesByProduct = {};
     sales.forEach((sale) => {
       sale.items?.forEach((item) => {
@@ -69,11 +69,42 @@ export class ReportsService {
             productId: item.product?.id,
             quantity: 0,
             revenue: 0,
+            priceRanges: {},
           };
         }
-        salesByProduct[productName].quantity += item.quantity;
+        const itemQuantity = Number(item.quantity || 0);
+        const itemTotalPrice = itemQuantity * Number(item.unitPrice || 0);
+        
+        salesByProduct[productName].quantity += itemQuantity;
         if (sale.paymentStatus === PaymentStatus.PAID) {
-          salesByProduct[productName].revenue += item.quantity * Number(item.unitPrice || 0);
+          salesByProduct[productName].revenue += itemTotalPrice;
+        }
+
+        // Group by price ranges (200 KES increments: 1-200, 201-400, 401-600, etc.)
+        let rangeKey;
+        if (itemTotalPrice <= 0) {
+          rangeKey = '0';
+        } else if (itemTotalPrice <= 200) {
+          rangeKey = '1-200';
+        } else {
+          // Calculate which 200-range bucket: 201-400, 401-600, etc.
+          const rangeIndex = Math.floor((itemTotalPrice - 1) / 200);
+          const rangeStart = rangeIndex * 200 + 1;
+          const rangeEnd = (rangeIndex + 1) * 200;
+          rangeKey = `${rangeStart}-${rangeEnd}`;
+        }
+        
+        if (!salesByProduct[productName].priceRanges[rangeKey]) {
+          salesByProduct[productName].priceRanges[rangeKey] = {
+            count: 0,
+            quantity: 0,
+            revenue: 0,
+          };
+        }
+        salesByProduct[productName].priceRanges[rangeKey].count += 1;
+        salesByProduct[productName].priceRanges[rangeKey].quantity += itemQuantity;
+        if (sale.paymentStatus === PaymentStatus.PAID) {
+          salesByProduct[productName].priceRanges[rangeKey].revenue += itemTotalPrice;
         }
       });
     });
@@ -125,6 +156,25 @@ export class ReportsService {
 
     const entries = await query.orderBy('entry.recordedAt', 'DESC').getMany();
 
+    // Get sales for the same date range to include sales by price and by kgs
+    const salesQuery = this.saleRepository
+      .createQueryBuilder('sale')
+      .leftJoinAndSelect('sale.items', 'items')
+      .leftJoinAndSelect('items.product', 'product');
+
+    if (filters.startDate && filters.endDate) {
+      salesQuery.where('DATE(sale.soldAt) BETWEEN :startDate AND :endDate', {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
+    }
+
+    if (filters.sessionId) {
+      salesQuery.andWhere('sale.sessionId = :sessionId', { sessionId: filters.sessionId });
+    }
+
+    const sales = await salesQuery.getMany();
+
     // Group by product and type
     const stockByProduct = {};
     entries.forEach((entry) => {
@@ -136,6 +186,8 @@ export class ReportsService {
           incoming: 0,
           closing: 0,
           wastage: 0,
+          salesByPrice: 0,
+          salesByKgs: 0,
         };
       }
 
@@ -155,8 +207,44 @@ export class ReportsService {
       }
     });
 
+    // Add sales data by product
+    sales.forEach((sale) => {
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach((item) => {
+          const productName = item.product?.name || 'Unknown';
+          if (!stockByProduct[productName]) {
+            stockByProduct[productName] = {
+              productId: item.product?.id,
+              opening: 0,
+              incoming: 0,
+              closing: 0,
+              wastage: 0,
+              salesByPrice: 0,
+              salesByKgs: 0,
+            };
+          }
+          const quantity = parseFloat(item.quantity?.toString() || '0');
+          const totalPrice = parseFloat(item.totalPrice?.toString() || '0');
+          stockByProduct[productName].salesByPrice += totalPrice;
+          stockByProduct[productName].salesByKgs += quantity;
+        });
+      }
+    });
+
+    // Calculate totals
+    let totalSalesByPrice = 0;
+    let totalSalesByKgs = 0;
+    Object.values(stockByProduct).forEach((product: any) => {
+      totalSalesByPrice += product.salesByPrice || 0;
+      totalSalesByKgs += product.salesByKgs || 0;
+    });
+
     return {
       stockByProduct,
+      summary: {
+        totalSalesByPrice,
+        totalSalesByKgs,
+      },
       entries: entries.map((e) => ({
         id: e.id,
         product: e.product?.name,
@@ -335,6 +423,39 @@ export class ReportsService {
     const paidSales = sales.filter((s) => s.paymentStatus === PaymentStatus.PAID);
     const totalRevenue = paidSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
 
+    // Calculate sales by price (total revenue) and by kgs (total quantity)
+    let totalQuantity = 0;
+    let totalRevenueByPrice = 0;
+    
+    sales.forEach((sale) => {
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach((item) => {
+          const quantity = parseFloat(item.quantity?.toString() || '0');
+          const totalPrice = parseFloat(item.totalPrice?.toString() || '0');
+          totalQuantity += quantity;
+          totalRevenueByPrice += totalPrice;
+        });
+      }
+    });
+
+    // Calculate sales by product (by price and by kgs)
+    const salesByProduct = {};
+    sales.forEach((sale) => {
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach((item) => {
+          const productName = item.product?.name || 'Unknown';
+          if (!salesByProduct[productName]) {
+            salesByProduct[productName] = {
+              revenue: 0,
+              quantity: 0,
+            };
+          }
+          salesByProduct[productName].revenue += parseFloat(item.totalPrice?.toString() || '0');
+          salesByProduct[productName].quantity += parseFloat(item.quantity?.toString() || '0');
+        });
+      }
+    });
+
     return {
       date: targetDate.toISOString().split('T')[0],
       sales: {
@@ -342,6 +463,9 @@ export class ReportsService {
         paid: paidSales.length,
         unpaid: sales.length - paidSales.length,
         revenue: totalRevenue,
+        totalByPrice: totalRevenueByPrice,
+        totalByKgs: totalQuantity,
+        byProduct: salesByProduct,
       },
       stock: {
         entries: stockEntries.length,

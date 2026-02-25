@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger, BadRequestException } from '@nes
 import { Role } from '../roles/entities/role.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { User } from './entities/user.entity';
 import { UserRole } from '../roles/entities/role.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -53,10 +54,11 @@ export class UsersService {
       finalEmail = emailAttempt;
     }
 
+    const hashedPassword = await bcrypt.hash(createDto.password, 10);
     const user = this.userRepo.create({
       username: createDto.username,
       email: finalEmail,
-      password: createDto.password,
+      password: hashedPassword,
       roles,
     });
     
@@ -73,8 +75,27 @@ export class UsersService {
     return fullUser;
   }
 
-  async update(id: number, data: Partial<User>): Promise<User> {
-    await this.userRepo.update(id, data);
+  async update(
+    id: number,
+    data: Partial<Pick<User, 'username' | 'email' | 'password'>> & { roleIds?: number[] },
+  ): Promise<User> {
+    const { roleIds, ...rest } = data;
+    const updateData = { ...rest } as Partial<User>;
+    if (updateData.password) {
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    }
+    if (Object.keys(updateData).length > 0) {
+      await this.userRepo.update(id, updateData);
+    }
+    if (roleIds !== undefined) {
+      const roles = await this.roleRepo.findBy({ id: In(roleIds) });
+      if (roles.length !== roleIds.length) {
+        throw new BadRequestException('One or more roleIds are invalid');
+      }
+      const user = await this.findOne(id);
+      user.roles = roles;
+      await this.userRepo.save(user);
+    }
     return await this.findOne(id);
   }
 

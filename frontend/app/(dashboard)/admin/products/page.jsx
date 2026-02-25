@@ -1,20 +1,57 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
+
+const defaultEnd = new Date();
+const defaultStart = new Date();
+defaultStart.setDate(defaultStart.getDate() - 365);
+
+function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
+  if (!dateFrom && !dateTo) return items;
+  return items.filter((item) => {
+    const d = item[dateKey] ? new Date(item[dateKey]) : null;
+    if (!d) return true;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      if (d < from) return false;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      if (d > to) return false;
+    }
+    return true;
+  });
+}
 
 export default function ProductsPage() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [filters, setFilters] = useState({
+    dateFrom: defaultStart.toISOString().split("T")[0],
+    dateTo: defaultEnd.toISOString().split("T")[0],
+  });
   const [formData, setFormData] = useState({
     name: '',
     unit: 'kg',
     pricePerUnit: '',
     description: '',
     isActive: true,
+    parentProductId: '',
   });
+
+  const filteredProducts = useMemo(
+    () => filterByDateRange(products, filters.dateFrom, filters.dateTo),
+    [products, filters.dateFrom, filters.dateTo]
+  );
 
   useEffect(() => {
     loadProducts();
@@ -47,6 +84,7 @@ export default function ProductsPage() {
         pricePerUnit: (product.defaultPrice || product.pricePerUnit || 0).toString(),
         description: product.description || '',
         isActive: product.isActive,
+        parentProductId: product.parentProductId ? product.parentProductId.toString() : '',
       });
     } else {
       setEditingProduct(null);
@@ -56,6 +94,7 @@ export default function ProductsPage() {
         pricePerUnit: '',
         description: '',
         isActive: true,
+        parentProductId: '',
       });
     }
     setShowModal(true);
@@ -90,6 +129,7 @@ export default function ProductsPage() {
         unit: formData.unit.trim(),
         defaultPrice: price,
         isActive: formData.isActive,
+        parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
       };
 
       console.log("Sending product data:", data); // Debug log
@@ -148,20 +188,75 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex justify-between items-center">
+    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
+      <div className="mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
             Products Management
           </h1>
-          <p className="text-gray-600 mt-1">Manage butchery products</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage butchery products</p>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
-        >
-          Add Product
-        </button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              const rows = filteredProducts.map((p) => ({
+                name: p.name,
+                unit: p.unit,
+                pricePerUnit: parseFloat(p.defaultPrice || p.pricePerUnit || 0),
+                description: p.description || "",
+                status: p.isActive ? "Active" : "Inactive",
+                createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : "",
+              }));
+              exportToExcel(
+                rows,
+                [
+                  { key: "name", label: "Name" },
+                  { key: "unit", label: "Unit" },
+                  { key: "pricePerUnit", label: "Price (KES)" },
+                  { key: "description", label: "Description" },
+                  { key: "status", label: "Status" },
+                  { key: "createdAt", label: "Created" },
+                ],
+                `products-export-${new Date().toISOString().split("T")[0]}`
+              );
+              toast.success("Excel exported");
+            }}
+            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 text-sm font-medium min-h-[44px]"
+          >
+            Export Excel
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex-1 sm:flex-none bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
+          >
+            Add Product
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Products Table */}
@@ -170,37 +265,37 @@ export default function ProductsPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price per Unit</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Price per Unit</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Description</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {products.length === 0 ? (
+              {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
                     No products found. Create your first product!
                   </td>
                 </tr>
               ) : (
-                products.map((product) => (
+                filteredProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {product.name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {product.unit}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 hidden sm:table-cell">
                       KES {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
                       {product.description || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         product.isActive 
                           ? 'bg-green-100 text-green-800' 
@@ -209,26 +304,31 @@ export default function ProductsPage() {
                         {product.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleOpenModal(product)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(product)}
-                          className="text-yellow-600 hover:text-yellow-800"
-                        >
-                          {product.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          Delete
-                        </button>
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => handleOpenModal(product)}
+                              className="text-blue-600 hover:text-blue-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleToggleActive(product)}
+                              className="text-yellow-600 hover:text-yellow-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
+                            >
+                              {product.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(product.id)}
+                              className="text-red-600 hover:text-red-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                        {!isAdmin && <span className="text-gray-400 text-sm">View only</span>}
                       </div>
                     </td>
                   </tr>
@@ -241,9 +341,9 @@ export default function ProductsPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
               {editingProduct ? 'Edit Product' : 'Add Product'}
             </h2>
             
@@ -256,12 +356,12 @@ export default function ProductsPage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Unit *
@@ -270,7 +370,7 @@ export default function ProductsPage() {
                     type="text"
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                     placeholder="kg"
                     required
                   />
@@ -285,10 +385,31 @@ export default function ProductsPage() {
                     step="0.01"
                     value={formData.pricePerUnit}
                     onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Parent Product (for byproducts)
+                </label>
+                <select
+                  value={formData.parentProductId}
+                  onChange={(e) => setFormData({ ...formData, parentProductId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                >
+                  <option value="">None (Main Product)</option>
+                  {products.filter(p => p.isActive && (!editingProduct || p.id !== editingProduct.id)).map(product => (
+                    <option key={product.id} value={product.id.toString()}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select a parent product if this is a byproduct (e.g., select "Beef" for "Minced Meat")
+                </p>
               </div>
 
               <div>
@@ -298,35 +419,35 @@ export default function ProductsPage() {
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                   rows="3"
                 />
               </div>
 
-              <div className="flex items-center">
+              <div className="flex items-center min-h-[44px]">
                 <input
                   type="checkbox"
                   id="isActive"
                   checked={formData.isActive}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label htmlFor="isActive" className="ml-2 block text-sm text-gray-700">
                   Active
                 </label>
               </div>
 
-              <div className="flex gap-4 pt-4">
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 transition-colors min-h-[44px] text-base"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors"
+                  className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-[#1e88b5] transition-colors min-h-[44px] text-base"
                 >
                   {editingProduct ? 'Update' : 'Create'}
                 </button>

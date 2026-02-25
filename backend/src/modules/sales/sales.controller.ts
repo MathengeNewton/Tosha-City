@@ -9,7 +9,9 @@ import {
   Query,
   UseGuards,
   Request,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -37,9 +39,24 @@ export class SalesController {
   @Get()
   @ApiOperation({ summary: 'Get all sales (with optional filters)' })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  @ApiQuery({ name: 'productId', required: false, type: Number, description: 'Filter by product (sale contains this product)' })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
-  findAll(@Query('sessionId') sessionId?: string, @Query('date') date?: string) {
-    return this.salesService.findAll(sessionId ? +sessionId : undefined, date);
+  @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date YYYY-MM-DD' })
+  @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date YYYY-MM-DD' })
+  findAll(
+    @Query('sessionId') sessionId?: string,
+    @Query('productId') productId?: string,
+    @Query('date') date?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.salesService.findAll(
+      sessionId ? +sessionId : undefined,
+      productId ? +productId : undefined,
+      date,
+      dateFrom,
+      dateTo,
+    );
   }
 
   @Get(':id')
@@ -54,20 +71,28 @@ export class SalesController {
     return this.salesService.getPaymentForSale(+id);
   }
 
+  @Get(':id/receipt')
+  @ApiOperation({ summary: 'Get plain text receipt for a paid sale' })
+  async getReceipt(@Param('id') id: string, @Res() res: Response) {
+    const receiptText = await this.salesService.generatePlainTextReceipt(+id);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(receiptText);
+  }
+
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Update a sale (Cashier/Admin)' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update a sale (Admin only)' })
   update(@Param('id') id: string, @Body() updateSaleDto: UpdateSaleDto, @Request() req) {
     return this.salesService.update(+id, updateSaleDto, req.user.userId);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Delete a sale (Cashier/Admin)' })
-  remove(@Param('id') id: string) {
-    return this.salesService.remove(+id);
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete a sale (Admin only)' })
+  remove(@Param('id') id: string, @Request() req) {
+    return this.salesService.remove(+id, req.user?.userId);
   }
 }
 

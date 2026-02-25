@@ -16,6 +16,7 @@ import { SaleItem } from './modules/sales/entities/sale-item.entity';
 import { SalePayment } from './modules/sales/entities/sale-payment.entity';
 import { Supplier } from './modules/suppliers/entities/supplier.entity';
 import { Customer } from './modules/customers/entities/customer.entity';
+import { ActivityLog } from './modules/activity-log/entities/activity-log.entity';
 import { SeedService } from './core/seed/seed.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -28,6 +29,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import AppConfig from './core/config/app.config';
 
 @Module({
@@ -54,6 +56,7 @@ import AppConfig from './core/config/app.config';
       SalePayment,
       Supplier,
       Customer,
+      ActivityLog,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -83,6 +86,7 @@ import AppConfig from './core/config/app.config';
     ReportsModule,
     SuppliersModule,
     CustomersModule,
+    ActivityLogModule,
   ],
   controllers: [AppController],
   providers: [AppService, SeedService],

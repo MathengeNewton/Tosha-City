@@ -49,7 +49,8 @@ export default function SideBar({
         {!isMobile && (
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="cursor-pointer p-1 rounded-lg bg-gray-100 p-1 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900"
+            className="cursor-pointer p-2 rounded-lg bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Toggle sidebar"
           >
             {isCollapsed ? (
               <Bars3Icon className="h-6 w-6 text-gray-600" />
@@ -62,7 +63,8 @@ export default function SideBar({
         {isMobile && isMobileOpen && (
           <button
             onClick={() => setIsMobileOpen(false)}
-            className="cursor-pointer p-1 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900"
+            className="cursor-pointer p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close menu"
           >
             <ChevronLeftIcon className="h-6 w-6 text-gray-600" />
           </button>
@@ -79,13 +81,13 @@ export default function SideBar({
                 <Link
                   onClick={() => setIsMobileOpen(false)}
                   href={item.href}
-                  className={`text-sm lg:text-base flex items-center p-4 transition-colors duration-200 ${
+                  className={`text-sm lg:text-base flex items-center p-4 transition-colors duration-200 min-h-[44px] ${
                     isActive
                       ? `bg-[#0D47A1]/10 text-[#0D47A1] font-semibold`
-                      : "text-gray-600 hover:bg-gray-100"
+                      : "text-gray-600 hover:bg-gray-100 active:bg-gray-200"
                   }`}
                 >
-                  <item.icon className="h-4 lg:h-6 w-4 lg:w-6 flex-shrink-0" />
+                  <item.icon className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
                   {showText && <span className="ml-4">{item.name}</span>}
                 </Link>
               </li>

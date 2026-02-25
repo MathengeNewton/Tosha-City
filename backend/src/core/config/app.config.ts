@@ -6,4 +6,9 @@ export default registerAs('app', () => ({
     secret: process.env.JWT_SECRET || 'default_secret_key',
     expiresIn: process.env.JWT_EXPIRES_IN || '1d',
   },
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET,
+  },
 }));
