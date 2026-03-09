@@ -12,10 +12,16 @@ export class CreateProductDto {
   @IsNotEmpty()
   unit: string;
 
-  @ApiProperty({ description: 'Default price per unit', example: 800.0 })
+  @ApiProperty({ description: 'Retail price per unit', example: 800.0 })
   @IsNumber()
   @Min(0)
   defaultPrice: number;
+
+  @ApiProperty({ description: 'Wholesale price per unit (optional)', example: 720.0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  wholesalePrice?: number;
 
   @ApiProperty({ description: 'Whether product is active', example: true, required: false })
   @IsOptional()

@@ -18,6 +18,7 @@ export enum StockEntryType {
   CLOSING = 'CLOSING',
   WASTAGE = 'WASTAGE',
   BYPRODUCT_SALE = 'BYPRODUCT_SALE',
+  PARTNER_SHARE = 'PARTNER_SHARE',
 }
 
 @Entity()

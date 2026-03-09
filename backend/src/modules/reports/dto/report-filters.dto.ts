@@ -21,5 +21,10 @@ export class ReportFiltersDto {
   @IsOptional()
   @IsNumber()
   sessionId?: number;
+
+  @ApiProperty({ description: 'Partner ID filter (for stock share report)', required: false })
+  @IsOptional()
+  @IsNumber()
+  partnerId?: number;
 }
 

@@ -35,9 +35,13 @@ export class StockEntriesService {
       }
     }
 
-    if (createEntryDto.type === StockEntryType.CLOSING || createEntryDto.type === StockEntryType.WASTAGE) {
+    if (
+      createEntryDto.type === StockEntryType.CLOSING ||
+      createEntryDto.type === StockEntryType.WASTAGE ||
+      createEntryDto.type === StockEntryType.PARTNER_SHARE
+    ) {
       if (session.status !== SessionStatus.OPEN) {
-        throw new BadRequestException('Cannot add closing/wastage stock to a closed session');
+        throw new BadRequestException('Cannot add closing/wastage/partner share to a closed session');
       }
     }
 

@@ -65,5 +65,17 @@ export class ReportsController {
   getDailySummary(@Query('date') date?: string) {
     return this.reportsService.getDailySummary(date);
   }
+
+  @Get('stock-share')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get stock share report over time (Admin only)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiQuery({ name: 'partnerId', required: false, type: Number })
+  @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  getStockShareReport(@Query() filters: ReportFiltersDto) {
+    return this.reportsService.getStockShareReport(filters);
+  }
 }
 

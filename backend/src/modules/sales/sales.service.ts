@@ -45,12 +45,17 @@ export class SalesService {
       throw new BadRequestException('Sale must have at least one item');
     }
 
+    // Resolve customer if provided (for credit or wholesale)
+    let customer: Awaited<ReturnType<CustomersService['findOne']>> | null = null;
+    if (createSaleDto.customerId) {
+      customer = await this.customersService.findOne(createSaleDto.customerId);
+    }
+
     // Validate credit sales require customer
     if (createSaleDto.paymentMethod === PaymentMethod.CREDIT) {
-      if (!createSaleDto.customerId) {
+      if (!createSaleDto.customerId || !customer) {
         throw new BadRequestException('Customer is required for credit sales');
       }
-      const customer = await this.customersService.findOne(createSaleDto.customerId);
       if (customer.type !== 'CREDIT') {
         throw new BadRequestException('Customer must be a credit customer for credit sales');
       }
@@ -61,6 +66,8 @@ export class SalesService {
       }
     }
 
+    const isWholesaleSale = customer?.type === 'WHOLESALE';
+
     // Calculate totals and validate stock
     let totalAmount = 0;
     const itemsToCreate: Partial<SaleItem>[] = [];
@@ -68,7 +75,9 @@ export class SalesService {
 
     for (const itemDto of createSaleDto.items) {
       const product = await this.productsService.findOne(itemDto.productId);
-      const unitPrice = itemDto.unitPrice || product.defaultPrice;
+      const unitPrice =
+        itemDto.unitPrice ??
+        (isWholesaleSale && product.wholesalePrice != null ? Number(product.wholesalePrice) : Number(product.defaultPrice));
       const itemTotal = itemDto.quantity * unitPrice;
       totalAmount += itemTotal;
 
@@ -472,7 +481,11 @@ export class SalesService {
     const byproductSaleEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.BYPRODUCT_SALE);
     const byproductSaleQty = byproductSaleEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
 
-    return openingStock + incomingStock - soldStock - wastage - byproductSaleQty;
+    // Get partner shares (deducted from available stock)
+    const partnerShareEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.PARTNER_SHARE);
+    const partnerShareQty = partnerShareEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
+    return openingStock + incomingStock - soldStock - wastage - byproductSaleQty - partnerShareQty;
   }
 }
 

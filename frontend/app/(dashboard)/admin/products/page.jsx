@@ -43,6 +43,7 @@ export default function ProductsPage() {
     name: '',
     unit: 'kg',
     pricePerUnit: '',
+    wholesalePricePerUnit: '',
     description: '',
     isActive: true,
     parentProductId: '',
@@ -82,6 +83,7 @@ export default function ProductsPage() {
         name: product.name,
         unit: product.unit,
         pricePerUnit: (product.defaultPrice || product.pricePerUnit || 0).toString(),
+        wholesalePricePerUnit: (product.wholesalePrice != null ? product.wholesalePrice : '').toString(),
         description: product.description || '',
         isActive: product.isActive,
         parentProductId: product.parentProductId ? product.parentProductId.toString() : '',
@@ -92,6 +94,7 @@ export default function ProductsPage() {
         name: '',
         unit: 'kg',
         pricePerUnit: '',
+        wholesalePricePerUnit: '',
         description: '',
         isActive: true,
         parentProductId: '',
@@ -118,16 +121,20 @@ export default function ProductsPage() {
     // Validate price
     const price = parseFloat(formData.pricePerUnit);
     if (isNaN(price) || price <= 0) {
-      toast.error("Please enter a valid price greater than 0");
+      toast.error("Please enter a valid retail price greater than 0");
       return;
     }
-    
+    const wholesalePrice = formData.wholesalePricePerUnit ? parseFloat(formData.wholesalePricePerUnit) : undefined;
+    if (wholesalePrice !== undefined && (isNaN(wholesalePrice) || wholesalePrice < 0)) {
+      toast.error("Wholesale price must be 0 or greater");
+      return;
+    }
     try {
-      // Map pricePerUnit to defaultPrice for backend
       const data = {
         name: formData.name.trim(),
         unit: formData.unit.trim(),
         defaultPrice: price,
+        wholesalePrice: wholesalePrice,
         isActive: formData.isActive,
         parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
       };
@@ -170,6 +177,7 @@ export default function ProductsPage() {
         name: product.name,
         unit: product.unit,
         defaultPrice: product.defaultPrice || product.pricePerUnit || 0,
+        wholesalePrice: product.wholesalePrice ?? undefined,
         isActive: !product.isActive,
       });
       toast.success(`Product ${product.isActive ? 'deactivated' : 'activated'} successfully`);
@@ -267,7 +275,8 @@ export default function ProductsPage() {
               <tr>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Price per Unit</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Retail (KES)</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Wholesale (KES)</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Description</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -276,7 +285,7 @@ export default function ProductsPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-4 sm:px-6 py-4 text-center text-gray-500">
                     No products found. Create your first product!
                   </td>
                 </tr>
@@ -291,6 +300,9 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 hidden sm:table-cell">
                       KES {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 hidden md:table-cell">
+                      {product.wholesalePrice != null ? `KES ${parseFloat(product.wholesalePrice).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '–'}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
                       {product.description || '-'}
@@ -378,7 +390,7 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Price per Unit (KES) *
+                    Retail price per Unit (KES) *
                   </label>
                   <input
                     type="number"
@@ -387,6 +399,19 @@ export default function ProductsPage() {
                     onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Wholesale price (KES)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.wholesalePricePerUnit}
+                    onChange={(e) => setFormData({ ...formData, wholesalePricePerUnit: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                    placeholder="Optional"
                   />
                 </div>
               </div>
