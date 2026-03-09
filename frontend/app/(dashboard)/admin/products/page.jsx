@@ -124,17 +124,19 @@ export default function ProductsPage() {
       toast.error("Please enter a valid retail price greater than 0");
       return;
     }
-    const wholesalePrice = formData.wholesalePricePerUnit ? parseFloat(formData.wholesalePricePerUnit) : undefined;
-    if (wholesalePrice !== undefined && (isNaN(wholesalePrice) || wholesalePrice < 0)) {
+    const wholesaleInput = formData.wholesalePricePerUnit ? parseFloat(formData.wholesalePricePerUnit) : null;
+    if (wholesaleInput !== null && (isNaN(wholesaleInput) || wholesaleInput < 0)) {
       toast.error("Wholesale price must be 0 or greater");
       return;
     }
+    // Every product has both: if wholesale left blank, use retail so wholesale sales always have a price
+    const wholesalePrice = wholesaleInput !== null && !isNaN(wholesaleInput) ? wholesaleInput : price;
     try {
       const data = {
         name: formData.name.trim(),
         unit: formData.unit.trim(),
         defaultPrice: price,
-        wholesalePrice: wholesalePrice,
+        wholesalePrice,
         isActive: formData.isActive,
         parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
       };
