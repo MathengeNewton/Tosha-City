@@ -186,6 +186,7 @@ export class ReportsService {
           incoming: 0,
           closing: 0,
           wastage: 0,
+          partnerShare: 0,
           salesByPrice: 0,
           salesByKgs: 0,
         };
@@ -204,6 +205,9 @@ export class ReportsService {
         case StockEntryType.WASTAGE:
           stockByProduct[productName].wastage += entry.quantity;
           break;
+        case StockEntryType.PARTNER_SHARE:
+          stockByProduct[productName].partnerShare += entry.quantity;
+          break;
       }
     });
 
@@ -219,6 +223,7 @@ export class ReportsService {
               incoming: 0,
               closing: 0,
               wastage: 0,
+              partnerShare: 0,
               salesByPrice: 0,
               salesByKgs: 0,
             };
@@ -473,6 +478,7 @@ export class ReportsService {
         incoming: stockEntries.filter((e) => e.type === StockEntryType.INCOMING).length,
         closing: stockEntries.filter((e) => e.type === StockEntryType.CLOSING).length,
         wastage: stockEntries.filter((e) => e.type === StockEntryType.WASTAGE).length,
+        partnerShare: stockEntries.filter((e) => e.type === StockEntryType.PARTNER_SHARE).length,
       },
     };
   }

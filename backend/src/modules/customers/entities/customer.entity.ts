@@ -12,6 +12,7 @@ import { Sale } from '../../sales/entities/sale.entity';
 export enum CustomerType {
   REGULAR = 'REGULAR',
   CREDIT = 'CREDIT',
+  WHOLESALE = 'WHOLESALE',
 }
 
 @Entity()

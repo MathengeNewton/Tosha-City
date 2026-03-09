@@ -23,6 +23,7 @@ import {
   Bars3Icon,
   XMarkIcon,
   DocumentTextIcon,
+  ShareIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
@@ -41,6 +42,7 @@ export default function DashboardLayout({ children }) {
     { name: "Products", href: "/admin/products", icon: CubeIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
+    { name: "Partners", href: "/admin/partners", icon: ShareIcon },
   ];
 
   // Admin menu - Full access
@@ -54,6 +56,7 @@ export default function DashboardLayout({ children }) {
     { name: "Products", href: "/admin/products", icon: CubeIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
+    { name: "Partners", href: "/admin/partners", icon: ShareIcon },
     { name: "Users", href: "/admin/users", icon: UserGroupIcon },
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
@@ -62,7 +65,7 @@ export default function DashboardLayout({ children }) {
   const menuItems = isAdmin ? adminMenu : cashierMenu;
 
   // Redirect cashier away from admin-only pages (allow products, suppliers, customers for read+create)
-  const cashierAllowedAdminPaths = ["/admin/products", "/admin/suppliers", "/admin/customers"];
+  const cashierAllowedAdminPaths = ["/admin/products", "/admin/suppliers", "/admin/customers", "/admin/partners"];
   const isCashierAllowedPath = pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
   useEffect(() => {
     if (isAdmin === false && pathname) {

@@ -4,17 +4,19 @@ A comprehensive management system for small to medium-sized butcheries to track 
 
 ## Features
 
-- 📦 **Stock Management**: Track opening stock, incoming stock, and leftover stock
+- 📦 **Stock Management**: Track opening stock, incoming stock, closing stock, and byproducts (parent/child products)
 - 💰 **Sales Processing**: Record sales with multiple payment methods (Cash, MPESA, Credit)
-- 📊 **Reports**: Generate comprehensive reports for sales, stock, and wastage
+- 📊 **Reports**: Generate sales, stock, wastage, and weekly reports; export to Excel
 - 👥 **Customer & Supplier Management**: Manage credit customers and suppliers
-- 🔐 **User Management**: Role-based access control (Admin, Cashier)
-- 📸 **Wastage Tracking**: Record wastage with photo evidence
+- 🔐 **User Management**: Role-based access control (Admin, Cashier); forgot password / reset password
+- 📸 **Wastage Tracking**: Record wastage with optional photo evidence (local or Cloudinary)
+- 📋 **Activity Log**: Audit trail of user actions (admin only)
 
 ## Tech Stack
 
-- **Backend**: NestJS, TypeORM, PostgreSQL
-- **Frontend**: Next.js, React, Tailwind CSS
+- **Backend**: NestJS 11, TypeORM, PostgreSQL, Swagger (API docs), JWT auth
+- **Frontend**: Next.js 16, React 19, Tailwind CSS 4, Chart.js, react-toastify, xlsx (Excel export)
+- **Uploads**: Multer; optional Cloudinary for wastage photos
 - **Deployment**: Docker, Docker Compose, GitHub Actions
 
 ## Quick Start
@@ -43,12 +45,15 @@ docker-compose up
 docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
-See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for complete deployment instructions.
+**Quick Steps:** Add GitHub Secrets and SSH keys, create `.env.production` on the server, then push to `development` to trigger deployment. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full guide.
 
-**Quick Steps:**
-1. Add GitHub Secrets (see [`GITHUB_SECRETS.md`](./GITHUB_SECRETS.md))
-2. Set up SSH keys (see [`SSH_SETUP_GUIDE.md`](./SSH_SETUP_GUIDE.md))
-3. Push to `development` branch to trigger deployment
+## Project Structure
+
+- **`backend/`** – NestJS API (auth, users, roles, products, stock-sessions, stock-entries, sales, reports, suppliers, customers, uploads, activity-log)
+- **`frontend/`** – Next.js app (dashboard, stock, sales, reports, admin: products, suppliers, customers, users, activity log, settings; auth: login, forgot/reset password)
+- **`docker-compose.yml`** – Local development (db, backend, frontend)
+- **`docker-compose.prod.yml`** – Production (domain URLs)
+- **`.dev.sh`** / **`.deployment.sh`** – Start dev or production stack with health checks
 
 ## Deployment Scripts
 
@@ -82,10 +87,7 @@ Two deployment scripts are available:
 
 ## Documentation
 
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment guide
-- **[SERVER_SETUP.md](./SERVER_SETUP.md)** - **Server setup guide (create .env.production)**
-- **[SSH_SETUP_GUIDE.md](./SSH_SETUP_GUIDE.md)** - SSH key setup for GitHub Actions
-- **[GITHUB_SECRETS.md](./GITHUB_SECRETS.md)** - GitHub secrets configuration
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Full deployment guide: server setup, `.env.production`, GitHub Secrets, SSH setup, and deployment methods
 
 ## Production URLs
 

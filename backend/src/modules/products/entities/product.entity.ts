@@ -26,9 +26,13 @@ export class Product {
   @Column()
   unit: string;
 
-  @ApiProperty({ description: 'Default price per unit', example: 800.0 })
+  @ApiProperty({ description: 'Retail price per unit', example: 800.0 })
   @Column('decimal', { precision: 10, scale: 2 })
   defaultPrice: number;
+
+  @ApiProperty({ description: 'Wholesale price per unit', example: 720.0, required: false })
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  wholesalePrice: number | null;
 
   @ApiProperty({ description: 'Whether product is active', example: true })
   @Column({ default: true })

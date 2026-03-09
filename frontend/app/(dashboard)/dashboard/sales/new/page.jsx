@@ -19,6 +19,7 @@ export default function NewSalePage() {
     loadData();
   }, []);
 
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -40,8 +41,8 @@ export default function NewSalePage() {
       const productsList = productsRes.data || [];
       setProducts(productsList);
 
-      // Get credit customers
-      const customersRes = await apiClient.customers.getAll({ type: 'CREDIT', activeOnly: true });
+      // Get credit and wholesale customers (for credit sales and wholesale pricing)
+      const customersRes = await apiClient.customers.getAll({ activeOnly: true });
       setCustomers(customersRes.data || []);
 
       // Get available stock for each product
@@ -86,8 +87,10 @@ export default function NewSalePage() {
       const product = products.find(p => p.id === parseInt(value));
       if (product) {
         item.productId = value;
-        // Auto-fill price from product's defaultPrice
-        item.price = product.defaultPrice || product.pricePerUnit || 0;
+        // Use wholesale price if a wholesale customer is selected, else retail
+        const selectedCustomer = customerId ? customers.find(c => c.id === parseInt(customerId)) : null;
+        const useWholesale = selectedCustomer?.type === 'WHOLESALE' && product.wholesalePrice != null;
+        item.price = useWholesale ? product.wholesalePrice : (product.defaultPrice || product.pricePerUnit || 0);
         // Recalculate quantity if amount exists
         if (item.amount) {
           const amount = parseFloat(item.amount || 0);
@@ -157,7 +160,6 @@ export default function NewSalePage() {
         items: saleItems.map(item => {
           const quantity = parseFloat(item.quantity || 0);
           const unitPrice = parseFloat(item.price || 0);
-          // Ensure quantity is calculated correctly from amount
           const calculatedQuantity = unitPrice > 0 ? (parseFloat(item.amount || 0) / unitPrice) : quantity;
           return {
             productId: parseInt(item.productId),
@@ -166,7 +168,7 @@ export default function NewSalePage() {
           };
         }),
         paymentMethod: paymentMethod,
-        customerId: paymentMethod === 'CREDIT' && customerId ? parseInt(customerId) : undefined,
+        customerId: customerId ? parseInt(customerId) : undefined,
       };
 
       const response = await apiClient.sales.create(saleData);
@@ -236,7 +238,8 @@ export default function NewSalePage() {
                         <option value="">Select product</option>
                         {products.map((product) => (
                           <option key={product.id} value={product.id}>
-                            {product.name} ({product.unit}) - KES {product.defaultPrice || product.pricePerUnit || 0}
+                            {product.name} ({product.unit}) – Retail KES {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                            {product.wholesalePrice != null ? ` | Wholesale KES ${parseFloat(product.wholesalePrice).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : ''}
                           </option>
                         ))}
                       </select>
@@ -325,24 +328,37 @@ export default function NewSalePage() {
                 <option value="CREDIT">Credit</option>
               </select>
             </div>
-            {paymentMethod === 'CREDIT' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
-                <select
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="">Select a customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name} {customer.creditLimit ? `(Limit: KES ${parseFloat(customer.creditLimit).toLocaleString('en-KE', { minimumFractionDigits: 2 })})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {paymentMethod === 'CREDIT' ? 'Customer *' : 'Customer (optional – for wholesale pricing)'}
+              </label>
+              <select
+                value={customerId}
+                onChange={(e) => {
+                  const newId = e.target.value;
+                  setCustomerId(newId);
+                  const selectedCustomer = newId ? customers.find(c => c.id === parseInt(newId)) : null;
+                  const useWholesale = selectedCustomer?.type === 'WHOLESALE';
+                  setSaleItems(prev => prev.map(item => {
+                    const product = products.find(p => p.id === parseInt(item.productId));
+                    if (!product) return item;
+                    const newPrice = useWholesale && product.wholesalePrice != null ? product.wholesalePrice : (product.defaultPrice || product.pricePerUnit || 0);
+                    const amount = parseFloat(item.amount || 0);
+                    const quantity = newPrice > 0 && amount > 0 ? (amount / newPrice).toFixed(3) : item.quantity;
+                    return { ...item, price: newPrice, quantity };
+                  }));
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                required={paymentMethod === 'CREDIT'}
+              >
+                <option value="">{paymentMethod === 'CREDIT' ? 'Select a customer' : 'None'}</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} {customer.type === 'CREDIT' && customer.creditLimit ? `(Limit: KES ${parseFloat(customer.creditLimit).toLocaleString('en-KE', { minimumFractionDigits: 2 })})` : ''} {customer.type === 'WHOLESALE' ? '(Wholesale)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Total */}

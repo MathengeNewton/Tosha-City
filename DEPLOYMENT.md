@@ -160,13 +160,13 @@ ssh-copy-id -i ~/.ssh/toshacity_deploy_key.pub user@your-server-ip
 cat ~/.ssh/toshacity_deploy_key
 ```
 
-**📖 For detailed instructions, see [`SSH_SETUP_GUIDE.md`](./SSH_SETUP_GUIDE.md)**
+The steps above are sufficient for most setups; the rest of this guide covers deployment methods and troubleshooting.
 
 ## Deployment Methods
 
 ### Method 1: Automated Deployment via GitHub Actions (Recommended)
 
-1. Push code to `main` or `master` branch
+1. Push code to the `development` branch
 2. GitHub Actions will automatically:
    - Build Docker images
    - Push to GitHub Container Registry

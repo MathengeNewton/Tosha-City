@@ -194,6 +194,21 @@ export const apiClient = {
   activityLog: {
     getAll: (params) => api.get('/activity-log', { params }),
   },
+
+  partners: {
+    getAll: (params) => api.get('/partners', { params }),
+    getById: (id) => api.get(`/partners/${id}`),
+    create: (data) => api.post('/partners', data),
+    update: (id, data) => api.patch(`/partners/${id}`, data),
+    delete: (id) => api.delete(`/partners/${id}`),
+  },
+
+  stockShare: {
+    getAll: (params) => api.get('/stock-share', { params }),
+    getById: (id) => api.get(`/stock-share/${id}`),
+    create: (data) => api.post('/stock-share', data),
+    markPaid: (id) => api.post(`/stock-share/${id}/mark-paid`),
+  },
 };
 
 export default apiClient;
