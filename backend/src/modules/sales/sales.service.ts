@@ -454,7 +454,7 @@ export class SalesService {
     return `${yearPrefix}${sequence}`;
   }
 
-  private async getAvailableStock(sessionId: number, productId: number): Promise<number> {
+  async getAvailableStock(sessionId: number, productId: number): Promise<number> {
     // Get opening stock
     const openingEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.OPENING);
     const openingStock = openingEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
