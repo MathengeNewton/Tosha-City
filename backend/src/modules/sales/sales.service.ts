@@ -77,7 +77,7 @@ export class SalesService {
       const product = await this.productsService.findOne(itemDto.productId);
       const unitPrice =
         itemDto.unitPrice ??
-        (isWholesaleSale && product.wholesalePrice != null ? Number(product.wholesalePrice) : Number(product.defaultPrice));
+        (isWholesaleSale ? Number(product.wholesalePrice ?? product.defaultPrice) : Number(product.defaultPrice));
       const itemTotal = itemDto.quantity * unitPrice;
       totalAmount += itemTotal;
 
