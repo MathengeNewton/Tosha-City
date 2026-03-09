@@ -38,13 +38,16 @@ export class StockShareController {
   @ApiOperation({ summary: 'Get all stock shares (optional filters)' })
   @ApiQuery({ name: 'partnerId', required: false, type: Number })
   @ApiQuery({ name: 'paid', required: false, type: Boolean })
+  @ApiQuery({ name: 'sessionId', required: false, type: Number })
   findAll(
     @Query('partnerId') partnerId?: string,
     @Query('paid') paid?: string,
+    @Query('sessionId') sessionId?: string,
   ) {
     const partnerIdNum = partnerId ? +partnerId : undefined;
     const paidBool = paid === 'true' ? true : paid === 'false' ? false : undefined;
-    return this.stockShareService.findAll(partnerIdNum, paidBool);
+    const sessionIdNum = sessionId ? +sessionId : undefined;
+    return this.stockShareService.findAll(partnerIdNum, paidBool, sessionIdNum);
   }
 
   @Get(':id')

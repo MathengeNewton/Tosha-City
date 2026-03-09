@@ -6,6 +6,7 @@ import { SaleItem } from '../sales/entities/sale-item.entity';
 import { StockEntry } from '../stock-entries/entities/stock-entry.entity';
 import { StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { Product } from '../products/entities/product.entity';
+import { StockShare } from '../stock-share/entities/stock-share.entity';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { PaymentStatus } from '../sales/entities/payment.enums';
 
@@ -20,6 +21,8 @@ export class ReportsService {
     private stockEntryRepository: Repository<StockEntry>,
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(StockShare)
+    private stockShareRepository: Repository<StockShare>,
   ) {}
 
   async getSalesReport(filters: ReportFiltersDto) {
@@ -322,6 +325,82 @@ export class ReportsService {
         date: e.recordedAt,
         notes: e.notes,
         photoUrl: e.photoUrl,
+      })),
+    };
+  }
+
+  async getStockShareReport(filters: ReportFiltersDto) {
+    const query = this.stockShareRepository
+      .createQueryBuilder('share')
+      .leftJoinAndSelect('share.partner', 'partner')
+      .leftJoinAndSelect('share.product', 'product')
+      .leftJoinAndSelect('share.session', 'session')
+      .leftJoinAndSelect('share.recordedBy', 'recordedBy')
+      .orderBy('share.recordedAt', 'DESC');
+
+    if (filters.startDate && filters.endDate) {
+      query.andWhere('DATE(share.recordedAt) BETWEEN :startDate AND :endDate', {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
+    } else if (filters.startDate) {
+      query.andWhere('DATE(share.recordedAt) >= :startDate', { startDate: filters.startDate });
+    } else if (filters.endDate) {
+      query.andWhere('DATE(share.recordedAt) <= :endDate', { endDate: filters.endDate });
+    }
+
+    if (filters.partnerId) {
+      query.andWhere('share.partnerId = :partnerId', { partnerId: filters.partnerId });
+    }
+
+    if (filters.sessionId) {
+      query.andWhere('share.sessionId = :sessionId', { sessionId: filters.sessionId });
+    }
+
+    const shares = await query.getMany();
+
+    const totalQuantity = shares.reduce((sum, s) => sum + Number(s.quantity), 0);
+    const byPartner: Record<string, { partnerId: number; quantity: number; entries: number; paid: number; unpaid: number }> = {};
+    const byProduct: Record<string, { productId: number; quantity: number; entries: number }> = {};
+
+    shares.forEach((s) => {
+      const partnerName = s.partner?.name || 'Unknown';
+      if (!byPartner[partnerName]) {
+        byPartner[partnerName] = { partnerId: s.partnerId, quantity: 0, entries: 0, paid: 0, unpaid: 0 };
+      }
+      byPartner[partnerName].quantity += Number(s.quantity);
+      byPartner[partnerName].entries += 1;
+      if (s.paid) byPartner[partnerName].paid += 1;
+      else byPartner[partnerName].unpaid += 1;
+
+      const productName = s.product?.name || 'Unknown';
+      if (!byProduct[productName]) {
+        byProduct[productName] = { productId: s.productId, quantity: 0, entries: 0 };
+      }
+      byProduct[productName].quantity += Number(s.quantity);
+      byProduct[productName].entries += 1;
+    });
+
+    return {
+      summary: {
+        totalQuantity,
+        totalEntries: shares.length,
+        partnersCount: Object.keys(byPartner).length,
+        productsCount: Object.keys(byProduct).length,
+      },
+      byPartner: Object.entries(byPartner).map(([name, data]) => ({ partner: name, ...data })),
+      byProduct: Object.entries(byProduct).map(([name, data]) => ({ product: name, ...data })),
+      entries: shares.map((s) => ({
+        id: s.id,
+        partner: s.partner?.name,
+        product: s.product?.name,
+        quantity: s.quantity,
+        unit: s.unit,
+        recordedAt: s.recordedAt,
+        paid: s.paid,
+        paidAt: s.paidAt,
+        notes: s.notes,
+        sessionDate: s.session?.date,
       })),
     };
   }

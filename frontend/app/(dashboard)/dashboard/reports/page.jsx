@@ -21,6 +21,7 @@ export default function ReportsPage() {
   const [salesReport, setSalesReport] = useState(null);
   const [stockReport, setStockReport] = useState(null);
   const [wastageReport, setWastageReport] = useState(null);
+  const [stockShareReport, setStockShareReport] = useState(null);
   const [weeklyComparison, setWeeklyComparison] = useState(null);
 
   useEffect(() => {
@@ -40,6 +41,9 @@ export default function ReportsPage() {
       } else if (activeTab === 'wastage') {
         const res = await apiClient.reports.getWastageReport(filters);
         setWastageReport(res.data);
+      } else if (activeTab === 'stock-share') {
+        const res = await apiClient.reports.getStockShareReport(filters);
+        setStockShareReport(res.data);
       } else if (activeTab === 'weekly') {
         const res = await apiClient.reports.getWeeklyComparison();
         setWeeklyComparison(res.data);
@@ -58,14 +62,14 @@ export default function ReportsPage() {
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
           Reports & Analytics
         </h1>
-        <p className="text-gray-600 mt-1">View sales, stock, and wastage reports</p>
+        <p className="text-gray-600 mt-1">View sales, stock, wastage, and stock share reports</p>
       </div>
 
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
           <nav className="flex -mb-px">
-            {['sales', 'stock', 'wastage', 'weekly'].map((tab) => (
+            {['sales', 'stock', 'wastage', 'stock-share', 'weekly'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -75,7 +79,7 @@ export default function ReportsPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)} Report
+                {tab === 'stock-share' ? 'Stock Share' : tab.charAt(0).toUpperCase() + tab.slice(1)} Report
               </button>
             ))}
           </nav>
@@ -149,6 +153,21 @@ export default function ReportsPage() {
                     }));
                     exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'quantity', label: 'Quantity (kg)' }, { key: 'entries', label: 'Entries' }], `wastage-report-${range || dateStr}`);
                     toast.success('Excel exported');
+                  } else if (activeTab === 'stock-share' && stockShareReport?.entries) {
+                    const rows = stockShareReport.entries.map((e) => ({
+                      date: e.recordedAt ? new Date(e.recordedAt).toLocaleDateString() : '',
+                      partner: e.partner,
+                      product: e.product,
+                      quantity: parseFloat(e.quantity || 0),
+                      unit: e.unit,
+                      paid: e.paid ? 'Yes' : 'No',
+                      notes: e.notes || '',
+                    }));
+                    exportToExcel(rows, [
+                      { key: 'date', label: 'Date' }, { key: 'partner', label: 'Partner' }, { key: 'product', label: 'Product' },
+                      { key: 'quantity', label: 'Quantity' }, { key: 'unit', label: 'Unit' }, { key: 'paid', label: 'Paid' }, { key: 'notes', label: 'Notes' },
+                    ], `stock-share-report-${range || dateStr}`);
+                    toast.success('Excel exported');
                   } else if (activeTab === 'weekly' && weeklyComparison) {
                     const rows = [
                       { metric: 'Current Week Sales', value: weeklyComparison.currentWeek?.totalSales ?? 0 },
@@ -186,6 +205,9 @@ export default function ReportsPage() {
               )}
               {activeTab === 'wastage' && wastageReport && (
                 <WastageReportView data={wastageReport} />
+              )}
+              {activeTab === 'stock-share' && stockShareReport && (
+                <StockShareReportView data={stockShareReport} />
               )}
               {activeTab === 'weekly' && weeklyComparison && (
                 <WeeklyComparisonView data={weeklyComparison} />
@@ -425,6 +447,130 @@ function WastageReportView({ data }) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right tabular-nums">
                       {Array.isArray(stats.entries) ? stats.entries.length : 0}
                     </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Stock Share Report Component
+function StockShareReportView({ data }) {
+  const summary = data.summary || {};
+  const byPartner = data.byPartner || [];
+  const byProduct = data.byProduct || [];
+  const entries = data.entries || [];
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Shared (kg)</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">
+            {Number(summary.totalQuantity || 0).toFixed(2)}
+          </p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Entries</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{summary.totalEntries ?? 0}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Partners</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{summary.partnersCount ?? 0}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Products</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{summary.productsCount ?? 0}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">By Partner</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity (kg)</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Paid / Unpaid</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {byPartner.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No data</td></tr>
+                ) : (
+                  byPartner.map((row) => (
+                    <tr key={row.partner} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.partner}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.quantity || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{row.entries ?? 0}</td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-600">{row.paid ?? 0} / {row.unpaid ?? 0}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">By Product</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity (kg)</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {byProduct.length === 0 ? (
+                  <tr><td colSpan={3} className="px-4 py-6 text-center text-gray-500">No data</td></tr>
+                ) : (
+                  byProduct.map((row) => (
+                    <tr key={row.product} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.product}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.quantity || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{row.entries ?? 0}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">All Stock Share Entries</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {entries.length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No entries in this period</td></tr>
+              ) : (
+                entries.map((e) => (
+                  <tr key={e.id} className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3 text-sm text-gray-900">{e.recordedAt ? new Date(e.recordedAt).toLocaleDateString() : '–'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{e.partner || '–'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{e.product || '–'}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(e.quantity || 0).toFixed(2)} {e.unit || 'kg'}</td>
+                    <td className="px-4 py-3"><span className={e.paid ? 'text-green-600 font-medium' : 'text-amber-600'}>{e.paid ? 'Yes' : 'No'}</span></td>
                   </tr>
                 ))
               )}

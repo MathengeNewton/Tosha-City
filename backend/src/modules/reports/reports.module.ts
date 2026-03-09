@@ -6,10 +6,11 @@ import { Sale } from '../sales/entities/sale.entity';
 import { SaleItem } from '../sales/entities/sale-item.entity';
 import { StockEntry } from '../stock-entries/entities/stock-entry.entity';
 import { Product } from '../products/entities/product.entity';
+import { StockShare } from '../stock-share/entities/stock-share.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Sale, SaleItem, StockEntry, Product]),
+    TypeOrmModule.forFeature([Sale, SaleItem, StockEntry, Product, StockShare]),
   ],
   controllers: [ReportsController],
   providers: [ReportsService],

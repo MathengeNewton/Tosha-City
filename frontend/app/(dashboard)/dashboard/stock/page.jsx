@@ -315,8 +315,10 @@ export default function StockManagementPage() {
     const incomingEntries = stockEntries.filter(e => e.type === 'INCOMING');
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
+    const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
 
     const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const partnerShareKg = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const soldKg = sales.reduce((total, s) => total + (s.items || []).reduce((sum, it) => sum + parseFloat(it.quantity || 0), 0), 0);
     const availableKg = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
@@ -490,6 +492,11 @@ export default function StockManagementPage() {
               <p className="text-sm text-gray-600">Wastage</p>
               <p className="text-2xl font-bold text-gray-900">{stockEntries.filter(e => e.type === 'WASTAGE').length} entries</p>
             </div>
+            <div className="bg-indigo-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Stock shared</p>
+              <p className="text-2xl font-bold text-gray-900">{partnerShareKg.toFixed(2)} kg</p>
+              <p className="text-xs text-gray-500">{partnerShareEntries.length} entries</p>
+            </div>
           </div>
         </div>
 
@@ -497,7 +504,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'sales', 'production'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales', 'production'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -512,6 +519,7 @@ export default function StockManagementPage() {
                    tab === 'incoming' ? 'Incoming Stock' :
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
+                   tab === 'stock-share' ? 'Stock Share' :
                    tab === 'sales' ? 'Sales' :
                    'Production'}
                 </button>
@@ -526,6 +534,15 @@ export default function StockManagementPage() {
                 stockEntries={stockEntries}
                 sales={sales}
                 products={products}
+              />
+            )}
+            {activeTab === 'stock-share' && (
+              <StockShareTab
+                session={selectedSession}
+                partnerShareEntries={partnerShareEntries}
+                products={products}
+                canManage={canManageEntries}
+                onRefresh={() => loadSessionDetails(selectedSession.id)}
               />
             )}
             {activeTab === 'opening' && (
@@ -1393,6 +1410,220 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
   );
 }
 
+// Stock Share tab: record and list shares for this session (from incoming stock)
+function StockShareTab({ session, partnerShareEntries, products, canManage, onRefresh }) {
+  const [shares, setShares] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ partnerId: '', productId: '', quantity: '', unit: 'kg', notes: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!session?.id) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [sharesRes, partnersRes] = await Promise.all([
+          apiClient.stockShare.getAll({ sessionId: session.id }),
+          apiClient.partners.getAll({ activeOnly: true }),
+        ]);
+        if (!cancelled) {
+          setShares(sharesRes.data || []);
+          setPartners(partnersRes.data || []);
+        }
+      } catch (e) {
+        if (!cancelled) toast.error('Failed to load stock share data');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [session?.id]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const qty = parseFloat(form.quantity);
+    if (!form.partnerId || !form.productId || isNaN(qty) || qty <= 0) {
+      toast.error('Select partner, product, and enter a valid quantity.');
+      return;
+    }
+    const product = products.find(p => p.id === parseInt(form.productId));
+    setSubmitting(true);
+    try {
+      await apiClient.stockShare.create({
+        partnerId: parseInt(form.partnerId),
+        productId: parseInt(form.productId),
+        sessionId: session.id,
+        quantity: qty,
+        unit: form.unit || product?.unit || 'kg',
+        notes: form.notes || undefined,
+      });
+      toast.success('Stock share recorded');
+      setShowForm(false);
+      setForm({ partnerId: '', productId: '', quantity: '', unit: 'kg', notes: '' });
+      onRefresh?.();
+      const res = await apiClient.stockShare.getAll({ sessionId: session.id });
+      setShares(res.data || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to record share');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMarkPaid = async (id) => {
+    try {
+      await apiClient.stockShare.markPaid(id);
+      toast.success('Marked as paid');
+      onRefresh?.();
+      const res = await apiClient.stockShare.getAll({ sessionId: session.id });
+      setShares(res.data || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update');
+    }
+  };
+
+  if (!session) return null;
+  const isOpen = session.status === 'OPEN';
+
+  return (
+    <div className="space-y-6">
+      <p className="text-gray-600 text-sm">
+        Share part of today’s incoming stock with partners. Recorded shares are deducted from available session stock.
+      </p>
+      {canManage && isOpen && (
+        <div>
+          {!showForm ? (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] text-sm"
+            >
+              Record stock share
+            </button>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-w-md space-y-3">
+              <h4 className="font-medium text-gray-900">Record stock share</h4>
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Partner *</label>
+                  <select
+                    value={form.partnerId}
+                    onChange={(e) => setForm({ ...form, partnerId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  >
+                    <option value="">Select partner</option>
+                    {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Product *</label>
+                  <select
+                    value={form.productId}
+                    onChange={(e) => {
+                      const p = products.find(x => x.id === parseInt(e.target.value));
+                      setForm({ ...form, productId: e.target.value, unit: p?.unit || 'kg' });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    required
+                  >
+                    <option value="">Select product</option>
+                    {products.filter(p => p.isActive !== false).map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Quantity *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={form.quantity}
+                      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Unit</label>
+                    <input
+                      type="text"
+                      value={form.unit}
+                      onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Notes</label>
+                  <input
+                    type="text"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={submitting} className="px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-[#1e88b5] disabled:opacity-50">
+                    {submitting ? 'Saving...' : 'Record share'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+      <div>
+        <h4 className="font-medium text-gray-900 mb-2">Shares for this session</h4>
+        {loading ? (
+          <p className="text-gray-500">Loading...</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
+                  {canManage && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {shares.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No stock shares recorded for this session yet.</td></tr>
+                ) : (
+                  shares.map(s => (
+                    <tr key={s.id}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.partner?.name || '–'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{s.product?.name || '–'}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(s.quantity).toFixed(2)} {s.unit}</td>
+                      <td className="px-4 py-3"><span className={s.paid ? 'text-green-600' : 'text-amber-600'}>{s.paid ? 'Yes' : 'No'}</span></td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          {!s.paid && <button type="button" onClick={() => handleMarkPaid(s.id)} className="text-blue-600 hover:underline text-sm">Mark paid</button>}
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Session Overview Analytics Component
 function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] }) {
   // Calculate comprehensive analytics
@@ -1401,7 +1632,10 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
     const incomingEntries = stockEntries.filter(e => e.type === 'INCOMING');
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
+    const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
     const byproductSaleEntries = stockEntries.filter(e => e.type === 'BYPRODUCT_SALE');
+
+    const totalPartnerShareQty = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
     // Sales statistics
     const totalSales = sales.length;
@@ -1537,11 +1771,13 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
       const wastage = wastageEntries
         .filter(e => e.product?.id === productId)
         .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+      const partnerShare = partnerShareEntries
+        .filter(e => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
       const productMeta = products.find(p => p.id === productId);
       const isByproduct = productMeta?.parentProductId != null;
-      // Remaining: for byproducts we don't hold stock (consumes from parent), so show —
-      const remaining = isByproduct ? null : (totalAvailable - soldInclByproduct - wastage);
+      const remaining = isByproduct ? null : (totalAvailable - soldInclByproduct - wastage - partnerShare);
 
       productBreakdown[productId] = {
         name: productName,
@@ -1552,6 +1788,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
         byproductSold,
         soldInclByproduct,
         wastage,
+        partnerShare,
         remaining,
         isByproduct,
       };
@@ -1563,6 +1800,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
         incoming: { entries: incomingEntries.length, quantity: totalIncomingQty },
         closing: { entries: closingEntries.length, quantity: totalClosingQty },
         wastage: { entries: wastageEntries.length, quantity: totalWastageQty },
+        partnerShare: { entries: partnerShareEntries.length, quantity: totalPartnerShareQty },
       },
       sales: {
         total: totalSales,
@@ -1648,6 +1886,13 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
               {analytics.stock.wastage.quantity.toFixed(2)} kg
             </p>
             <p className="text-xs text-gray-500">{analytics.stock.wastage.entries} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Stock shared</p>
+            <p className="text-lg font-bold text-indigo-600">
+              {(analytics.stock.partnerShare?.quantity ?? 0).toFixed(2)} kg
+            </p>
+            <p className="text-xs text-gray-500">{analytics.stock.partnerShare?.entries ?? 0} entries</p>
           </div>
         </div>
       </div>
@@ -1750,6 +1995,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Available (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sold (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wastage (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock shared (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (kg)</th>
                 </tr>
               </thead>
@@ -1768,6 +2014,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
                       {product.byproductSold > 0 && <span className="ml-1 text-xs text-gray-500">(incl. byproduct)</span>}
                     </td>
                     <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-indigo-600">{(product.partnerShare ?? 0).toFixed(2)}</td>
                     <td className={`px-4 py-2 text-sm font-semibold ${product.remaining == null ? 'text-gray-500' : product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                       {product.remaining == null ? '—' : product.remaining.toFixed(2)}
                     </td>

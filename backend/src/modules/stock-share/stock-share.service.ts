@@ -64,7 +64,7 @@ export class StockShareService {
     return await this.stockShareRepository.save(share);
   }
 
-  async findAll(partnerId?: number, paid?: boolean): Promise<StockShare[]> {
+  async findAll(partnerId?: number, paid?: boolean, sessionId?: number): Promise<StockShare[]> {
     const query = this.stockShareRepository
       .createQueryBuilder('share')
       .leftJoinAndSelect('share.partner', 'partner')
@@ -77,6 +77,9 @@ export class StockShareService {
     }
     if (typeof paid === 'boolean') {
       query.andWhere('share.paid = :paid', { paid });
+    }
+    if (sessionId != null) {
+      query.andWhere('share.sessionId = :sessionId', { sessionId });
     }
     return query.getMany();
   }

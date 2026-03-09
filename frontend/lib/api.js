@@ -153,6 +153,7 @@ export const apiClient = {
     getSalesReport: (params) => api.get('/reports/sales', { params }),
     getStockReport: (params) => api.get('/reports/stock', { params }),
     getWastageReport: (params) => api.get('/reports/wastage', { params }),
+    getStockShareReport: (params) => api.get('/reports/stock-share', { params }),
     getWeeklyComparison: () => api.get('/reports/weekly-comparison'),
     getDailySummary: (date) => api.get('/reports/daily-summary', { params: date ? { date } : {} }),
   },
@@ -204,7 +205,7 @@ export const apiClient = {
   },
 
   stockShare: {
-    getAll: (params) => api.get('/stock-share', { params }),
+    getAll: (params) => api.get('/stock-share', { params }), // params: partnerId, paid, sessionId
     getById: (id) => api.get(`/stock-share/${id}`),
     create: (data) => api.post('/stock-share', data),
     markPaid: (id) => api.post(`/stock-share/${id}/mark-paid`),
