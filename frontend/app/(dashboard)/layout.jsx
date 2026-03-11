@@ -29,7 +29,7 @@ import {
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { hasRole } = useAuth();
+  const { hasRole, loading } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -70,6 +70,8 @@ export default function DashboardLayout({ children }) {
   const cashierAllowedAdminPaths = ["/admin/products", "/admin/suppliers", "/admin/customers", "/admin/partners"];
   const isCashierAllowedPath = pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
   useEffect(() => {
+    if (loading) return;
+
     if (isAdmin === false && pathname) {
       if (pathname === "/dashboard/reports") {
         router.replace("/dashboard");
@@ -77,7 +79,7 @@ export default function DashboardLayout({ children }) {
         router.replace("/dashboard");
       }
     }
-  }, [isAdmin, pathname, router, isCashierAllowedPath]);
+  }, [isAdmin, loading, pathname, router, isCashierAllowedPath]);
 
   return (
     <ProtectedRoute>
