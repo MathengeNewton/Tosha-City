@@ -13,6 +13,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { User } from '../../users/entities/user.entity';
 import { StockEntry } from '../../stock-entries/entities/stock-entry.entity';
 import { Sale } from '../../sales/entities/sale.entity';
+import { Branch } from '../../branches/entities/branch.entity';
 
 export enum SessionStatus {
   OPEN = 'OPEN',
@@ -28,6 +29,16 @@ export class StockSession {
   @ApiProperty({ description: 'Session date', example: '2024-01-15' })
   @Column({ type: 'date' })
   date: Date;
+
+  @ApiProperty({ description: 'Branch this session belongs to' })
+  @ManyToOne(() => Branch, (branch) => branch.stockSessions, { eager: true })
+  @JoinColumn({ name: 'branchId' })
+  branch: Branch;
+
+  @ApiProperty({ description: 'Branch ID', example: 1 })
+  @Column()
+  @Index()
+  branchId: number;
 
   @ApiProperty({ description: 'User who opened the session' })
   @ManyToOne(() => User, { eager: true })

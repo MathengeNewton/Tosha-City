@@ -16,6 +16,7 @@ import { SaleItem } from './sale-item.entity';
 import { SalePayment } from './sale-payment.entity';
 import { PaymentMethod, PaymentStatus } from './payment.enums';
 import { Customer } from '../../customers/entities/customer.entity';
+import { Branch } from '../../branches/entities/branch.entity';
 
 export { PaymentMethod, PaymentStatus };
 
@@ -33,6 +34,15 @@ export class Sale {
   @ApiProperty({ description: 'Session ID', example: 1 })
   @Column()
   sessionId: number;
+
+  @ApiProperty({ description: 'Branch this sale belongs to' })
+  @ManyToOne(() => Branch, (branch) => branch.sales, { eager: true })
+  @JoinColumn({ name: 'branchId' })
+  branch: Branch;
+
+  @ApiProperty({ description: 'Branch ID', example: 1 })
+  @Column()
+  branchId: number;
 
   @ApiProperty({ description: 'Unique sale number', example: 'SALE-2024-0001' })
   @Column({ unique: true })

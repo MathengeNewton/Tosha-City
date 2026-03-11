@@ -21,6 +21,7 @@ export class AuthService {
     // Search by both username and email
     const user = await this.userRepo.createQueryBuilder('user')
       .leftJoinAndSelect('user.roles', 'roles')
+      .leftJoinAndSelect('user.branch', 'branch')
       .where('user.username = :username OR user.email = :email', {
         username,
         email: username
@@ -40,7 +41,13 @@ export class AuthService {
 
   // Example method: issue JWT
   async login(user: any) {
-    const payload = { username: user.username, sub: user.id, roles: user.roles };
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      roles: user.roles,
+      branchId: user.branchId ?? user.branch?.id ?? null,
+      branch: user.branch ?? null,
+    };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -48,7 +55,8 @@ export class AuthService {
         username: user.username,
         roles: user.roles,
         email: user.email,
-        // Add other fields as needed
+        branchId: user.branchId ?? user.branch?.id ?? null,
+        branch: user.branch ?? null,
       },
     };
   }

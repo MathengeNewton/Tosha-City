@@ -5,6 +5,19 @@ import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 
+const PRODUCT_CATEGORIES = [
+  { value: "RAW_STOCK", label: "Raw stock" },
+  { value: "PRODUCTION_ITEM", label: "Production item" },
+  { value: "CONSUMABLE", label: "Consumable" },
+];
+
+const SALE_MODES = [
+  { value: "WEIGHT", label: "Weight" },
+  { value: "PORTION", label: "Portion" },
+  { value: "CUP", label: "Cup" },
+  { value: "PIECE", label: "Piece" },
+];
+
 const defaultEnd = new Date();
 const defaultStart = new Date();
 defaultStart.setDate(defaultStart.getDate() - 365);
@@ -44,6 +57,9 @@ export default function ProductsPage() {
     unit: 'kg',
     pricePerUnit: '',
     wholesalePricePerUnit: '',
+    category: 'RAW_STOCK',
+    saleMode: 'WEIGHT',
+    salesPrompt: '',
     description: '',
     isActive: true,
     parentProductId: '',
@@ -84,6 +100,9 @@ export default function ProductsPage() {
         unit: product.unit,
         pricePerUnit: (product.defaultPrice || product.pricePerUnit || 0).toString(),
         wholesalePricePerUnit: (product.wholesalePrice != null ? product.wholesalePrice : '').toString(),
+        category: product.category || 'RAW_STOCK',
+        saleMode: product.saleMode || 'WEIGHT',
+        salesPrompt: product.salesPrompt || '',
         description: product.description || '',
         isActive: product.isActive,
         parentProductId: product.parentProductId ? product.parentProductId.toString() : '',
@@ -95,6 +114,9 @@ export default function ProductsPage() {
         unit: 'kg',
         pricePerUnit: '',
         wholesalePricePerUnit: '',
+        category: 'RAW_STOCK',
+        saleMode: 'WEIGHT',
+        salesPrompt: '',
         description: '',
         isActive: true,
         parentProductId: '',
@@ -110,8 +132,13 @@ export default function ProductsPage() {
       name: '',
       unit: 'kg',
       pricePerUnit: '',
+      wholesalePricePerUnit: '',
+      category: 'RAW_STOCK',
+      saleMode: 'WEIGHT',
+      salesPrompt: '',
       description: '',
       isActive: true,
+      parentProductId: '',
     });
   };
 
@@ -137,6 +164,9 @@ export default function ProductsPage() {
         unit: formData.unit.trim(),
         defaultPrice: price,
         wholesalePrice,
+        category: formData.category,
+        saleMode: formData.saleMode,
+        salesPrompt: formData.salesPrompt?.trim() || undefined,
         isActive: formData.isActive,
         parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
       };
@@ -180,6 +210,9 @@ export default function ProductsPage() {
         unit: product.unit,
         defaultPrice: product.defaultPrice || product.pricePerUnit || 0,
         wholesalePrice: product.wholesalePrice ?? undefined,
+        category: product.category || 'RAW_STOCK',
+        saleMode: product.saleMode || 'WEIGHT',
+        salesPrompt: product.salesPrompt || undefined,
         isActive: !product.isActive,
       });
       toast.success(`Product ${product.isActive ? 'deactivated' : 'activated'} successfully`);
@@ -214,7 +247,9 @@ export default function ProductsPage() {
                 name: p.name,
                 unit: p.unit,
                 pricePerUnit: parseFloat(p.defaultPrice || p.pricePerUnit || 0),
-                description: p.description || "",
+                category: p.category || "",
+                saleMode: p.saleMode || "",
+                salesPrompt: p.salesPrompt || "",
                 status: p.isActive ? "Active" : "Inactive",
                 createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : "",
               }));
@@ -224,7 +259,9 @@ export default function ProductsPage() {
                   { key: "name", label: "Name" },
                   { key: "unit", label: "Unit" },
                   { key: "pricePerUnit", label: "Price (KES)" },
-                  { key: "description", label: "Description" },
+                  { key: "category", label: "Category" },
+                  { key: "saleMode", label: "Sale Mode" },
+                  { key: "salesPrompt", label: "Sales Prompt" },
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
@@ -279,7 +316,8 @@ export default function ProductsPage() {
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Retail (KES)</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Wholesale (KES)</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Description</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Category</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Sale Mode</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
@@ -287,7 +325,7 @@ export default function ProductsPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                  <td colSpan="8" className="px-4 sm:px-6 py-4 text-center text-gray-500">
                     No products found. Create your first product!
                   </td>
                 </tr>
@@ -307,7 +345,10 @@ export default function ProductsPage() {
                       {product.wholesalePrice != null ? `KES ${parseFloat(product.wholesalePrice).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '–'}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
-                      {product.description || '-'}
+                      {product.category?.replace(/_/g, ' ') || '-'}
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
+                      {product.saleMode?.replace(/_/g, ' ') || '-'}
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -439,16 +480,56 @@ export default function ProductsPage() {
                 </p>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                  >
+                    {PRODUCT_CATEGORIES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sale Mode *
+                  </label>
+                  <select
+                    value={formData.saleMode}
+                    onChange={(e) => setFormData({ ...formData, saleMode: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                  >
+                    {SALE_MODES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
+                  Sales Prompt
                 </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                  rows="3"
+                <input
+                  type="text"
+                  value={formData.salesPrompt}
+                  onChange={(e) => setFormData({ ...formData, salesPrompt: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                  placeholder="Example: Number of cups"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Helpful for mutura, soup, and other prepared items.
+                </p>
               </div>
 
               <div className="flex items-center min-h-[44px]">

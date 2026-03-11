@@ -22,6 +22,7 @@ export class ReportsController {
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'productId', required: false, type: Number })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   getSalesReport(@Query() filters: ReportFiltersDto) {
     return this.reportsService.getSalesReport(filters);
   }
@@ -34,6 +35,7 @@ export class ReportsController {
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'productId', required: false, type: Number })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   getStockReport(@Query() filters: ReportFiltersDto) {
     return this.reportsService.getStockReport(filters);
   }
@@ -45,6 +47,7 @@ export class ReportsController {
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'productId', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   getWastageReport(@Query() filters: ReportFiltersDto) {
     return this.reportsService.getWastageReport(filters);
   }
@@ -74,8 +77,22 @@ export class ReportsController {
   @ApiQuery({ name: 'endDate', required: false, type: String })
   @ApiQuery({ name: 'partnerId', required: false, type: Number })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
   getStockShareReport(@Query() filters: ReportFiltersDto) {
     return this.reportsService.getStockShareReport(filters);
+  }
+
+  @Get('production')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get production report (Admin only)' })
+  @ApiQuery({ name: 'startDate', required: false, type: String })
+  @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiQuery({ name: 'productId', required: false, type: Number })
+  @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
+  getProductionReport(@Query() filters: ReportFiltersDto) {
+    return this.reportsService.getProductionReport(filters);
   }
 }
 
