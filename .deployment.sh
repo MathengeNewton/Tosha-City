@@ -42,6 +42,11 @@ log_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
+run_db_sql() {
+    local sql="$1"
+    printf '%s\n' "$sql" | $COMPOSE_CMD exec -T db env PGPASSWORD="$DATABASE_PASSWORD" psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME"
+}
+
 # Health check function
 check_health() {
     local service=$1
@@ -189,6 +194,101 @@ for i in $(seq 1 $MAX_RETRIES); do
     log_warning "Database not ready yet (attempt $i/$MAX_RETRIES), waiting..."
     sleep $RETRY_DELAY
 done
+
+# Prepare branch-scoped schema backfill before backend sync runs.
+# This prevents startup failures when existing sale/session rows predate branchId.
+log ""
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log "🧱 Preparing Branch Backfill..."
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+BRANCH_BACKFILL_SQL=$(cat <<'EOF'
+DO $$
+DECLARE
+    default_branch_id integer;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE n.nspname = 'public'
+          AND t.typname = 'branch_type_enum'
+    ) THEN
+        CREATE TYPE public.branch_type_enum AS ENUM ('GENERAL_BUTCHERY', 'PORK_BUTCHERY');
+    END IF;
+
+    CREATE TABLE IF NOT EXISTS public.branch (
+        id SERIAL PRIMARY KEY,
+        name character varying NOT NULL UNIQUE,
+        code character varying NOT NULL UNIQUE,
+        type public.branch_type_enum NOT NULL DEFAULT 'GENERAL_BUTCHERY',
+        "isActive" boolean NOT NULL DEFAULT true,
+        "createdAt" timestamp NOT NULL DEFAULT now(),
+        "updatedAt" timestamp NOT NULL DEFAULT now()
+    );
+
+    INSERT INTO public.branch (name, code, type, "isActive")
+    SELECT 'Default Branch', 'DEFAULT', 'GENERAL_BUTCHERY', true
+    WHERE NOT EXISTS (SELECT 1 FROM public.branch);
+
+    SELECT id
+    INTO default_branch_id
+    FROM public.branch
+    ORDER BY id
+    LIMIT 1;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'stock_session'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'stock_session'
+              AND column_name = 'branchId'
+        ) THEN
+            ALTER TABLE public.stock_session ADD COLUMN "branchId" integer;
+        END IF;
+
+        UPDATE public.stock_session
+        SET "branchId" = default_branch_id
+        WHERE "branchId" IS NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'sale'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'sale'
+              AND column_name = 'branchId'
+        ) THEN
+            ALTER TABLE public.sale ADD COLUMN "branchId" integer;
+        END IF;
+
+        UPDATE public.sale
+        SET "branchId" = default_branch_id
+        WHERE "branchId" IS NULL;
+    END IF;
+END $$;
+EOF
+)
+
+if run_db_sql "$BRANCH_BACKFILL_SQL" > /dev/null 2>&1; then
+    log_success "Branch backfill preparation completed"
+else
+    log_warning "Branch backfill preparation did not complete cleanly"
+    log_info "Retrying with verbose output for diagnostics..."
+    run_db_sql "$BRANCH_BACKFILL_SQL" || log_warning "Continuing anyway - backend health checks will confirm final state"
+fi
 
 # Step 3: Start Backend
 log ""
