@@ -40,6 +40,7 @@ export default function DashboardLayout({ children }) {
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
@@ -57,6 +58,7 @@ export default function DashboardLayout({ children }) {
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
+    { name: "Branches", href: "/admin/branches", icon: HomeIcon },
     { name: "Users", href: "/admin/users", icon: UserGroupIcon },
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];

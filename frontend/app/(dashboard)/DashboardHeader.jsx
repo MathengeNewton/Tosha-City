@@ -21,6 +21,7 @@ export default function DashBoardHeader() {
   const userRole = user?.roles?.[0]?.name || user?.roles?.[0] || "user";
   const userName = user?.username || "User";
   const userEmail = user?.email || "";
+  const userBranch = user?.branch?.name || (user?.branchId ? `Branch #${user.branchId}` : "Global access");
 
   // Optional: Different avatar for regular members
   const getAvatar = () => {
@@ -115,7 +116,11 @@ export default function DashBoardHeader() {
       </nav>
 
       {/* User Dropdown */}
-      <div className="relative flex-shrink-0" ref={dropdownRef}>
+      <div className="relative flex items-center gap-3 flex-shrink-0" ref={dropdownRef}>
+        <div className="hidden lg:flex flex-col items-end text-right">
+          <span className="text-xs uppercase tracking-wide text-gray-500">Branch</span>
+          <span className="text-sm font-semibold text-gray-900">{userBranch}</span>
+        </div>
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="flex items-center gap-2 sm:gap-3 min-h-[44px] px-2 sm:px-3 rounded-full bg-white shadow-md border border-gray-200 hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#0D47A1]"
@@ -153,6 +158,9 @@ export default function DashBoardHeader() {
               </p>
               <p className="text-xs text-gray-500 mt-1 capitalize">
                 {userRole}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {userBranch}
               </p>
             </div>
 

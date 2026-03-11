@@ -30,6 +30,7 @@ function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
 const UsersPage = () => {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -42,6 +43,7 @@ const UsersPage = () => {
     email: "",
     password: "",
     roleIds: [],
+    branchId: "",
   });
 
   const cashierRole = useMemo(
@@ -57,6 +59,7 @@ const UsersPage = () => {
   useEffect(() => {
     loadUsers();
     loadRoles();
+    loadBranches();
   }, []);
 
   const loadUsers = async () => {
@@ -82,6 +85,16 @@ const UsersPage = () => {
     }
   };
 
+  const loadBranches = async () => {
+    try {
+      const response = await apiClient.branches.getAll({ activeOnly: true });
+      setBranches(response.data || []);
+    } catch (error) {
+      console.error("Error loading branches:", error);
+      toast.error("Failed to load branches");
+    }
+  };
+
   const handleCreate = () => {
     setEditingUser(null);
     setFormData({
@@ -89,6 +102,7 @@ const UsersPage = () => {
       email: "",
       password: "",
       roleIds: cashierRole ? [cashierRole.id] : [],
+      branchId: "",
     });
     setShowModal(true);
   };
@@ -100,6 +114,7 @@ const UsersPage = () => {
       email: user.email || "",
       password: "",
       roleIds: user.roles?.map((r) => r.id) || [],
+      branchId: user.branchId ? String(user.branchId) : "",
     });
     setShowModal(true);
   };
@@ -120,8 +135,13 @@ const UsersPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!editingUser && !cashierRole) {
+    if (!roles.length) {
       toast.error("Roles are still loading. Please try again.");
+      return;
+    }
+
+    if (formData.roleIds.length === 0) {
+      toast.error("Please select at least one role");
       return;
     }
 
@@ -129,7 +149,8 @@ const UsersPage = () => {
       const userData = {
         username: formData.username,
         email: formData.email,
-        roleIds: editingUser ? formData.roleIds : [cashierRole.id],
+        roleIds: formData.roleIds,
+        branchId: formData.branchId ? parseInt(formData.branchId, 10) : undefined,
       };
 
       // Only include password if it's a new user or if password was changed
@@ -173,6 +194,9 @@ const UsersPage = () => {
   const getUserRoles = (user) => {
     return user.roles?.map((r) => r.name).join(", ") || "No roles";
   };
+
+  const selectedRoles = roles.filter((role) => formData.roleIds.includes(role.id));
+  const selectedRolesIncludeAdmin = selectedRoles.some((role) => role.name?.toLowerCase() === "admin");
 
   if (loading) {
     return (
@@ -228,6 +252,7 @@ const UsersPage = () => {
                   username: u.username,
                   email: u.email || "",
                   roles: u.roles?.map((r) => r.name).join(", ") || "",
+                  branch: u.branch?.name || "",
                 }));
                 exportToExcel(
                   rows,
@@ -235,6 +260,7 @@ const UsersPage = () => {
                     { key: "username", label: "Username" },
                     { key: "email", label: "Email" },
                     { key: "roles", label: "Roles" },
+                    { key: "branch", label: "Branch" },
                   ],
                   `users-export-${new Date().toISOString().split("T")[0]}`
                 );
@@ -266,6 +292,9 @@ const UsersPage = () => {
                   Roles
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Branch
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -273,7 +302,7 @@ const UsersPage = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
                     No users found.
                   </td>
                 </tr>
@@ -288,6 +317,9 @@ const UsersPage = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {getUserRoles(user)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.branch?.name || "Global"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
@@ -344,7 +376,6 @@ const UsersPage = () => {
                   onChange={handleChange}
                   placeholder="Email"
                   className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-                  required
                 />
               </div>
               <div className="mb-4">
@@ -365,22 +396,40 @@ const UsersPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Roles *
                 </label>
-                {editingUser ? (
-                  <div className="space-y-2">
-                    {roles.map((role) => (
-                      <label key={role.id} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.roleIds.includes(role.id)}
-                          onChange={() => handleRoleToggle(role.id)}
-                          className="mr-2"
-                        />
-                        <span className="text-sm capitalize">{role.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600 py-1">Cashier</p>
+                <div className="space-y-2">
+                  {roles.map((role) => (
+                    <label key={role.id} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.roleIds.includes(role.id)}
+                        onChange={() => handleRoleToggle(role.id)}
+                        className="mr-2"
+                      />
+                      <span className="text-sm capitalize">{role.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Branch {!selectedRolesIncludeAdmin ? "*" : "(optional for admins)"}
+                </label>
+                <select
+                  name="branchId"
+                  value={formData.branchId}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
+                  required={!selectedRolesIncludeAdmin}
+                >
+                  <option value="">{selectedRolesIncludeAdmin ? "No branch (global)" : "Select branch"}</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name} ({branch.type === "PORK_BUTCHERY" ? "Pork" : "General"})
+                    </option>
+                  ))}
+                </select>
+                {!selectedRolesIncludeAdmin && (
+                  <p className="mt-1 text-xs text-gray-500">Non-admin users must belong to one branch.</p>
                 )}
               </div>
               <div className="flex justify-end gap-2">

@@ -14,6 +14,15 @@ import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { CustomersService } from '../customers/customers.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { UserRole } from '../roles/entities/role.entity';
+import { ProductCategory } from '../products/entities/product.entity';
+import { ProductionRun } from '../production/entities/production-run.entity';
+
+type RequestUser = {
+  userId: number;
+  roles?: Array<{ name?: string } | string>;
+  branchId?: number | null;
+};
 
 @Injectable()
 export class SalesService {
@@ -26,6 +35,8 @@ export class SalesService {
     private paymentRepository: Repository<SalePayment>,
     @InjectRepository(StockEntry)
     private stockEntryRepository: Repository<StockEntry>,
+    @InjectRepository(ProductionRun)
+    private productionRunRepository: Repository<ProductionRun>,
     private dataSource: DataSource,
     private stockSessionsService: StockSessionsService,
     private productsService: ProductsService,
@@ -34,11 +45,26 @@ export class SalesService {
     private activityLog: ActivityLogService,
   ) {}
 
-  async create(createSaleDto: CreateSaleDto, userId: number): Promise<Sale> {
+  private isAdmin(user?: RequestUser): boolean {
+    return (user?.roles || []).some((role) =>
+      typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
+    );
+  }
+
+  async create(createSaleDto: CreateSaleDto, user: RequestUser): Promise<Sale> {
     // Verify session exists and is open
     const session = await this.stockSessionsService.findOne(createSaleDto.sessionId);
     if (session.status !== SessionStatus.OPEN) {
       throw new BadRequestException('Cannot create sale for a closed session');
+    }
+
+    if (!this.isAdmin(user)) {
+      if (!user.branchId) {
+        throw new BadRequestException('Your account is not assigned to a branch');
+      }
+      if (session.branchId !== user.branchId) {
+        throw new BadRequestException('You can only create sales in your assigned branch');
+      }
     }
 
     if (!createSaleDto.items || createSaleDto.items.length === 0) {
@@ -87,11 +113,13 @@ export class SalesService {
         ? await this.productsService.findOne(product.parentProductId)
         : product;
 
-      // Check available stock (from parent if byproduct)
-      const availableStock = await this.getAvailableStock(createSaleDto.sessionId, stockProductId);
+      const availableStock =
+        product.category === ProductCategory.PRODUCTION_ITEM
+          ? await this.getProducedAvailableStock(createSaleDto.sessionId, itemDto.productId)
+          : await this.getAvailableStock(createSaleDto.sessionId, stockProductId);
       if (availableStock < itemDto.quantity) {
         throw new BadRequestException(
-          `Insufficient stock for ${product.name}. Available: ${availableStock} ${stockProduct.unit}, Requested: ${itemDto.quantity} ${stockProduct.unit}`,
+          `Insufficient stock for ${product.name}. Available: ${availableStock} ${product.unit}, Requested: ${itemDto.quantity} ${product.unit}`,
         );
       }
 
@@ -133,7 +161,8 @@ export class SalesService {
           customerId: createSaleDto.customerId || null,
           paymentMethod: createSaleDto.paymentMethod,
           paymentStatus: PaymentStatus.PENDING,
-          soldById: userId,
+          soldById: user.userId,
+          branchId: session.branchId,
         });
 
         const savedSale = await queryRunner.manager.save(Sale, sale);
@@ -156,7 +185,7 @@ export class SalesService {
             quantity: byproductEntry.quantity,
             unit: byproductEntry.unit,
             notes: 'Byproduct sale (deducted from parent stock)',
-            recordedById: userId,
+            recordedById: user.userId,
           });
           await queryRunner.manager.save(StockEntry, stockEntry);
         }
@@ -165,7 +194,7 @@ export class SalesService {
 
         const saleWithItems = await this.findOne(savedSale.id);
         await this.activityLog.log({
-          userId,
+          userId: user.userId,
           action: 'SALE_CREATED',
           entityType: 'sale',
           entityId: savedSale.id,
@@ -176,7 +205,7 @@ export class SalesService {
       } catch (error: any) {
         await queryRunner.rollbackTransaction();
         await this.activityLog.log({
-          userId,
+          userId: user.userId,
           action: 'SALE_CREATED',
           entityType: 'sale',
           entityId: null,
@@ -214,6 +243,7 @@ export class SalesService {
     date?: string,
     dateFrom?: string,
     dateTo?: string,
+    branchId?: number,
   ): Promise<Sale[]> {
     const query = this.saleRepository.createQueryBuilder('sale')
       .leftJoinAndSelect('sale.items', 'items')
@@ -237,6 +267,10 @@ export class SalesService {
       query.andWhere('DATE(sale.soldAt) <= :dateTo', { dateTo });
     } else if (date) {
       query.andWhere('DATE(sale.soldAt) = :date', { date });
+    }
+
+    if (branchId) {
+      query.andWhere('sale.branchId = :branchId', { branchId });
     }
 
     return await query.orderBy('sale.soldAt', 'DESC').getMany();
@@ -486,6 +520,25 @@ export class SalesService {
     const partnerShareQty = partnerShareEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
 
     return openingStock + incomingStock - soldStock - wastage - byproductSaleQty - partnerShareQty;
+  }
+
+  async getProducedAvailableStock(sessionId: number, productId: number): Promise<number> {
+    const producedResult = await this.productionRunRepository
+      .createQueryBuilder('run')
+      .select('COALESCE(SUM(run.actualOutputQuantity - run.wastedQuantity), 0)', 'total')
+      .where('run.sessionId = :sessionId', { sessionId })
+      .andWhere('run.finishedProductId = :productId', { productId })
+      .getRawOne();
+
+    const soldResult = await this.saleItemRepository
+      .createQueryBuilder('item')
+      .select('COALESCE(SUM(item.quantity), 0)', 'total')
+      .innerJoin('item.sale', 'sale')
+      .where('sale.sessionId = :sessionId', { sessionId })
+      .andWhere('item.productId = :productId', { productId })
+      .getRawOne();
+
+    return Number(producedResult?.total || 0) - Number(soldResult?.total || 0);
   }
 }
 

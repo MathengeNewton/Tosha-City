@@ -79,10 +79,24 @@ export const apiClient = {
     delete: (id) => api.delete(`/products/${id}`),
   },
 
+  recipes: {
+    getAll: (params) => api.get('/recipes', { params }),
+    getById: (id) => api.get(`/recipes/${id}`),
+    create: (data) => api.post('/recipes', data),
+    update: (id, data) => api.patch(`/recipes/${id}`, data),
+    delete: (id) => api.delete(`/recipes/${id}`),
+  },
+
+  production: {
+    getAll: (params) => api.get('/production', { params }),
+    getById: (id) => api.get(`/production/${id}`),
+    create: (data) => api.post('/production', data),
+  },
+
   // Stock Sessions
   stockSessions: {
     getAll: (params) => api.get('/stock-sessions', { params }),
-    getCurrent: () => api.get('/stock-sessions/current'),
+    getCurrent: (params) => api.get('/stock-sessions/current', { params }),
     getById: (id) => api.get(`/stock-sessions/${id}`),
     open: (data) => api.post('/stock-sessions/open', data),
     close: (id) => api.post(`/stock-sessions/${id}/close`),
@@ -127,6 +141,14 @@ export const apiClient = {
     delete: (id) => api.delete(`/users/${id}`),
   },
 
+  branches: {
+    getAll: (params) => api.get('/branches', { params }),
+    getById: (id) => api.get(`/branches/${id}`),
+    create: (data) => api.post('/branches', data),
+    update: (id, data) => api.patch(`/branches/${id}`, data),
+    delete: (id) => api.delete(`/branches/${id}`),
+  },
+
   // Uploads
   uploads: {
     upload: (file) => {
@@ -154,6 +176,7 @@ export const apiClient = {
     getStockReport: (params) => api.get('/reports/stock', { params }),
     getWastageReport: (params) => api.get('/reports/wastage', { params }),
     getStockShareReport: (params) => api.get('/reports/stock-share', { params }),
+    getProductionReport: (params) => api.get('/reports/production', { params }),
     getWeeklyComparison: () => api.get('/reports/weekly-comparison'),
     getDailySummary: (date) => api.get('/reports/daily-summary', { params: date ? { date } : {} }),
   },

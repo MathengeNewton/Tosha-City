@@ -24,6 +24,13 @@ export class ProductsService {
       name: createProductDto.name.trim(),
       unit: createProductDto.unit.trim(),
       defaultPrice: Number(createProductDto.defaultPrice),
+      wholesalePrice:
+        createProductDto.wholesalePrice !== undefined && createProductDto.wholesalePrice !== null
+          ? Number(createProductDto.wholesalePrice)
+          : null,
+      category: createProductDto.category,
+      saleMode: createProductDto.saleMode,
+      salesPrompt: createProductDto.salesPrompt?.trim() || null,
       isActive: createProductDto.isActive !== undefined ? createProductDto.isActive : true,
       parentProductId: createProductDto.parentProductId || null,
     };
@@ -67,6 +74,9 @@ export class ProductsService {
   async update(id: number, updateProductDto: UpdateProductDto): Promise<Product> {
     const product = await this.findOne(id);
     Object.assign(product, updateProductDto);
+    if (typeof product.salesPrompt === 'string') {
+      product.salesPrompt = product.salesPrompt.trim() || null;
+    }
     return await this.productRepository.save(product);
   }
 

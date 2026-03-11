@@ -7,6 +7,7 @@ import { StockEntry } from '../stock-entries/entities/stock-entry.entity';
 import { StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { Product } from '../products/entities/product.entity';
 import { StockShare } from '../stock-share/entities/stock-share.entity';
+import { ProductionRun } from '../production/entities/production-run.entity';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { PaymentStatus } from '../sales/entities/payment.enums';
 
@@ -23,6 +24,8 @@ export class ReportsService {
     private productRepository: Repository<Product>,
     @InjectRepository(StockShare)
     private stockShareRepository: Repository<StockShare>,
+    @InjectRepository(ProductionRun)
+    private productionRunRepository: Repository<ProductionRun>,
   ) {}
 
   async getSalesReport(filters: ReportFiltersDto) {
@@ -49,6 +52,10 @@ export class ReportsService {
 
     if (filters.sessionId) {
       query.andWhere('sale.sessionId = :sessionId', { sessionId: filters.sessionId });
+    }
+
+    if (filters.branchId) {
+      query.andWhere('sale.branchId = :branchId', { branchId: filters.branchId });
     }
 
     const sales = await query.orderBy('sale.soldAt', 'DESC').getMany();
@@ -157,6 +164,10 @@ export class ReportsService {
       query.andWhere('entry.sessionId = :sessionId', { sessionId: filters.sessionId });
     }
 
+    if (filters.branchId) {
+      query.andWhere('session.branchId = :branchId', { branchId: filters.branchId });
+    }
+
     const entries = await query.orderBy('entry.recordedAt', 'DESC').getMany();
 
     // Get sales for the same date range to include sales by price and by kgs
@@ -176,6 +187,10 @@ export class ReportsService {
       salesQuery.andWhere('sale.sessionId = :sessionId', { sessionId: filters.sessionId });
     }
 
+    if (filters.branchId) {
+      salesQuery.andWhere('sale.branchId = :branchId', { branchId: filters.branchId });
+    }
+
     const sales = await salesQuery.getMany();
 
     // Group by product and type
@@ -190,6 +205,7 @@ export class ReportsService {
           closing: 0,
           wastage: 0,
           partnerShare: 0,
+          productionUsage: 0,
           salesByPrice: 0,
           salesByKgs: 0,
         };
@@ -211,6 +227,9 @@ export class ReportsService {
         case StockEntryType.PARTNER_SHARE:
           stockByProduct[productName].partnerShare += entry.quantity;
           break;
+        case StockEntryType.PRODUCTION_USAGE:
+          stockByProduct[productName].productionUsage += entry.quantity;
+          break;
       }
     });
 
@@ -227,6 +246,7 @@ export class ReportsService {
               closing: 0,
               wastage: 0,
               partnerShare: 0,
+              productionUsage: 0,
               salesByPrice: 0,
               salesByKgs: 0,
             };
@@ -281,6 +301,10 @@ export class ReportsService {
 
     if (filters.productId) {
       query.andWhere('entry.productId = :productId', { productId: filters.productId });
+    }
+
+    if (filters.branchId) {
+      query.andWhere('session.branchId = :branchId', { branchId: filters.branchId });
     }
 
     const wastageEntries = await query.orderBy('entry.recordedAt', 'DESC').getMany();
@@ -357,6 +381,10 @@ export class ReportsService {
       query.andWhere('share.sessionId = :sessionId', { sessionId: filters.sessionId });
     }
 
+    if (filters.branchId) {
+      query.andWhere('session.branchId = :branchId', { branchId: filters.branchId });
+    }
+
     const shares = await query.getMany();
 
     const totalQuantity = shares.reduce((sum, s) => sum + Number(s.quantity), 0);
@@ -402,6 +430,129 @@ export class ReportsService {
         notes: s.notes,
         sessionDate: s.session?.date,
       })),
+    };
+  }
+
+  async getProductionReport(filters: ReportFiltersDto) {
+    const query = this.productionRunRepository
+      .createQueryBuilder('run')
+      .leftJoinAndSelect('run.branch', 'branch')
+      .leftJoinAndSelect('run.session', 'session')
+      .leftJoinAndSelect('run.recipe', 'recipe')
+      .leftJoinAndSelect('run.finishedProduct', 'finishedProduct')
+      .leftJoinAndSelect('run.recordedBy', 'recordedBy')
+      .leftJoinAndSelect('run.ingredients', 'ingredients')
+      .leftJoinAndSelect('ingredients.product', 'ingredientProduct')
+      .orderBy('run.recordedAt', 'DESC');
+
+    if (filters.startDate && filters.endDate) {
+      query.andWhere('DATE(run.recordedAt) BETWEEN :startDate AND :endDate', {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
+    } else if (filters.startDate) {
+      query.andWhere('DATE(run.recordedAt) >= :startDate', { startDate: filters.startDate });
+    } else if (filters.endDate) {
+      query.andWhere('DATE(run.recordedAt) <= :endDate', { endDate: filters.endDate });
+    }
+
+    if (filters.branchId) {
+      query.andWhere('run.branchId = :branchId', { branchId: filters.branchId });
+    }
+
+    if (filters.sessionId) {
+      query.andWhere('run.sessionId = :sessionId', { sessionId: filters.sessionId });
+    }
+
+    if (filters.productId) {
+      query.andWhere('run.finishedProductId = :productId', { productId: filters.productId });
+    }
+
+    const runs = await query.getMany();
+
+    const soldQuantities = new Map<string, number>();
+    for (const run of runs) {
+      const key = `${run.sessionId}:${run.finishedProductId}`;
+      if (!soldQuantities.has(key)) {
+        const soldResult = await this.saleItemRepository
+          .createQueryBuilder('item')
+          .select('COALESCE(SUM(item.quantity), 0)', 'total')
+          .innerJoin('item.sale', 'sale')
+          .where('sale.sessionId = :sessionId', { sessionId: run.sessionId })
+          .andWhere('item.productId = :productId', { productId: run.finishedProductId })
+          .getRawOne();
+        soldQuantities.set(key, Number(soldResult?.total || 0));
+      }
+    }
+
+    const byProduct: Record<string, { productId: number; output: number; sold: number; wastage: number; remaining: number }> = {};
+    const byRecipe: Record<string, { recipeId: number; runs: number; output: number; wastage: number }> = {};
+
+    let totalOutput = 0;
+    let totalWastage = 0;
+    let totalSold = 0;
+
+    const entries = runs.map((run) => {
+      const sold = soldQuantities.get(`${run.sessionId}:${run.finishedProductId}`) || 0;
+      const remaining = Number(run.actualOutputQuantity) - Number(run.wastedQuantity || 0) - sold;
+      totalOutput += Number(run.actualOutputQuantity || 0);
+      totalWastage += Number(run.wastedQuantity || 0);
+
+      const productName = run.finishedProduct?.name || 'Unknown';
+      if (!byProduct[productName]) {
+        byProduct[productName] = { productId: run.finishedProductId, output: 0, sold: 0, wastage: 0, remaining: 0 };
+      }
+      byProduct[productName].output += Number(run.actualOutputQuantity || 0);
+      byProduct[productName].wastage += Number(run.wastedQuantity || 0);
+      byProduct[productName].remaining += Number(run.actualOutputQuantity || 0) - Number(run.wastedQuantity || 0);
+
+      const recipeName = run.recipe?.name || 'Unknown';
+      if (!byRecipe[recipeName]) {
+        byRecipe[recipeName] = { recipeId: run.recipeId, runs: 0, output: 0, wastage: 0 };
+      }
+      byRecipe[recipeName].runs += 1;
+      byRecipe[recipeName].output += Number(run.actualOutputQuantity || 0);
+      byRecipe[recipeName].wastage += Number(run.wastedQuantity || 0);
+
+      return {
+        id: run.id,
+        branch: run.branch?.name,
+        sessionDate: run.session?.date,
+        recipe: run.recipe?.name,
+        finishedProduct: run.finishedProduct?.name,
+        expectedOutputQuantity: run.expectedOutputQuantity,
+        actualOutputQuantity: run.actualOutputQuantity,
+        wastedQuantity: run.wastedQuantity,
+        soldQuantity: sold,
+        remainingQuantity: remaining,
+        recordedAt: run.recordedAt,
+        notes: run.notes,
+      };
+    });
+
+    soldQuantities.forEach((sold, key) => {
+      totalSold += sold;
+      const [, productIdPart] = key.split(':');
+      const productId = Number(productIdPart);
+      const productName = runs.find((run) => run.finishedProductId === productId)?.finishedProduct?.name || 'Unknown';
+      if (!byProduct[productName]) {
+        byProduct[productName] = { productId, output: 0, sold: 0, wastage: 0, remaining: 0 };
+      }
+      byProduct[productName].sold += sold;
+      byProduct[productName].remaining -= sold;
+    });
+
+    return {
+      summary: {
+        totalRuns: runs.length,
+        totalOutput,
+        totalWastage,
+        totalSold,
+        totalRemaining: totalOutput - totalWastage - totalSold,
+      },
+      byProduct: Object.entries(byProduct).map(([product, data]) => ({ product, ...data })),
+      byRecipe: Object.entries(byRecipe).map(([recipe, data]) => ({ recipe, ...data })),
+      entries,
     };
   }
 

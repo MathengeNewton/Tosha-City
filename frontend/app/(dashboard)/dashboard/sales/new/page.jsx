@@ -3,34 +3,80 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
+import { useAuth } from "../../../../../contexts/AuthContext";
+
+function getPromptLabel(product) {
+  if (!product) return "Quantity";
+  if (product.salesPrompt) return product.salesPrompt;
+  if (product.saleMode === "CUP") return "Number of cups";
+  if (product.saleMode === "PORTION") return "Number of portions";
+  if (product.saleMode === "PIECE") return "Number of pieces";
+  return `Quantity (${product.unit || "kg"})`;
+}
 
 export default function NewSalePage() {
   const router = useRouter();
+  const { user, hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [saleItems, setSaleItems] = useState([]);
   const [availableStock, setAvailableStock] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [customerId, setCustomerId] = useState('');
 
   useEffect(() => {
-    loadData();
-  }, []);
+    initializeBranchContext();
+  }, [user?.branchId, isAdmin]);
 
+  useEffect(() => {
+    if (isAdmin ? selectedBranchId : user?.branchId) {
+      loadData();
+    }
+  }, [selectedBranchId, user?.branchId, isAdmin]);
+
+  const initializeBranchContext = async () => {
+    try {
+      if (isAdmin) {
+        const branchesRes = await apiClient.branches.getAll({ activeOnly: true });
+        const branchList = branchesRes.data || [];
+        setBranches(branchList);
+        if (!selectedBranchId && branchList.length > 0) {
+          setSelectedBranchId(String(branchList[0].id));
+        }
+      } else if (user?.branchId) {
+        setSelectedBranchId(String(user.branchId));
+      }
+    } catch (error) {
+      console.error("Error loading branches:", error);
+      toast.error("Failed to load branches");
+    }
+  };
 
   const loadData = async () => {
     try {
       setLoading(true);
+      const branchId = isAdmin ? parseInt(selectedBranchId, 10) : user?.branchId;
+      if (!branchId) {
+        setCurrentSession(null);
+        setLoading(false);
+        return;
+      }
       
       // Get current session
-      const sessionRes = await apiClient.stockSessions.getCurrent();
+      const sessionRes = await apiClient.stockSessions.getCurrent({ branchId });
       const session = sessionRes.data;
       
       if (!session || session.status !== 'OPEN') {
-        toast.error("No active stock session. Please open a session first.");
-        router.push('/dashboard/stock');
+        setCurrentSession(null);
+        if (!isAdmin) {
+          toast.error("No active stock session. Please open a session first.");
+          router.push('/dashboard/stock');
+        }
         return;
       }
 
@@ -82,6 +128,7 @@ export default function NewSalePage() {
   const updateItem = (index, field, value) => {
     const updated = [...saleItems];
     const item = updated[index];
+    const currentProduct = products.find(p => p.id === parseInt(item.productId));
     
     if (field === 'productId') {
       const product = products.find(p => p.id === parseInt(value));
@@ -92,27 +139,44 @@ export default function NewSalePage() {
         const useWholesale = selectedCustomer?.type === 'WHOLESALE';
         const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
         item.price = useWholesale ? (product.wholesalePrice ?? retail) : retail;
-        // Recalculate quantity if amount exists
-        if (item.amount) {
-          const amount = parseFloat(item.amount || 0);
-          const unitPrice = parseFloat(item.price || 0);
-          item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+        if (product.saleMode === "WEIGHT") {
+          item.quantity = item.quantity || '';
+          if (item.amount) {
+            const amount = parseFloat(item.amount || 0);
+            const unitPrice = parseFloat(item.price || 0);
+            item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+          }
+        } else {
+          const qty = parseFloat(item.quantity || 1);
+          item.quantity = qty > 0 ? String(qty) : '1';
+          item.amount = ((parseFloat(item.quantity || 1) || 1) * parseFloat(item.price || 0)).toFixed(2);
         }
       }
     } else if (field === 'amount') {
       item.amount = value;
-      // Auto-calculate quantity from amount and unit price
-      const amount = parseFloat(value || 0);
-      const unitPrice = parseFloat(item.price || 0);
-      item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
-    } else if (field === 'price') {
-      // Allow manual override of price if needed
-      item.price = value;
-      // Recalculate quantity if amount exists
-      if (item.amount) {
-        const amount = parseFloat(item.amount || 0);
-        const unitPrice = parseFloat(value || 0);
+      if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
+        const amount = parseFloat(value || 0);
+        const unitPrice = parseFloat(item.price || 0);
         item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+      }
+    } else if (field === 'price') {
+      item.price = value;
+      if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
+        if (item.amount) {
+          const amount = parseFloat(item.amount || 0);
+          const unitPrice = parseFloat(value || 0);
+          item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+        }
+      } else {
+        const qty = parseFloat(item.quantity || 0);
+        item.amount = qty > 0 ? (qty * parseFloat(value || 0)).toFixed(2) : '';
+      }
+    } else if (field === 'quantity') {
+      item.quantity = value;
+      if ((currentProduct?.saleMode || 'WEIGHT') !== 'WEIGHT') {
+        const qty = parseFloat(value || 0);
+        const unitPrice = parseFloat(item.price || 0);
+        item.amount = qty > 0 ? (qty * unitPrice).toFixed(2) : '';
       }
     } else {
       item[field] = value;
@@ -159,9 +223,12 @@ export default function NewSalePage() {
       const saleData = {
         sessionId: currentSession.id,
         items: saleItems.map(item => {
+          const product = products.find(p => p.id === parseInt(item.productId));
           const quantity = parseFloat(item.quantity || 0);
           const unitPrice = parseFloat(item.price || 0);
-          const calculatedQuantity = unitPrice > 0 ? (parseFloat(item.amount || 0) / unitPrice) : quantity;
+          const calculatedQuantity = product?.saleMode === 'WEIGHT'
+            ? (unitPrice > 0 ? (parseFloat(item.amount || 0) / unitPrice) : quantity)
+            : quantity;
           return {
             productId: parseInt(item.productId),
             quantity: calculatedQuantity,
@@ -189,7 +256,40 @@ export default function NewSalePage() {
   }
 
   if (!currentSession) {
-    return null;
+    return (
+      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">New Sale</h1>
+            <p className="text-gray-600 mt-1">Select a branch with an open stock session to continue.</p>
+          </div>
+          {isAdmin && (
+            <div className="max-w-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Branch *</label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select branch</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/stock")}
+            className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors"
+          >
+            Go to Stock Sessions
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -200,11 +300,30 @@ export default function NewSalePage() {
             New Sale
           </h1>
           <p className="text-gray-600 mt-1 text-sm sm:text-base">Create a new sale and generate receipt</p>
+          <p className="text-gray-500 mt-1 text-sm">
+            Branch: {currentSession.branch?.name || user?.branch?.name || "Unassigned"}
+          </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <div className="space-y-6">
+          {isAdmin && (
+            <div className="border-b border-gray-200 pb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Branch *</label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {/* Customer & payment first so wholesale selection applies to items */}
           <div className="border-b border-gray-200 pb-4 space-y-4">
             <div>
@@ -241,9 +360,14 @@ export default function NewSalePage() {
                     if (!product) return item;
                     const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
                     const newPrice = useWholesale ? (product.wholesalePrice ?? retail) : retail;
-                    const amount = parseFloat(item.amount || 0);
-                    const quantity = newPrice > 0 && amount > 0 ? (amount / newPrice).toFixed(3) : item.quantity;
-                    return { ...item, price: newPrice, quantity };
+                    if ((product.saleMode || 'WEIGHT') === 'WEIGHT') {
+                      const amount = parseFloat(item.amount || 0);
+                      const quantity = newPrice > 0 && amount > 0 ? (amount / newPrice).toFixed(3) : item.quantity;
+                      return { ...item, price: newPrice, quantity };
+                    }
+                    const quantity = parseFloat(item.quantity || 0);
+                    const amount = quantity > 0 ? (quantity * newPrice).toFixed(2) : item.amount;
+                    return { ...item, price: newPrice, amount };
                   }));
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
@@ -285,6 +409,13 @@ export default function NewSalePage() {
               <div className="space-y-4">
                 {saleItems.map((item, index) => (
                   <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-4 p-4 border border-gray-200 rounded-lg">
+                    {(() => {
+                      const selectedProduct = products.find((product) => product.id === parseInt(item.productId));
+                      const saleMode = selectedProduct?.saleMode || 'WEIGHT';
+                      const isWeightSale = saleMode === 'WEIGHT';
+                      const promptLabel = getPromptLabel(selectedProduct);
+                      return (
+                        <>
                     <div className="sm:col-span-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product *
@@ -300,6 +431,7 @@ export default function NewSalePage() {
                           <option key={product.id} value={product.id}>
                             {product.name} ({product.unit}) – Retail KES {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                             {product.wholesalePrice != null ? ` | Wholesale KES ${parseFloat(product.wholesalePrice).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : ''}
+                            {product.saleMode && product.saleMode !== 'WEIGHT' ? ` | ${product.saleMode}` : ''}
                           </option>
                         ))}
                       </select>
@@ -307,15 +439,16 @@ export default function NewSalePage() {
 
                     <div className="sm:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Amount (KES) *
+                        {isWeightSale ? 'Amount (KES) *' : 'Amount (KES)'}
                       </label>
                       <input
                         type="number"
                         step="0.01"
                         value={item.amount}
                         onChange={(e) => updateItem(index, 'amount', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                        required
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-md text-base min-h-[44px] ${isWeightSale ? 'focus:outline-none focus:ring-2 focus:ring-blue-500' : 'bg-gray-50 cursor-not-allowed'}`}
+                        required={isWeightSale}
+                        readOnly={!isWeightSale}
                       />
                     </div>
 
@@ -336,14 +469,16 @@ export default function NewSalePage() {
 
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Quantity (kg)
+                        {promptLabel}
                       </label>
                       <input
-                        type="text"
+                        type={isWeightSale ? "text" : "number"}
+                        step={isWeightSale ? undefined : "0.01"}
                         value={item.quantity || ''}
-                        readOnly
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-base min-h-[44px] cursor-not-allowed"
-                        placeholder="Auto-calculated"
+                        readOnly={isWeightSale}
+                        onChange={isWeightSale ? undefined : (e) => updateItem(index, 'quantity', e.target.value)}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-md text-base min-h-[44px] ${isWeightSale ? 'bg-gray-50 cursor-not-allowed' : 'focus:outline-none focus:ring-2 focus:ring-blue-500'}`}
+                        placeholder={isWeightSale ? "Auto-calculated" : `Enter ${selectedProduct?.unit || 'quantity'}`}
                       />
                     </div>
 
@@ -362,6 +497,9 @@ export default function NewSalePage() {
                         KES {parseFloat(item.amount || 0).toFixed(2)}
                       </p>
                     </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>

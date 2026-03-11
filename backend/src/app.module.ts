@@ -8,6 +8,7 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { User } from './modules/users/entities/user.entity';
 import { Role } from './modules/roles/entities/role.entity';
+import { Branch } from './modules/branches/entities/branch.entity';
 import { Product } from './modules/products/entities/product.entity';
 import { StockSession } from './modules/stock-sessions/entities/stock-session.entity';
 import { StockEntry } from './modules/stock-entries/entities/stock-entry.entity';
@@ -19,14 +20,21 @@ import { Customer } from './modules/customers/entities/customer.entity';
 import { ActivityLog } from './modules/activity-log/entities/activity-log.entity';
 import { Partner } from './modules/partners/entities/partner.entity';
 import { StockShare } from './modules/stock-share/entities/stock-share.entity';
+import { Recipe } from './modules/recipes/entities/recipe.entity';
+import { RecipeIngredient } from './modules/recipes/entities/recipe-ingredient.entity';
+import { ProductionRun } from './modules/production/entities/production-run.entity';
+import { ProductionRunIngredient } from './modules/production/entities/production-run-ingredient.entity';
 import { SeedService } from './core/seed/seed.service';
 import { AuthModule } from './modules/auth/auth.module';
+import { BranchesModule } from './modules/branches/branches.module';
 import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { ProductsModule } from './modules/products/products.module';
+import { RecipesModule } from './modules/recipes/recipes.module';
 import { StockSessionsModule } from './modules/stock-sessions/stock-sessions.module';
 import { StockEntriesModule } from './modules/stock-entries/stock-entries.module';
 import { SalesModule } from './modules/sales/sales.module';
+import { ProductionModule } from './modules/production/production.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -52,6 +60,7 @@ import AppConfig from './core/config/app.config';
     TypeOrmModule.forFeature([
       User,
       Role,
+      Branch,
       Product,
       StockSession,
       StockEntry,
@@ -63,6 +72,10 @@ import AppConfig from './core/config/app.config';
       ActivityLog,
       Partner,
       StockShare,
+      Recipe,
+      RecipeIngredient,
+      ProductionRun,
+      ProductionRunIngredient,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -82,12 +95,15 @@ import AppConfig from './core/config/app.config';
       inject: [ConfigService],
     }),
     AuthModule,
+    BranchesModule,
     UsersModule,
     RolesModule,
     ProductsModule,
+    RecipesModule,
     StockSessionsModule,
     StockEntriesModule,
     SalesModule,
+    ProductionModule,
     UploadsModule,
     ReportsModule,
     SuppliersModule,

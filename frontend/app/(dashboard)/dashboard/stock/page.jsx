@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
+import ProductionTab from "../components/ProductionTab";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -35,7 +36,7 @@ export default function StockManagementPage() {
   const searchParams = useSearchParams();
   const sessionIdParam = searchParams.get('sessionId');
   const viewParam = searchParams.get('view');
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
   const isAdmin = hasRole('admin');
   const canManageEntries = isAdmin || hasRole('cashier'); // Cashiers can add/edit stock entries
   const canCloseSession = isAdmin || hasRole('cashier'); // Cashiers can close sessions
@@ -44,10 +45,13 @@ export default function StockManagementPage() {
   const [currentSession, setCurrentSession] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [allSessions, setAllSessions] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
   const [sales, setSales] = useState([]);
+  const [productionRuns, setProductionRuns] = useState([]);
   const [currentSessionSales, setCurrentSessionSales] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState(() => {
@@ -74,8 +78,14 @@ export default function StockManagementPage() {
   );
 
   useEffect(() => {
-    loadData();
-  }, []);
+    initializeBranches();
+  }, [user?.branchId, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin ? selectedBranchId : user?.branchId) {
+      loadData();
+    }
+  }, [selectedBranchId, user?.branchId, isAdmin]);
 
   useEffect(() => {
     if (sessionIdParam) {
@@ -83,20 +93,41 @@ export default function StockManagementPage() {
     }
   }, [sessionIdParam]);
 
-  // Reload sessions when filters change (skip initial load)
+  // Reload sessions when filters or branch change (skip initial load)
   useEffect(() => {
     const timer = setTimeout(() => {
       loadSessions();
     }, 100);
     return () => clearTimeout(timer);
-  }, [filters.dateFrom, filters.dateTo, filters.status]);
+  }, [filters.dateFrom, filters.dateTo, filters.status, selectedBranchId, user?.branchId, isAdmin]);
+
+  const initializeBranches = async () => {
+    try {
+      if (isAdmin) {
+        const branchesRes = await apiClient.branches.getAll({ activeOnly: true });
+        const branchList = branchesRes.data || [];
+        setBranches(branchList);
+        if (!selectedBranchId && branchList.length > 0) {
+          setSelectedBranchId(String(branchList[0].id));
+        }
+      } else if (user?.branchId) {
+        setSelectedBranchId(String(user.branchId));
+      }
+    } catch (error) {
+      console.error("Error loading branches:", error);
+      toast.error("Failed to load branches");
+    }
+  };
 
   const loadSessions = async () => {
     try {
+      const branchId = isAdmin ? selectedBranchId : user?.branchId;
+      if (!branchId) return;
       const allSessionsRes = await apiClient.stockSessions.getAll({
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         status: filters.status || undefined,
+        branchId,
       });
       setAllSessions(allSessionsRes.data || []);
     } catch (error) {
@@ -122,12 +153,18 @@ export default function StockManagementPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+      const branchId = isAdmin ? selectedBranchId : user?.branchId;
+      if (!branchId) {
+        setCurrentSession(null);
+        setLoading(false);
+        return;
+      }
       
       // Get all sessions for list/calendar views first (this also helps us get stats)
       await loadSessions();
 
       // Get current session
-      const sessionRes = await apiClient.stockSessions.getCurrent();
+      const sessionRes = await apiClient.stockSessions.getCurrent({ branchId });
       const session = sessionRes.data;
       
       if (session) {
@@ -135,6 +172,7 @@ export default function StockManagementPage() {
         const allSessionsRes = await apiClient.stockSessions.getAll({
           dateFrom: new Date(session.date).toISOString().split("T")[0],
           dateTo: new Date(session.date).toISOString().split("T")[0],
+          branchId,
         });
         const sessionsWithStats = allSessionsRes.data || [];
         const sessionWithStats = sessionsWithStats.find(s => s.id === session.id);
@@ -177,8 +215,12 @@ export default function StockManagementPage() {
       setStockEntries(entriesRes.data || []);
       
       // Load sales for this session
-      const salesRes = await apiClient.sales.getAll({ sessionId });
+      const [salesRes, productionRes] = await Promise.all([
+        apiClient.sales.getAll({ sessionId }),
+        apiClient.production.getAll({ sessionId }),
+      ]);
       setSales(salesRes.data || []);
+      setProductionRuns(productionRes.data || []);
     } catch (error) {
       console.error("Error loading session:", error);
       toast.error("Failed to load session details");
@@ -187,7 +229,9 @@ export default function StockManagementPage() {
 
   const handleOpenSession = async () => {
     try {
-      await apiClient.stockSessions.open({});
+      await apiClient.stockSessions.open({
+        branchId: isAdmin ? parseInt(selectedBranchId, 10) : user?.branchId,
+      });
       toast.success("Stock session opened successfully");
       loadData();
     } catch (error) {
@@ -321,6 +365,7 @@ export default function StockManagementPage() {
     const partnerShareKg = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const soldKg = sales.reduce((total, s) => total + (s.items || []).reduce((sum, it) => sum + parseFloat(it.quantity || 0), 0), 0);
     const availableKg = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const productionOutputQty = productionRuns.reduce((sum, run) => sum + parseFloat(run.actualOutputQuantity || 0), 0);
 
     const handleCloseSession = async () => {
       if (!confirm("Are you sure you want to close this session? Make sure all sales are paid and closing stock is recorded.")) {
@@ -497,6 +542,11 @@ export default function StockManagementPage() {
               <p className="text-2xl font-bold text-gray-900">{partnerShareKg.toFixed(2)} kg</p>
               <p className="text-xs text-gray-500">{partnerShareEntries.length} entries</p>
             </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Production output</p>
+              <p className="text-2xl font-bold text-gray-900">{productionOutputQty.toFixed(2)}</p>
+              <p className="text-xs text-gray-500">{productionRuns.length} runs</p>
+            </div>
           </div>
         </div>
 
@@ -534,6 +584,7 @@ export default function StockManagementPage() {
                 stockEntries={stockEntries}
                 sales={sales}
                 products={products}
+                productionRuns={productionRuns}
               />
             )}
             {activeTab === 'stock-share' && (
@@ -630,13 +681,11 @@ export default function StockManagementPage() {
               <SalesTable sales={sales} />
             )}
             {activeTab === 'production' && (
-              <div className="text-center py-12">
-                <div className="max-w-md mx-auto">
-                  <div className="text-6xl mb-4">🚧</div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Coming Soon</h3>
-                  <p className="text-gray-600">Production tracking feature is under development.</p>
-                </div>
-              </div>
+              <ProductionTab
+                session={selectedSession}
+                canManage={canManageEntries}
+                onRefresh={() => loadSessionDetails(selectedSession.id)}
+              />
             )}
           </div>
         </div>
@@ -652,9 +701,25 @@ export default function StockManagementPage() {
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
             Stock Management
           </h1>
-          <p className="text-gray-600 mt-1">Manage stock sessions and entries</p>
+          <p className="text-gray-600 mt-1">
+            Manage stock sessions and entries
+            {(currentSession?.branch?.name || user?.branch?.name) ? ` for ${currentSession?.branch?.name || user?.branch?.name}` : ""}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <select
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm min-h-[44px]"
+            >
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          )}
           {/* View Toggle */}
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
@@ -1625,7 +1690,7 @@ function StockShareTab({ session, partnerShareEntries, products, canManage, onRe
 }
 
 // Session Overview Analytics Component
-function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] }) {
+function SessionOverviewAnalytics({ session, stockEntries, sales, products = [], productionRuns = [] }) {
   // Calculate comprehensive analytics
   const analytics = useMemo(() => {
     const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
@@ -1634,8 +1699,19 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
     const byproductSaleEntries = stockEntries.filter(e => e.type === 'BYPRODUCT_SALE');
+    const productionUsageEntries = stockEntries.filter(e => e.type === 'PRODUCTION_USAGE');
+    const productionOutputByProduct = {};
+    const productionWastageByProduct = {};
+
+    productionRuns.forEach((run) => {
+      const pid = run.finishedProduct?.id ?? run.finishedProductId;
+      if (!pid) return;
+      productionOutputByProduct[pid] = (productionOutputByProduct[pid] || 0) + parseFloat(run.actualOutputQuantity || 0);
+      productionWastageByProduct[pid] = (productionWastageByProduct[pid] || 0) + parseFloat(run.wastedQuantity || 0);
+    });
 
     const totalPartnerShareQty = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const totalProductionUsageQty = productionUsageEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
     // Sales statistics
     const totalSales = sales.length;
@@ -1774,25 +1850,40 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
       const partnerShare = partnerShareEntries
         .filter(e => e.product?.id === productId)
         .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+      const productionUsage = productionUsageEntries
+        .filter(e => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
       const productMeta = products.find(p => p.id === productId);
       const isByproduct = productMeta?.parentProductId != null;
-      const remaining = isByproduct ? null : (totalAvailable - soldInclByproduct - wastage - partnerShare);
+      const isProductionItem = productMeta?.category === 'PRODUCTION_ITEM';
+      const productionOutput = productionOutputByProduct[productId] || 0;
+      const productionWastage = productionWastageByProduct[productId] || 0;
+      const effectiveAvailable = isProductionItem ? productionOutput : totalAvailable;
+      const effectiveWastage = isProductionItem ? productionWastage : wastage;
+      const remaining = isByproduct
+        ? null
+        : (effectiveAvailable - soldInclByproduct - effectiveWastage - partnerShare - productionUsage);
 
       productBreakdown[productId] = {
         name: productName,
-        opening,
-        incoming,
-        totalAvailable,
+        opening: isProductionItem ? 0 : opening,
+        incoming: isProductionItem ? 0 : incoming,
+        totalAvailable: effectiveAvailable,
         sold,
         byproductSold,
         soldInclByproduct,
-        wastage,
+        wastage: effectiveWastage,
         partnerShare,
+        productionUsage,
         remaining,
         isByproduct,
+        isProductionItem,
       };
     });
+
+    const totalProducedQty = productionRuns.reduce((sum, run) => sum + parseFloat(run.actualOutputQuantity || 0), 0);
+    const totalProductionWastage = productionRuns.reduce((sum, run) => sum + parseFloat(run.wastedQuantity || 0), 0);
 
     return {
       stock: {
@@ -1801,6 +1892,8 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
         closing: { entries: closingEntries.length, quantity: totalClosingQty },
         wastage: { entries: wastageEntries.length, quantity: totalWastageQty },
         partnerShare: { entries: partnerShareEntries.length, quantity: totalPartnerShareQty },
+        productionUsage: { entries: productionUsageEntries.length, quantity: totalProductionUsageQty },
+        production: { entries: productionRuns.length, quantity: totalProducedQty, wastage: totalProductionWastage },
       },
       sales: {
         total: totalSales,
@@ -1815,7 +1908,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
       paymentMethods,
       productBreakdown: Object.values(productBreakdown),
     };
-  }, [stockEntries, sales, products]);
+  }, [stockEntries, sales, products, productionRuns]);
 
   return (
     <div className="space-y-6">
@@ -1893,6 +1986,22 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
               {(analytics.stock.partnerShare?.quantity ?? 0).toFixed(2)} kg
             </p>
             <p className="text-xs text-gray-500">{analytics.stock.partnerShare?.entries ?? 0} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Production use</p>
+            <p className="text-lg font-bold text-purple-600">
+              {(analytics.stock.productionUsage?.quantity ?? 0).toFixed(2)} kg
+            </p>
+            <p className="text-xs text-gray-500">{analytics.stock.productionUsage?.entries ?? 0} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Production output</p>
+            <p className="text-lg font-bold text-purple-600">
+              {(analytics.stock.production?.quantity ?? 0).toFixed(2)}
+            </p>
+            <p className="text-xs text-gray-500">
+              {analytics.stock.production?.entries ?? 0} runs
+            </p>
           </div>
         </div>
       </div>
@@ -1996,6 +2105,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sold (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wastage (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock shared (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Production use (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (kg)</th>
                 </tr>
               </thead>
@@ -2015,6 +2125,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
                     </td>
                     <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm text-indigo-600">{(product.partnerShare ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-purple-600">{(product.productionUsage ?? 0).toFixed(2)}</td>
                     <td className={`px-4 py-2 text-sm font-semibold ${product.remaining == null ? 'text-gray-500' : product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                       {product.remaining == null ? '—' : product.remaining.toFixed(2)}
                     </td>

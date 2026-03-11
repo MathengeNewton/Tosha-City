@@ -21,6 +21,12 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
 
+function isAdminUser(user: { roles?: Array<{ name?: string } | string> }) {
+  return (user?.roles || []).some((role) =>
+    typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
+  );
+}
+
 @ApiTags('Sales')
 @Controller('sales')
 @UseGuards(JwtAuthGuard)
@@ -33,7 +39,7 @@ export class SalesController {
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
   @ApiOperation({ summary: 'Create a new sale (Cashier/Admin)' })
   create(@Body() createSaleDto: CreateSaleDto, @Request() req) {
-    return this.salesService.create(createSaleDto, req.user.userId);
+    return this.salesService.create(createSaleDto, req.user);
   }
 
   @Get()
@@ -43,19 +49,24 @@ export class SalesController {
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
   @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date YYYY-MM-DD' })
   @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date YYYY-MM-DD' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID filter (admin only)' })
   findAll(
+    @Request() req,
     @Query('sessionId') sessionId?: string,
     @Query('productId') productId?: string,
     @Query('date') date?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('branchId') branchId?: string,
   ) {
+    const scopedBranchId = isAdminUser(req.user) ? (branchId ? +branchId : undefined) : req.user.branchId;
     return this.salesService.findAll(
       sessionId ? +sessionId : undefined,
       productId ? +productId : undefined,
       date,
       dateFrom,
       dateTo,
+      scopedBranchId,
     );
   }
 

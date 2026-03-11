@@ -12,6 +12,19 @@ import { ApiProperty } from '@nestjs/swagger';
 import { StockEntry } from '../../stock-entries/entities/stock-entry.entity';
 import { SaleItem } from '../../sales/entities/sale-item.entity';
 
+export enum ProductCategory {
+  RAW_STOCK = 'RAW_STOCK',
+  PRODUCTION_ITEM = 'PRODUCTION_ITEM',
+  CONSUMABLE = 'CONSUMABLE',
+}
+
+export enum ProductSaleMode {
+  WEIGHT = 'WEIGHT',
+  PORTION = 'PORTION',
+  CUP = 'CUP',
+  PIECE = 'PIECE',
+}
+
 @Entity()
 export class Product {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
@@ -33,6 +46,26 @@ export class Product {
   @ApiProperty({ description: 'Wholesale price per unit', example: 720.0, required: false })
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   wholesalePrice: number | null;
+
+  @ApiProperty({ description: 'Product category', enum: ProductCategory, example: ProductCategory.RAW_STOCK })
+  @Column({
+    type: 'enum',
+    enum: ProductCategory,
+    default: ProductCategory.RAW_STOCK,
+  })
+  category: ProductCategory;
+
+  @ApiProperty({ description: 'How the product is sold', enum: ProductSaleMode, example: ProductSaleMode.WEIGHT })
+  @Column({
+    type: 'enum',
+    enum: ProductSaleMode,
+    default: ProductSaleMode.WEIGHT,
+  })
+  saleMode: ProductSaleMode;
+
+  @ApiProperty({ description: 'Optional sales prompt label', example: 'Number of cups', required: false })
+  @Column({ nullable: true })
+  salesPrompt: string | null;
 
   @ApiProperty({ description: 'Whether product is active', example: true })
   @Column({ default: true })
