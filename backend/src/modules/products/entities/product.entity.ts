@@ -64,7 +64,7 @@ export class Product {
   saleMode: ProductSaleMode;
 
   @ApiProperty({ description: 'Optional sales prompt label', example: 'Number of cups', required: false })
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   salesPrompt: string | null;
 
   @ApiProperty({ description: 'Whether product is active', example: true })
