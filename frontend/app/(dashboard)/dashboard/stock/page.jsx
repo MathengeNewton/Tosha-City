@@ -685,6 +685,7 @@ export default function StockManagementPage() {
                 session={selectedSession}
                 canManage={canManageEntries}
                 onRefresh={() => loadSessionDetails(selectedSession.id)}
+                productionRuns={productionRuns}
               />
             )}
           </div>

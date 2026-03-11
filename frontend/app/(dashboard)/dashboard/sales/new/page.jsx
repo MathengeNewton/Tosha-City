@@ -307,7 +307,7 @@ export default function NewSalePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <div className="space-y-6">
+        <div className="space-y-6 pb-24 sm:pb-28">
           {isAdmin && (
             <div className="border-b border-gray-200 pb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Branch *</label>
@@ -517,7 +517,8 @@ export default function NewSalePage() {
           </div>
 
           {/* Submit Button */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className={`${saleItems.length > 0 ? "sticky bottom-0 -mx-4 sm:-mx-6 bg-white/95 backdrop-blur px-4 py-4 sm:px-6" : "border-t border-gray-200 pt-4"} mt-6 border-t border-gray-200`}>
+            <div className="flex flex-col sm:flex-row gap-4">
             <button
               type="button"
               onClick={() => router.back()}
@@ -531,6 +532,7 @@ export default function NewSalePage() {
             >
               Create Sale
             </button>
+            </div>
           </div>
         </div>
       </form>

@@ -10,9 +10,8 @@ function recipeMatchesBranch(recipe, branchType) {
   return recipe.branchScope === branchType;
 }
 
-export default function ProductionTab({ session, canManage, onRefresh }) {
-  const [loading, setLoading] = useState(false);
-  const [runs, setRuns] = useState([]);
+export default function ProductionTab({ session, canManage, onRefresh, productionRuns = [] }) {
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [recipes, setRecipes] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -33,7 +32,7 @@ export default function ProductionTab({ session, canManage, onRefresh }) {
 
   useEffect(() => {
     if (!session?.id) return;
-    loadData();
+    loadRecipes();
   }, [session?.id]);
 
   useEffect(() => {
@@ -53,20 +52,16 @@ export default function ProductionTab({ session, canManage, onRefresh }) {
     );
   }, [selectedRecipe]);
 
-  const loadData = async () => {
+  const loadRecipes = async () => {
     try {
-      setLoading(true);
-      const [runsRes, recipesRes] = await Promise.all([
-        apiClient.production.getAll({ sessionId: session.id }),
-        apiClient.recipes.getAll({ activeOnly: true }),
-      ]);
-      setRuns(runsRes.data || []);
+      setLoadingRecipes(true);
+      const recipesRes = await apiClient.recipes.getAll({ activeOnly: true });
       setRecipes(recipesRes.data || []);
     } catch (error) {
       console.error("Error loading production data:", error);
       toast.error("Failed to load production data");
     } finally {
-      setLoading(false);
+      setLoadingRecipes(false);
     }
   };
 
@@ -95,8 +90,7 @@ export default function ProductionTab({ session, canManage, onRefresh }) {
       setWastedQuantity("");
       setNotes("");
       setIngredientAdjustments([]);
-      loadData();
-      onRefresh?.();
+      await onRefresh?.();
     } catch (error) {
       console.error("Error recording production run:", error);
       toast.error(error.response?.data?.message || "Failed to record production run");
@@ -246,9 +240,9 @@ export default function ProductionTab({ session, canManage, onRefresh }) {
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
           <h4 className="font-medium text-gray-900">Production runs for this session</h4>
         </div>
-        {loading ? (
+        {loadingRecipes ? (
           <p className="px-4 py-6 text-gray-500">Loading...</p>
-        ) : runs.length === 0 ? (
+        ) : productionRuns.length === 0 ? (
           <p className="px-4 py-6 text-gray-500">No production runs recorded yet.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -264,7 +258,7 @@ export default function ProductionTab({ session, canManage, onRefresh }) {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {runs.map((run) => (
+                {productionRuns.map((run) => (
                   <tr key={run.id}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{run.recipe?.name}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{run.finishedProduct?.name}</td>
