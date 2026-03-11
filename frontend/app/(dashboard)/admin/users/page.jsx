@@ -8,6 +8,16 @@ const defaultEnd = new Date();
 const defaultStart = new Date();
 defaultStart.setDate(defaultStart.getDate() - 365);
 
+const HIDDEN_ROLE_NAMES = new Set([
+  "field_agent",
+  "staff",
+  "vet",
+  "partner",
+  "app",
+  "guest",
+  "owner",
+]);
+
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
   return items.filter((item) => {
@@ -48,6 +58,11 @@ const UsersPage = () => {
 
   const cashierRole = useMemo(
     () => roles.find((r) => r.name?.toLowerCase() === "cashier"),
+    [roles]
+  );
+
+  const assignableRoles = useMemo(
+    () => roles.filter((role) => !HIDDEN_ROLE_NAMES.has(role.name?.toLowerCase())),
     [roles]
   );
 
@@ -113,7 +128,10 @@ const UsersPage = () => {
       username: user.username || "",
       email: user.email || "",
       password: "",
-      roleIds: user.roles?.map((r) => r.id) || [],
+      roleIds:
+        user.roles
+          ?.filter((role) => !HIDDEN_ROLE_NAMES.has(role.name?.toLowerCase()))
+          .map((role) => role.id) || [],
       branchId: user.branchId ? String(user.branchId) : "",
     });
     setShowModal(true);
@@ -192,10 +210,12 @@ const UsersPage = () => {
   };
 
   const getUserRoles = (user) => {
-    return user.roles?.map((r) => r.name).join(", ") || "No roles";
+    const visibleRoles =
+      user.roles?.filter((role) => !HIDDEN_ROLE_NAMES.has(role.name?.toLowerCase())) || [];
+    return visibleRoles.map((role) => role.name).join(", ") || "No roles";
   };
 
-  const selectedRoles = roles.filter((role) => formData.roleIds.includes(role.id));
+  const selectedRoles = assignableRoles.filter((role) => formData.roleIds.includes(role.id));
   const selectedRolesIncludeAdmin = selectedRoles.some((role) => role.name?.toLowerCase() === "admin");
 
   if (loading) {
@@ -397,7 +417,7 @@ const UsersPage = () => {
                   Roles *
                 </label>
                 <div className="space-y-2">
-                  {roles.map((role) => (
+                  {assignableRoles.map((role) => (
                     <label key={role.id} className="flex items-center">
                       <input
                         type="checkbox"
