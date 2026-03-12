@@ -29,9 +29,9 @@ export class RecipesController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  @ApiOperation({ summary: 'Create a recipe (Admin only)' })
+  @ApiOperation({ summary: 'Create a recipe (Admin/Cashier)' })
   create(@Body() createRecipeDto: CreateRecipeDto) {
     return this.recipesService.create(createRecipeDto);
   }
@@ -51,9 +51,9 @@ export class RecipesController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  @ApiOperation({ summary: 'Update a recipe (Admin only)' })
+  @ApiOperation({ summary: 'Update a recipe (Admin/Cashier)' })
   update(@Param('id') id: string, @Body() updateRecipeDto: UpdateRecipeDto) {
     return this.recipesService.update(+id, updateRecipeDto);
   }

@@ -33,12 +33,17 @@ export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Cashier menu - operational access only
+  // Cashier menu - operational access plus setup masters
   const cashierMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
+    { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
+    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
+    { name: "Customers", href: "/admin/customers", icon: UserIcon },
+    { name: "Partners", href: "/admin/partners", icon: ShareIcon },
   ];
 
   // Admin menu - Full access
@@ -60,6 +65,15 @@ export default function DashboardLayout({ children }) {
 
   const isAdmin = hasRole("admin");
   const menuItems = isAdmin ? adminMenu : cashierMenu;
+  const cashierAllowedAdminPaths = [
+    "/admin/products",
+    "/admin/recipes",
+    "/admin/suppliers",
+    "/admin/customers",
+    "/admin/partners",
+  ];
+  const isCashierAllowedPath =
+    pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   useEffect(() => {
     if (loading) return;
@@ -67,11 +81,11 @@ export default function DashboardLayout({ children }) {
     if (isAdmin === false && pathname) {
       if (pathname === "/dashboard/reports") {
         router.replace("/dashboard");
-      } else if (pathname.startsWith("/admin")) {
+      } else if (pathname.startsWith("/admin") && !isCashierAllowedPath) {
         router.replace("/dashboard");
       }
     }
-  }, [isAdmin, loading, pathname, router]);
+  }, [isAdmin, loading, pathname, router, isCashierAllowedPath]);
 
   return (
     <ProtectedRoute>
