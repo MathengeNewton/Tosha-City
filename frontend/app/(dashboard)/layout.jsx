@@ -33,28 +33,23 @@ export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Cashier menu - Dashboard, stock, sales, and read+create for products/suppliers/customers
+  // Cashier menu - operational access only
   const cashierMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
-    { name: "Products", href: "/admin/products", icon: CubeIcon },
-    { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
-    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
-    { name: "Customers", href: "/admin/customers", icon: UserIcon },
-    { name: "Partners", href: "/admin/partners", icon: ShareIcon },
   ];
 
   // Admin menu - Full access
   const adminMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
-    { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
     { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
     { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
@@ -66,20 +61,17 @@ export default function DashboardLayout({ children }) {
   const isAdmin = hasRole("admin");
   const menuItems = isAdmin ? adminMenu : cashierMenu;
 
-  // Redirect cashier away from admin-only pages (allow products, suppliers, customers for read+create)
-  const cashierAllowedAdminPaths = ["/admin/products", "/admin/suppliers", "/admin/customers", "/admin/partners"];
-  const isCashierAllowedPath = pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(p + "/"));
   useEffect(() => {
     if (loading) return;
 
     if (isAdmin === false && pathname) {
       if (pathname === "/dashboard/reports") {
         router.replace("/dashboard");
-      } else if (pathname.startsWith("/admin") && !isCashierAllowedPath) {
+      } else if (pathname.startsWith("/admin")) {
         router.replace("/dashboard");
       }
     }
-  }, [isAdmin, loading, pathname, router, isCashierAllowedPath]);
+  }, [isAdmin, loading, pathname, router]);
 
   return (
     <ProtectedRoute>
