@@ -80,7 +80,7 @@ export default function ReportsPage() {
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
           Reports & Analytics
         </h1>
-        <p className="text-gray-600 mt-1">View sales, stock, wastage, and stock share reports</p>
+        <p className="text-gray-600 mt-1">Track branch performance across sales, stock, wastage, stock share, and production.</p>
       </div>
 
       {/* Tabs */}
@@ -287,6 +287,7 @@ function SalesReportView({ data }) {
   const totalRevenue = parseFloat(data.summary?.totalRevenue) || 0;
   const unpaidAmount = parseFloat(data.summary?.unpaidAmount) || 0;
   const paidSales = Number(data.summary?.paidSales) || 0;
+  const byBranch = data.byBranch || [];
 
   return (
     <div className="space-y-8">
@@ -310,6 +311,42 @@ function SalesReportView({ data }) {
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Paid Sales</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{paidSales}</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales by Branch</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Paid</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unpaid</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unpaid Amount</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {byBranch.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No branch sales data</td></tr>
+              ) : (
+                byBranch.map((row) => (
+                  <tr key={row.branch}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.branch}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.totalSales ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.paidSales ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.unpaidSales ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.quantity || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 tabular-nums">KES {parseFloat(row.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-4 py-3 text-sm text-right text-amber-700 tabular-nums">KES {parseFloat(row.unpaidAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -386,6 +423,7 @@ function SalesReportView({ data }) {
 // Stock Report Component
 function StockReportView({ data }) {
   const summary = data.summary || {};
+  const byBranch = data.byBranch || [];
   const byProduct = Object.entries(data.stockByProduct || {});
 
   return (
@@ -406,6 +444,44 @@ function StockReportView({ data }) {
           </div>
         </div>
       )}
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock by Branch</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Opening</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Incoming</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Closing</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Wastage</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Production Use</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales (KES)</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales (kg)</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {byBranch.length === 0 ? (
+                <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-500">No branch stock data</td></tr>
+              ) : (
+                byBranch.map((row) => (
+                  <tr key={row.branch}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.branch}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.opening || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.incoming || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.closing || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600 tabular-nums">{parseFloat(row.wastage || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-purple-600 tabular-nums">{parseFloat(row.productionUsage || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 tabular-nums">KES {parseFloat(row.salesByPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.salesByKgs || 0).toFixed(2)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock by Product</h3>
@@ -700,16 +776,21 @@ function WeeklyComparisonView({ data }) {
 
 function ProductionReportView({ data }) {
   const summary = data.summary || {};
+  const byBranch = data.byBranch || [];
   const byProduct = data.byProduct || [];
   const byRecipe = data.byRecipe || [];
   const entries = data.entries || [];
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Runs</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{summary.totalRuns ?? 0}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Expected Output</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{parseFloat(summary.totalExpectedOutput || 0).toFixed(2)}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Output</p>
@@ -722,6 +803,58 @@ function ProductionReportView({ data }) {
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Remaining</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{parseFloat(summary.totalRemaining || 0).toFixed(2)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Productivity</p>
+          <p className="mt-1 text-2xl font-bold text-blue-900 tabular-nums">{parseFloat(summary.productivity || 0).toFixed(2)}%</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Sell Through</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-700 tabular-nums">{parseFloat(summary.sellThrough || 0).toFixed(2)}%</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Wastage Rate</p>
+          <p className="mt-1 text-2xl font-bold text-amber-700 tabular-nums">{parseFloat(summary.wastageRate || 0).toFixed(2)}%</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Branch Productivity</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Runs</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Expected</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sold</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Productivity</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sell Through</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Wastage</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {byBranch.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-500">No branch productivity data</td></tr>
+              ) : (
+                byBranch.map((row) => (
+                  <tr key={row.branch}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.branch}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.runs ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.expectedOutput || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.output || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.sold || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.remaining || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-blue-900 tabular-nums">{parseFloat(row.productivity || 0).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700 tabular-nums">{parseFloat(row.sellThrough || 0).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-amber-700 tabular-nums">{parseFloat(row.wastageRate || 0).toFixed(2)}%</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

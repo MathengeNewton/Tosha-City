@@ -42,6 +42,60 @@ log_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
+cleanup_matching_containers() {
+    local pattern="$1"
+    docker ps -aq --filter "name=$pattern" | xargs -r docker rm -f > /dev/null 2>&1 || true
+}
+
+reset_docker_stack() {
+    log_info "Stopping existing ToshaCity containers..."
+    $COMPOSE_CMD down --remove-orphans > /dev/null 2>&1 || true
+    cleanup_matching_containers "toshacity"
+}
+
+prune_docker_dangling() {
+    log_info "Pruning dangling Docker resources..."
+    docker container prune -f > /dev/null 2>&1 || log_warning "Docker container prune did not complete cleanly"
+    docker image prune -f > /dev/null 2>&1 || log_warning "Docker image prune did not complete cleanly"
+    docker network prune -f > /dev/null 2>&1 || log_warning "Docker network prune did not complete cleanly"
+    docker volume prune -f > /dev/null 2>&1 || log_warning "Docker volume prune did not complete cleanly"
+    docker builder prune -f > /dev/null 2>&1 || log_warning "Docker builder prune did not complete cleanly"
+}
+
+service_container_name() {
+    case "$1" in
+        db)
+            echo "toshacity_db_1"
+            ;;
+        backend)
+            echo "toshacity-backend"
+            ;;
+        frontend)
+            echo "toshacity-frontend"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+recover_service_container() {
+    local service="$1"
+    local extra_args="$2"
+    local container_name
+
+    container_name=$(service_container_name "$service")
+
+    log_warning "Attempting recovery for $service container..."
+    $COMPOSE_CMD rm -sf "$service" > /dev/null 2>&1 || true
+
+    if [ -n "$container_name" ]; then
+        docker rm -f "$container_name" > /dev/null 2>&1 || true
+    fi
+
+    $COMPOSE_CMD up -d $extra_args "$service"
+}
+
 run_db_sql() {
     local sql="$1"
     printf '%s\n' "$sql" | $COMPOSE_CMD exec -T db env PGPASSWORD="$DATABASE_PASSWORD" psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME"
@@ -140,11 +194,11 @@ git pull origin development
 
 log_success "Code updated"
 
-# Detect docker-compose command (v1 or v2)
-if command -v docker-compose > /dev/null 2>&1; then
-    COMPOSE_CMD_BASE="docker-compose"
-elif docker compose version > /dev/null 2>&1; then
+# Detect docker-compose command (prefer v2 plugin over legacy v1)
+if docker compose version > /dev/null 2>&1; then
     COMPOSE_CMD_BASE="docker compose"
+elif command -v docker-compose > /dev/null 2>&1; then
+    COMPOSE_CMD_BASE="docker-compose"
 else
     log_error "docker-compose is not installed or not in PATH"
     log_error "Please install docker-compose or Docker with compose plugin"
@@ -155,6 +209,13 @@ fi
 COMPOSE_CMD="$COMPOSE_CMD_BASE -f $COMPOSE_FILE --env-file $ENV_FILE"
 
 log_info "Using: $COMPOSE_CMD_BASE"
+
+log ""
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log "🧹 Resetting Docker Stack..."
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+reset_docker_stack
+prune_docker_dangling
 
 # Step 2: Start Database
 log ""
@@ -169,7 +230,7 @@ if ! $COMPOSE_CMD up -d db; then
     $COMPOSE_CMD_BASE -f $COMPOSE_FILE down 2>/dev/null || true
     docker ps -a | grep toshacity | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
     log_info "Retrying database startup..."
-    $COMPOSE_CMD up -d db || {
+    recover_service_container "db" "" || {
         log_error "Database startup failed. Check Docker and try: $COMPOSE_CMD_BASE down"
         exit 1
     }
@@ -299,8 +360,14 @@ log "━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Building and starting backend container..."
 if ! $COMPOSE_CMD up -d --build backend; then
     log_error "Failed to start backend container"
-    $COMPOSE_CMD logs backend | tail -20
-    log_warning "Continuing anyway - will check health later..."
+    log_warning "Attempting backend recovery after recreate failure..."
+    if ! recover_service_container "backend" "--build"; then
+        $COMPOSE_CMD logs backend | tail -20
+        log_warning "Continuing anyway - will check health later..."
+    else
+        log_info "Backend container recovered, waiting for initialization..."
+        sleep 5
+    fi
 else
     log_info "Backend container started, waiting for initialization..."
     sleep 5
@@ -315,8 +382,14 @@ log "━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Building and starting frontend container..."
 if ! $COMPOSE_CMD up -d --build frontend; then
     log_error "Failed to start frontend container"
-    $COMPOSE_CMD logs frontend | tail -20
-    log_warning "Continuing anyway - will check health later..."
+    log_warning "Attempting frontend recovery after recreate failure..."
+    if ! recover_service_container "frontend" "--build"; then
+        $COMPOSE_CMD logs frontend | tail -20
+        log_warning "Continuing anyway - will check health later..."
+    else
+        log_info "Frontend container recovered, waiting for initialization..."
+        sleep 5
+    fi
 else
     log_info "Frontend container started, waiting for initialization..."
     sleep 5
@@ -368,11 +441,6 @@ else
         $COMPOSE_CMD logs frontend | tail -20
     fi
 fi
-
-# Clean up old images
-log ""
-log_info "Cleaning up old Docker images..."
-docker image prune -f
 
 # Show container status
 log ""
