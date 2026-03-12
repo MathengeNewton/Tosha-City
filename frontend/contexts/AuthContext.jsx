@@ -19,7 +19,10 @@ export function AuthProvider({ children }) {
     sessionStorage.clear();
     setToken(null);
     setUser(null);
-    router.push("/auth/login");
+    router.replace("/auth/login");
+    if (typeof window !== "undefined") {
+      window.location.href = "/auth/login";
+    }
   };
 
   // Initialize auth state from storage

@@ -10,12 +10,12 @@ export default function ProtectedRoute({ children, requiredRole = null }) {
   useEffect(() => {
     if (!loading) {
       if (!isAuthenticated()) {
-        router.push("/auth/login");
+        router.replace("/auth/login");
         return;
       }
 
       if (requiredRole && !hasRole(requiredRole)) {
-        router.push("/admin/dashboard");
+        router.replace("/admin/dashboard");
         return;
       }
     }
