@@ -1,16 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Use standalone output for Docker deployment
   output: 'standalone',
-  
-  // Fix trailing slash handling
   trailingSlash: true,
-  
-  // React strict mode
   reactStrictMode: true,
-  
   images: {
     unoptimized: false,
+  },
+  // Lower peak memory on server builds (trades a bit of speed for stability)
+  experimental: {
+    webpackMemoryOptimizations: true,
+    webpackBuildWorker: true,
   },
 };
 
