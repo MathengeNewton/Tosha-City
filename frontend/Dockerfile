@@ -12,7 +12,7 @@ COPY package*.json ./
 RUN npm config set registry https://registry.npmjs.org/ && \
     npm config set fetch-timeout 120000 && \
     npm config set fetch-retries 3 && \
-    npm ci --legacy-peer-deps --omit=optional || npm install --legacy-peer-deps --omit=optional
+    npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Copy the rest of the project files
 COPY . .
