@@ -63,6 +63,7 @@ If you are new to the system, read the manual in this order:
 - Opening and managing stock sessions
 - Recording production runs
 - Creating sales and recording payments
+- **Who may correct data:** admins edit/delete saved sales and stock entries; cashiers add new operational records only
 - Closing daily work correctly
 - Reading reports
 

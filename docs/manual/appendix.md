@@ -97,6 +97,7 @@ Escalate when:
 - a required product is missing
 - a recipe needs to be corrected
 - a branch record needs editing
+- **a sale or stock entry was saved wrong and must be corrected or removed** (cashiers cannot edit or delete saved sales or stock entries)
 - reports need review
 - the wrong person was created or assigned
 
@@ -121,6 +122,9 @@ Escalate when:
 2. Read the role guide
 3. Read the cashier operations guide
 4. Keep the SOP guide available during work
+
+## Product / engineering plans
+For roadmap items such as branch-level reporting, admin branch cockpit, and RBAC, see `docs/plans/reports-branch-cockpit-rbac.md`.
 
 ## Final Reminder
 The system works best when records are created in order.

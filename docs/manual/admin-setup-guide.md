@@ -266,11 +266,12 @@ Before handing the system to cashiers:
 1. Log in as admin
 2. Confirm branches are active
 3. Confirm cashier accounts are active and branch-assigned
-4. Confirm products have correct prices and sale modes
-5. Confirm recipes have the right finished products
-6. Confirm customers for credit and wholesale use
-7. Confirm suppliers for incoming stock
-8. Confirm partners if stock sharing is used
+4. Confirm **at least one admin** knows how to **correct mistakes**: editing or deleting **saved** stock entries and **sales** (cashiers cannot do this)
+5. Confirm products have correct prices and sale modes
+6. Confirm recipes have the right finished products
+7. Confirm customers for credit and wholesale use
+8. Confirm suppliers for incoming stock
+9. Confirm partners if stock sharing is used
 
 ## Common Setup Mistakes
 

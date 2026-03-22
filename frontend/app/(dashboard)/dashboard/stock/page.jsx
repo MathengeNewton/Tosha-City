@@ -38,7 +38,10 @@ export default function StockManagementPage() {
   const viewParam = searchParams.get('view');
   const { user, hasRole } = useAuth();
   const isAdmin = hasRole('admin');
-  const canManageEntries = isAdmin || hasRole('cashier'); // Cashiers can add/edit stock entries
+  /** Day-to-day capture (opening/incoming/etc.) — cashier + admin */
+  const canManageEntries = isAdmin || hasRole('cashier');
+  /** Corrections: update/delete existing entries — admin only */
+  const canEditStockEntries = isAdmin;
   const canCloseSession = isAdmin || hasRole('cashier'); // Cashiers can close sessions
   
   const [loading, setLoading] = useState(true);
@@ -612,7 +615,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={openingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
             )}
@@ -633,7 +636,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
+                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
             )}
@@ -653,7 +656,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={closingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
             )}
@@ -673,7 +676,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
             )}
