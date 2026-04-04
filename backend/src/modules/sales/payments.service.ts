@@ -1,10 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { SalePayment } from './entities/sale-payment.entity';
 import { Sale, PaymentStatus } from './entities/sale.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentMethod } from './entities/payment.enums';
+import { UserRole } from '../roles/entities/role.entity';
+
+type RequestUser = {
+  userId: number;
+  roles?: Array<{ name?: string } | string>;
+  branchId?: number | null;
+};
 
 @Injectable()
 export class PaymentsService {
@@ -16,7 +23,21 @@ export class PaymentsService {
     private dataSource: DataSource,
   ) {}
 
-  async createPayment(createPaymentDto: CreatePaymentDto, userId: number): Promise<SalePayment> {
+  private isAdmin(user?: RequestUser): boolean {
+    return (user?.roles || []).some((role) =>
+      typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
+    );
+  }
+
+  private assertSaleBranchAccess(sale: Sale, user?: RequestUser): void {
+    if (!user) return;
+    if (this.isAdmin(user)) return;
+    if (!user.branchId || sale.branchId !== user.branchId) {
+      throw new ForbiddenException('You cannot access this sale');
+    }
+  }
+
+  async createPayment(createPaymentDto: CreatePaymentDto, userId: number, user?: RequestUser): Promise<SalePayment> {
     // Find the sale
     const sale = await this.saleRepository.findOne({
       where: { id: createPaymentDto.saleId },
@@ -26,6 +47,8 @@ export class PaymentsService {
     if (!sale) {
       throw new NotFoundException(`Sale with ID ${createPaymentDto.saleId} not found`);
     }
+
+    this.assertSaleBranchAccess(sale, user);
 
     // Check if sale already has payment
     if (sale.payment) {
@@ -100,20 +123,40 @@ export class PaymentsService {
     }
   }
 
-  async findPaymentBySaleId(saleId: number): Promise<SalePayment | null> {
+  async findPaymentBySaleId(saleId: number, user?: RequestUser): Promise<SalePayment | null> {
+    const sale = await this.saleRepository.findOne({ where: { id: saleId } });
+    if (!sale) {
+      throw new NotFoundException(`Sale with ID ${saleId} not found`);
+    }
+    this.assertSaleBranchAccess(sale, user);
     return await this.paymentRepository.findOne({
       where: { saleId },
       relations: ['sale', 'receivedBy'],
     });
   }
 
-  async findAll(filters?: { saleId?: number; method?: PaymentMethod; date?: string }): Promise<SalePayment[]> {
-    const query = this.paymentRepository.createQueryBuilder('payment')
+  async findAll(
+    filters?: { saleId?: number; method?: PaymentMethod; date?: string },
+    user?: RequestUser,
+  ): Promise<SalePayment[]> {
+    const query = this.paymentRepository
+      .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.sale', 'sale')
       .leftJoinAndSelect('payment.receivedBy', 'receivedBy');
 
+    if (user && !this.isAdmin(user)) {
+      if (!user.branchId) {
+        throw new ForbiddenException('Your account is not assigned to a branch');
+      }
+      query.where('sale.branchId = :branchId', { branchId: user.branchId });
+    }
+
     if (filters?.saleId) {
-      query.where('payment.saleId = :saleId', { saleId: filters.saleId });
+      if (user && !this.isAdmin(user)) {
+        query.andWhere('payment.saleId = :saleId', { saleId: filters.saleId });
+      } else {
+        query.where('payment.saleId = :saleId', { saleId: filters.saleId });
+      }
     }
 
     if (filters?.method) {
@@ -127,7 +170,7 @@ export class PaymentsService {
     return await query.orderBy('payment.receivedAt', 'DESC').getMany();
   }
 
-  async findOne(id: number): Promise<SalePayment> {
+  async findOne(id: number, user?: RequestUser): Promise<SalePayment> {
     const payment = await this.paymentRepository.findOne({
       where: { id },
       relations: ['sale', 'sale.items', 'sale.items.product', 'receivedBy'],
@@ -135,6 +178,10 @@ export class PaymentsService {
 
     if (!payment) {
       throw new NotFoundException(`Payment with ID ${id} not found`);
+    }
+
+    if (payment.sale) {
+      this.assertSaleBranchAccess(payment.sale, user);
     }
 
     return payment;

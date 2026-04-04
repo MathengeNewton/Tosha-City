@@ -29,7 +29,7 @@ export class PaymentsController {
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
   @ApiOperation({ summary: 'Record payment for a sale (Cashier/Admin)' })
   create(@Body() createPaymentDto: CreatePaymentDto, @Request() req) {
-    return this.paymentsService.createPayment(createPaymentDto, req.user.userId);
+    return this.paymentsService.createPayment(createPaymentDto, req.user.userId, req.user);
   }
 
   @Get()
@@ -38,27 +38,31 @@ export class PaymentsController {
   @ApiQuery({ name: 'method', required: false, enum: PaymentMethod })
   @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
   findAll(
+    @Request() req,
     @Query('saleId') saleId?: string,
     @Query('method') method?: PaymentMethod,
     @Query('date') date?: string,
   ) {
-    return this.paymentsService.findAll({
-      saleId: saleId ? +saleId : undefined,
-      method,
-      date,
-    });
+    return this.paymentsService.findAll(
+      {
+        saleId: saleId ? +saleId : undefined,
+        method,
+        date,
+      },
+      req.user,
+    );
   }
 
   @Get('sale/:saleId')
   @ApiOperation({ summary: 'Get payment for a specific sale' })
-  findBySaleId(@Param('saleId') saleId: string) {
-    return this.paymentsService.findPaymentBySaleId(+saleId);
+  findBySaleId(@Param('saleId') saleId: string, @Request() req) {
+    return this.paymentsService.findPaymentBySaleId(+saleId, req.user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a payment by ID' })
-  findOne(@Param('id') id: string) {
-    return this.paymentsService.findOne(+id);
+  findOne(@Param('id') id: string, @Request() req) {
+    return this.paymentsService.findOne(+id, req.user);
   }
 }
 

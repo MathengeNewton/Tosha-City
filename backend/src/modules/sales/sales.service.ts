@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Sale } from './entities/sale.entity';
@@ -17,6 +17,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { UserRole } from '../roles/entities/role.entity';
 import { ProductCategory } from '../products/entities/product.entity';
 import { ProductionRun } from '../production/entities/production-run.entity';
+import { RestaurantOrder, RestaurantOrderStatus } from '../restaurant-orders/entities/restaurant-order.entity';
 
 type RequestUser = {
   userId: number;
@@ -37,6 +38,8 @@ export class SalesService {
     private stockEntryRepository: Repository<StockEntry>,
     @InjectRepository(ProductionRun)
     private productionRunRepository: Repository<ProductionRun>,
+    @InjectRepository(RestaurantOrder)
+    private restaurantOrderRepository: Repository<RestaurantOrder>,
     private dataSource: DataSource,
     private stockSessionsService: StockSessionsService,
     private productsService: ProductsService,
@@ -49,6 +52,14 @@ export class SalesService {
     return (user?.roles || []).some((role) =>
       typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
     );
+  }
+
+  private assertSaleBranchAccess(sale: Sale, user?: RequestUser): void {
+    if (!user) return;
+    if (this.isAdmin(user)) return;
+    if (!user.branchId || sale.branchId !== user.branchId) {
+      throw new ForbiddenException('You cannot access this sale');
+    }
   }
 
   async create(createSaleDto: CreateSaleDto, user: RequestUser): Promise<Sale> {
@@ -69,6 +80,31 @@ export class SalesService {
 
     if (!createSaleDto.items || createSaleDto.items.length === 0) {
       throw new BadRequestException('Sale must have at least one item');
+    }
+
+    if (createSaleDto.restaurantOrderId) {
+      const order = await this.restaurantOrderRepository.findOne({
+        where: { id: createSaleDto.restaurantOrderId },
+        relations: ['lines', 'lines.product', 'session', 'branch'],
+      });
+      if (!order) {
+        throw new NotFoundException('Restaurant order not found');
+      }
+      if (order.status !== RestaurantOrderStatus.OPEN) {
+        throw new BadRequestException('Restaurant order is not open for billing');
+      }
+      if (order.sessionId !== createSaleDto.sessionId) {
+        throw new BadRequestException('Restaurant order session does not match sale session');
+      }
+      if (order.branchId !== session.branchId) {
+        throw new BadRequestException('Restaurant order branch does not match session');
+      }
+      if (!this.isAdmin(user)) {
+        if (!user.branchId || order.branchId !== user.branchId) {
+          throw new ForbiddenException('You cannot bill this restaurant order');
+        }
+      }
+      this.assertRestaurantItemsMatchOrder(order, createSaleDto.items);
     }
 
     // Resolve customer if provided (for credit or wholesale)
@@ -163,6 +199,7 @@ export class SalesService {
           paymentStatus: PaymentStatus.PENDING,
           soldById: user.userId,
           branchId: session.branchId,
+          restaurantOrderId: createSaleDto.restaurantOrderId ?? null,
         });
 
         const savedSale = await queryRunner.manager.save(Sale, sale);
@@ -188,6 +225,14 @@ export class SalesService {
             recordedById: user.userId,
           });
           await queryRunner.manager.save(StockEntry, stockEntry);
+        }
+
+        if (createSaleDto.restaurantOrderId) {
+          await queryRunner.manager.update(
+            RestaurantOrder,
+            { id: createSaleDto.restaurantOrderId },
+            { status: RestaurantOrderStatus.BILLED },
+          );
         }
 
         await queryRunner.commitTransaction();
@@ -276,26 +321,27 @@ export class SalesService {
     return await query.orderBy('sale.soldAt', 'DESC').getMany();
   }
 
-  async findOne(id: number): Promise<Sale> {
+  async findOne(id: number, user?: RequestUser): Promise<Sale> {
     const sale = await this.saleRepository.findOne({
       where: { id },
-      relations: ['items', 'items.product', 'soldBy', 'session', 'payment', 'payment.receivedBy'],
+      relations: ['items', 'items.product', 'soldBy', 'session', 'payment', 'payment.receivedBy', 'branch'],
     });
 
     if (!sale) {
       throw new NotFoundException(`Sale with ID ${id} not found`);
     }
 
+    this.assertSaleBranchAccess(sale, user);
     return sale;
   }
 
-  async getPaymentForSale(saleId: number): Promise<SalePayment | null> {
-    const sale = await this.findOne(saleId);
+  async getPaymentForSale(saleId: number, user?: RequestUser): Promise<SalePayment | null> {
+    const sale = await this.findOne(saleId, user);
     return sale.payment || null;
   }
 
-  async generatePlainTextReceipt(saleId: number): Promise<string> {
-    const sale = await this.findOne(saleId);
+  async generatePlainTextReceipt(saleId: number, user?: RequestUser): Promise<string> {
+    const sale = await this.findOne(saleId, user);
 
     if (sale.paymentStatus !== PaymentStatus.PAID) {
       throw new BadRequestException('Receipt can only be generated for paid sales');
@@ -370,9 +416,9 @@ export class SalesService {
     return lines.join('\n');
   }
 
-  async update(id: number, updateSaleDto: UpdateSaleDto, userId: number): Promise<Sale> {
+  async update(id: number, updateSaleDto: UpdateSaleDto, userId: number, user?: RequestUser): Promise<Sale> {
     try {
-      const sale = await this.findOne(id);
+      const sale = await this.findOne(id, user);
 
       if (sale.paymentStatus === PaymentStatus.PAID) {
         throw new BadRequestException('Cannot update a paid sale');
@@ -406,9 +452,9 @@ export class SalesService {
     }
   }
 
-  async remove(id: number, userId?: number): Promise<void> {
+  async remove(id: number, userId?: number, user?: RequestUser): Promise<void> {
     try {
-      const sale = await this.findOne(id);
+      const sale = await this.findOne(id, user);
 
       if (sale.paymentStatus === PaymentStatus.PAID) {
         throw new BadRequestException('Cannot delete a paid sale');
@@ -539,6 +585,24 @@ export class SalesService {
       .getRawOne();
 
     return Number(producedResult?.total || 0) - Number(soldResult?.total || 0);
+  }
+
+  private assertRestaurantItemsMatchOrder(
+    order: RestaurantOrder,
+    items: { productId: number; quantity: number; unitPrice?: number }[],
+  ): void {
+    const lines = [...(order.lines || [])].sort((a, b) => a.productId - b.productId);
+    const saleItems = [...items].sort((a, b) => a.productId - b.productId);
+    if (lines.length !== saleItems.length) {
+      throw new BadRequestException('Sale items do not match restaurant order lines');
+    }
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const item = saleItems[i];
+      if (line.productId !== item.productId || Math.abs(Number(line.quantity) - Number(item.quantity)) > 0.001) {
+        throw new BadRequestException('Sale items do not match restaurant order lines');
+      }
+    }
   }
 }
 

@@ -170,6 +170,25 @@ export const apiClient = {
     },
   },
 
+  // Restaurant / kitchen (pork branch)
+  restaurantOrders: {
+    create: (data) => api.post('/restaurant-orders', data),
+    getAll: (params) => api.get('/restaurant-orders', { params }),
+    getById: (id) => api.get(`/restaurant-orders/${id}`),
+    update: (id, data) => api.patch(`/restaurant-orders/${id}`, data),
+    addLines: (id, data) => api.post(`/restaurant-orders/${id}/lines`, data),
+    updateLine: (lineId, data) => api.patch(`/restaurant-orders/lines/${lineId}`, data),
+    deleteLine: (lineId) => api.delete(`/restaurant-orders/lines/${lineId}`),
+    updateLineStatus: (lineId, data) =>
+      api.patch(`/restaurant-orders/lines/${lineId}/status`, data),
+    bill: (id, data) => api.post(`/restaurant-orders/${id}/bill`, data),
+    recordPayment: (id, data) => api.post(`/restaurant-orders/${id}/record-payment`, data),
+    void: (id) => api.post(`/restaurant-orders/${id}/void`),
+    getKitchenSummary: (sessionId) =>
+      api.get('/restaurant-orders/kitchen-summary', { params: { sessionId } }),
+    getStaffOptions: (params) => api.get('/restaurant-orders/staff-options', { params }),
+  },
+
   // Reports
   reports: {
     getSalesReport: (params) => api.get('/reports/sales', { params }),
@@ -179,6 +198,7 @@ export const apiClient = {
     getProductionReport: (params) => api.get('/reports/production', { params }),
     getWeeklyComparison: () => api.get('/reports/weekly-comparison'),
     getDailySummary: (date) => api.get('/reports/daily-summary', { params: date ? { date } : {} }),
+    getKitchenReport: (sessionId) => api.get('/reports/kitchen', { params: { sessionId } }),
   },
 
   // Suppliers

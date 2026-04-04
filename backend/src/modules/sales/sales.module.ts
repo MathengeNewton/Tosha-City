@@ -9,6 +9,7 @@ import { SaleItem } from './entities/sale-item.entity';
 import { SalePayment } from './entities/sale-payment.entity';
 import { StockEntry } from '../stock-entries/entities/stock-entry.entity';
 import { ProductionRun } from '../production/entities/production-run.entity';
+import { RestaurantOrder } from '../restaurant-orders/entities/restaurant-order.entity';
 import { StockSessionsModule } from '../stock-sessions/stock-sessions.module';
 import { ProductsModule } from '../products/products.module';
 import { StockEntriesModule } from '../stock-entries/stock-entries.module';
@@ -18,7 +19,7 @@ import { ProductionModule } from '../production/production.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Sale, SaleItem, SalePayment, StockEntry, ProductionRun]),
+    TypeOrmModule.forFeature([Sale, SaleItem, SalePayment, StockEntry, ProductionRun, RestaurantOrder]),
     StockSessionsModule,
     ProductsModule,
     StockEntriesModule,

@@ -6,7 +6,6 @@ import { toast } from "react-toastify";
 import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
-import ProductionTab from "../components/ProductionTab";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -74,6 +73,13 @@ export default function StockManagementPage() {
   const [calendarWeek, setCalendarWeek] = useState(new Date());
   const [showSessionPopup, setShowSessionPopup] = useState(false);
   const [popupSession, setPopupSession] = useState(null);
+
+  // Session details no longer has a Production tab; avoid a blank panel if state was 'production'
+  useEffect(() => {
+    if (activeTab === 'production') {
+      setActiveTab('overview');
+    }
+  }, [activeTab, selectedSession?.id]);
 
   const filteredStockEntries = useMemo(
     () => filterByDateRange(stockEntries, filters.dateFrom, filters.dateTo, "recordedAt"),
@@ -557,7 +563,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales', 'production'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -573,8 +579,7 @@ export default function StockManagementPage() {
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
                    tab === 'stock-share' ? 'Stock Share' :
-                   tab === 'sales' ? 'Sales' :
-                   'Production'}
+                   'Sales'}
                 </button>
               ))}
             </nav>
@@ -682,14 +687,6 @@ export default function StockManagementPage() {
             )}
             {activeTab === 'sales' && (
               <SalesTable sales={sales} />
-            )}
-            {activeTab === 'production' && (
-              <ProductionTab
-                session={selectedSession}
-                canManage={canManageEntries}
-                onRefresh={() => loadSessionDetails(selectedSession.id)}
-                productionRuns={productionRuns}
-              />
             )}
           </div>
         </div>
