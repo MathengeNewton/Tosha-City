@@ -71,21 +71,21 @@ export class SalesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a sale by ID' })
-  findOne(@Param('id') id: string) {
-    return this.salesService.findOne(+id);
+  @ApiOperation({ summary: 'Get a sale by ID (branch-scoped for non-admins)' })
+  findOne(@Param('id') id: string, @Request() req) {
+    return this.salesService.findOne(+id, req.user);
   }
 
   @Get(':id/payment')
   @ApiOperation({ summary: 'Get payment for a sale' })
-  getPayment(@Param('id') id: string) {
-    return this.salesService.getPaymentForSale(+id);
+  getPayment(@Param('id') id: string, @Request() req) {
+    return this.salesService.getPaymentForSale(+id, req.user);
   }
 
   @Get(':id/receipt')
   @ApiOperation({ summary: 'Get plain text receipt for a paid sale' })
-  async getReceipt(@Param('id') id: string, @Res() res: Response) {
-    const receiptText = await this.salesService.generatePlainTextReceipt(+id);
+  async getReceipt(@Param('id') id: string, @Request() req, @Res() res: Response) {
+    const receiptText = await this.salesService.generatePlainTextReceipt(+id, req.user);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(receiptText);
   }
@@ -95,7 +95,7 @@ export class SalesController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Update a sale (Admin only)' })
   update(@Param('id') id: string, @Body() updateSaleDto: UpdateSaleDto, @Request() req) {
-    return this.salesService.update(+id, updateSaleDto, req.user.userId);
+    return this.salesService.update(+id, updateSaleDto, req.user.userId, req.user);
   }
 
   @Delete(':id')
@@ -103,7 +103,7 @@ export class SalesController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Delete a sale (Admin only)' })
   remove(@Param('id') id: string, @Request() req) {
-    return this.salesService.remove(+id, req.user?.userId);
+    return this.salesService.remove(+id, req.user?.userId, req.user);
   }
 }
 

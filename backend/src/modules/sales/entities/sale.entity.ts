@@ -17,6 +17,7 @@ import { SalePayment } from './sale-payment.entity';
 import { PaymentMethod, PaymentStatus } from './payment.enums';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Branch } from '../../branches/entities/branch.entity';
+import { RestaurantOrder } from '../../restaurant-orders/entities/restaurant-order.entity';
 
 export { PaymentMethod, PaymentStatus };
 
@@ -104,5 +105,13 @@ export class Sale {
 
   @OneToOne(() => SalePayment, (payment) => payment.sale, { nullable: true })
   payment: SalePayment | null;
+
+  @ApiProperty({ description: 'Restaurant/kitchen order when sale was created from a table order', required: false })
+  @ManyToOne(() => RestaurantOrder, { nullable: true })
+  @JoinColumn({ name: 'restaurantOrderId' })
+  restaurantOrder: RestaurantOrder | null;
+
+  @Column({ nullable: true, unique: true })
+  restaurantOrderId: number | null;
 }
 

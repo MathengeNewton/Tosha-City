@@ -281,6 +281,20 @@ The session should move from open to closed.
 8. Record closing stock
 9. Close session
 
+## Corrections And Data Changes (Admin Only)
+
+After a record is saved, the system separates **day-to-day work** from **corrections**:
+
+| What | Cashier | Admin |
+|------|--------|-------|
+| Add a new stock entry (opening, incoming, closing, wastage) | Yes | Yes |
+| Change or delete a **saved** stock entry | No — ask an admin | Yes |
+| Create a new sale | Yes | Yes |
+| Change payment method or delete a sale | No — ask an admin | Yes |
+| Open reports, manage branches or users | No | Yes |
+
+If you saved the wrong quantity, wrong product, or the wrong sale details, **stop and contact an admin**. Do not expect to fix it yourself in the app.
+
 ## Common Cashier Mistakes
 
 ### Selling Before Opening A Session
@@ -301,3 +315,7 @@ Fix:
 - record missing closing stock
 - check unpaid sales
 - confirm required entries are complete
+
+### Need To Fix A Sale Or Stock Entry After Saving
+Fix:
+- ask an **admin** to correct or delete the record (cashiers cannot edit or delete saved sales or stock entries)

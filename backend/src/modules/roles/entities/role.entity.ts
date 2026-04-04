@@ -16,6 +16,8 @@ export class Role {
 export enum UserRole {
   ADMIN = 'admin',
   CASHIER = 'cashier',
+  KITCHEN = 'kitchen',
+  WAITER = 'waiter',
   FIELD_AGENT = 'field_agent',
   STAFF = 'staff',
   VET = 'vet',

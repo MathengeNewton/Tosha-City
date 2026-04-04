@@ -16,15 +16,18 @@ The admin sets up the system, controls branch structure, manages staff access, r
 ### Admin Can Do
 - view the branch reporting dashboard
 - create and manage branches
-- create and manage users
+- create and manage users (staff)
 - create and manage products
 - create and manage recipes
 - create suppliers, customers, and partners
 - review reports
 - view activity logs
 - create sales
+- **edit and delete sales** (corrections; follow your internal policy)
 - record payments
 - open and close stock sessions
+- record stock entries
+- **edit and delete stock entries** (corrections)
 - record production runs
 
 ### Admin Should Use The System For
@@ -50,9 +53,9 @@ The cashier runs day-to-day branch work.
 ### Cashier Can Do
 - use the cashier dashboard
 - open and close stock sessions
-- record stock entries
+- record stock entries (**add new** entries; **editing or deleting entries that are already saved** is admin only)
 - record production runs
-- create sales
+- create sales (**editing or deleting an existing sale** is admin only)
 - record payments
 - create products
 - create and update recipes
@@ -64,7 +67,9 @@ The cashier runs day-to-day branch work.
 ### Cashier Cannot Do
 - open reports
 - manage branches
-- manage users
+- manage users (staff)
+- **edit or delete existing sales** (ask an admin)
+- **edit or delete existing stock entries** (ask an admin)
 - open settings
 - use other admin-only oversight areas
 

@@ -6,7 +6,6 @@ import { toast } from "react-toastify";
 import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
-import ProductionTab from "../components/ProductionTab";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -38,7 +37,10 @@ export default function StockManagementPage() {
   const viewParam = searchParams.get('view');
   const { user, hasRole } = useAuth();
   const isAdmin = hasRole('admin');
-  const canManageEntries = isAdmin || hasRole('cashier'); // Cashiers can add/edit stock entries
+  /** Day-to-day capture (opening/incoming/etc.) — cashier + admin */
+  const canManageEntries = isAdmin || hasRole('cashier');
+  /** Corrections: update/delete existing entries — admin only */
+  const canEditStockEntries = isAdmin;
   const canCloseSession = isAdmin || hasRole('cashier'); // Cashiers can close sessions
   
   const [loading, setLoading] = useState(true);
@@ -71,6 +73,13 @@ export default function StockManagementPage() {
   const [calendarWeek, setCalendarWeek] = useState(new Date());
   const [showSessionPopup, setShowSessionPopup] = useState(false);
   const [popupSession, setPopupSession] = useState(null);
+
+  // Session details no longer has a Production tab; avoid a blank panel if state was 'production'
+  useEffect(() => {
+    if (activeTab === 'production') {
+      setActiveTab('overview');
+    }
+  }, [activeTab, selectedSession?.id]);
 
   const filteredStockEntries = useMemo(
     () => filterByDateRange(stockEntries, filters.dateFrom, filters.dateTo, "recordedAt"),
@@ -554,7 +563,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales', 'production'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -570,8 +579,7 @@ export default function StockManagementPage() {
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
                    tab === 'stock-share' ? 'Stock Share' :
-                   tab === 'sales' ? 'Sales' :
-                   'Production'}
+                   'Sales'}
                 </button>
               ))}
             </nav>
@@ -612,7 +620,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={openingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
             )}
@@ -633,7 +641,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
+                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
             )}
@@ -653,7 +661,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={closingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
             )}
@@ -673,20 +681,12 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
             )}
             {activeTab === 'sales' && (
               <SalesTable sales={sales} />
-            )}
-            {activeTab === 'production' && (
-              <ProductionTab
-                session={selectedSession}
-                canManage={canManageEntries}
-                onRefresh={() => loadSessionDetails(selectedSession.id)}
-                productionRuns={productionRuns}
-              />
             )}
           </div>
         </div>

@@ -167,4 +167,13 @@ export class UsersService {
       },
     });
   }
+
+  /** Users assigned to a branch (for table order staff pickers, etc.) */
+  async findStaffByBranch(branchId: number): Promise<Array<{ id: number; username: string; email: string | null }>> {
+    const users = await this.userRepo.find({
+      where: { branchId },
+      order: { username: 'ASC' },
+    });
+    return users.map((u) => ({ id: u.id, username: u.username, email: u.email }));
+  }
 }

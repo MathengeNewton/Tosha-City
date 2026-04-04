@@ -61,12 +61,16 @@ Cashiers use the dashboard for:
 #### Stock Session
 Use this area to open the day, record stock, manage production, and close the day.
 
+Cashiers **add** stock entries during the day. **Editing or deleting saved stock entries** is **admin only**.
+
 #### Sales
 Use this area to:
 - create a new sale
 - review existing sales
 - record payment
 - print a receipt for a paid sale
+
+**Editing or deleting an existing sale** is **admin only**.
 
 #### Products
 Use this area to create and maintain items sold or consumed by the business.
@@ -106,6 +110,7 @@ Admins use this area to review branch performance and operational totals.
 - Some products are sold by weight, some by portions, cups, or pieces.
 - Recipes can only use a final product that already exists as a production item.
 - A stock session should only be closed after required work is complete.
+- **Data corrections:** only **admins** may **edit or delete** saved **sales** and **stock entries**. Cashiers should escalate mistakes to an admin.
 
 ## 2. Role Guide
 
@@ -117,15 +122,18 @@ The admin sets up the system, controls branch structure, manages staff access, r
 #### Admin Can Do
 - view the branch reporting dashboard
 - create and manage branches
-- create and manage users
+- create and manage users (staff)
 - create and manage products
 - create and manage recipes
 - create suppliers, customers, and partners
 - review reports
 - view activity logs
 - create sales
+- edit and delete sales (corrections; follow internal policy)
 - record payments
 - open and close stock sessions
+- record stock entries
+- edit and delete stock entries (corrections)
 - record production runs
 
 ### Cashier Role
@@ -136,9 +144,9 @@ The cashier runs day-to-day branch work.
 #### Cashier Can Do
 - use the cashier dashboard
 - open and close stock sessions
-- record stock entries
+- record stock entries (add new; **not** edit/delete saved entries)
 - record production runs
-- create sales
+- create sales (not edit/delete existing sales)
 - record payments
 - create products
 - create and update recipes
@@ -150,7 +158,9 @@ The cashier runs day-to-day branch work.
 #### Cashier Cannot Do
 - open reports
 - manage branches
-- manage users
+- manage users (staff)
+- edit or delete existing sales (ask an admin)
+- edit or delete existing stock entries (ask an admin)
 - open settings
 - use other admin-only oversight areas
 
@@ -411,6 +421,9 @@ Before closing, confirm:
 - closing stock is recorded
 
 Then use the close session action and confirm it.
+
+### Corrections After Saving (Cashiers)
+If quantity, product, supplier, or sale details were saved incorrectly, the cashier should **ask an admin**. The application does not allow cashiers to edit or delete saved stock entries or sales.
 
 ## 5. SOP And Process Flows
 

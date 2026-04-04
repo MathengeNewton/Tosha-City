@@ -25,6 +25,8 @@ export default function ReportsPage() {
   const [stockShareReport, setStockShareReport] = useState(null);
   const [productionReport, setProductionReport] = useState(null);
   const [weeklyComparison, setWeeklyComparison] = useState(null);
+  const [kitchenReport, setKitchenReport] = useState(null);
+  const [kitchenSessionId, setKitchenSessionId] = useState("");
 
   useEffect(() => {
     loadBranches();
@@ -32,7 +34,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadReports();
-  }, [activeTab, filters]);
+  }, [activeTab, filters, kitchenSessionId]);
 
   const loadBranches = async () => {
     try {
@@ -65,6 +67,13 @@ export default function ReportsPage() {
       } else if (activeTab === 'weekly') {
         const res = await apiClient.reports.getWeeklyComparison();
         setWeeklyComparison(res.data);
+      } else if (activeTab === 'kitchen') {
+        if (!kitchenSessionId.trim()) {
+          setKitchenReport(null);
+        } else {
+          const res = await apiClient.reports.getKitchenReport(kitchenSessionId.trim());
+          setKitchenReport(res.data);
+        }
       }
     } catch (error) {
       console.error("Error loading reports:", error);
@@ -87,7 +96,7 @@ export default function ReportsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
           <nav className="flex -mb-px">
-            {['sales', 'stock', 'wastage', 'stock-share', 'production', 'weekly'].map((tab) => (
+            {['sales', 'stock', 'wastage', 'stock-share', 'production', 'weekly', 'kitchen'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -97,7 +106,12 @@ export default function ReportsPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                {tab === 'stock-share' ? 'Stock Share' : tab.charAt(0).toUpperCase() + tab.slice(1)} Report
+                {tab === 'stock-share'
+                  ? 'Stock Share'
+                  : tab === 'kitchen'
+                    ? 'Kitchen'
+                    : tab.charAt(0).toUpperCase() + tab.slice(1)}{' '}
+                {tab !== 'kitchen' ? 'Report' : ''}
               </button>
             ))}
           </nav>
@@ -106,7 +120,23 @@ export default function ReportsPage() {
         {/* Filters + Export */}
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="flex flex-wrap gap-4 items-end">
-            {activeTab !== 'weekly' && (
+            {activeTab === 'kitchen' && (
+              <div className="min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stock session ID
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 42"
+                  value={kitchenSessionId}
+                  onChange={(e) => setKitchenSessionId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Pork branch session — open orders prep summary.</p>
+              </div>
+            )}
+            {activeTab !== 'weekly' && activeTab !== 'kitchen' && (
               <>
                 <div className="min-w-[140px]">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -272,6 +302,15 @@ export default function ReportsPage() {
               )}
               {activeTab === 'weekly' && weeklyComparison && (
                 <WeeklyComparisonView data={weeklyComparison} />
+              )}
+              {activeTab === 'kitchen' && kitchenReport && (
+                <KitchenReportView data={kitchenReport} />
+              )}
+              {activeTab === 'kitchen' && !kitchenReport && !loading && kitchenSessionId.trim() && (
+                <p className="text-gray-500 text-sm">No data — check session ID or ensure it is a pork branch session.</p>
+              )}
+              {activeTab === 'kitchen' && !kitchenSessionId.trim() && !loading && (
+                <p className="text-gray-500 text-sm">Enter a stock session ID to load kitchen prep summary.</p>
               )}
             </>
           )}
@@ -716,6 +755,57 @@ function StockShareReportView({ data }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function KitchenReportView({ data }) {
+  const rows = data.byProduct || [];
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white border rounded-xl p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Dine-in orders (open)</p>
+          <p className="text-2xl font-bold">{data.dineInOrders ?? 0}</p>
+        </div>
+        <div className="bg-white border rounded-xl p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Takeaway orders (open)</p>
+          <p className="text-2xl font-bold">{data.takeawayOrders ?? 0}</p>
+        </div>
+      </div>
+      <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">Unserved prep by product</div>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500 border-b">
+              <th className="px-4 py-2">Product</th>
+              <th className="px-4 py-2">Total qty</th>
+              <th className="px-4 py-2">Queued</th>
+              <th className="px-4 py-2">Cooking</th>
+              <th className="px-4 py-2">Ready</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-gray-500 text-center">
+                  No unserved lines for this session.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr key={row.productId} className="border-b">
+                  <td className="px-4 py-2">{row.productName}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.quantity}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.queued}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.cooking}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.ready}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

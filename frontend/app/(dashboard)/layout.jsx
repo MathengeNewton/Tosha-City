@@ -24,19 +24,32 @@ import {
   XMarkIcon,
   DocumentTextIcon,
   ShareIcon,
+  FireIcon,
+  PlusCircleIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { hasRole, loading } = useAuth();
+  const { hasRole, loading, user } = useAuth();
+  const isAdmin = hasRole("admin");
+  const showRestaurant = isAdmin || user?.branch?.type === "PORK_BUTCHERY";
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Cashier menu - operational access plus setup masters
+  const restaurantItems = showRestaurant
+    ? [
+        { name: "Table orders", href: "/dashboard/table-orders", icon: ClipboardDocumentListIcon },
+        { name: "Kitchen", href: "/dashboard/kitchen", icon: FireIcon },
+        { name: "New table order", href: "/dashboard/restaurant-orders/new", icon: PlusCircleIcon },
+      ]
+    : [];
+
   const cashierMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
+    ...restaurantItems,
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
@@ -49,6 +62,7 @@ export default function DashboardLayout({ children }) {
   // Admin menu - Full access
   const adminMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
+    ...restaurantItems,
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
     { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
@@ -63,7 +77,6 @@ export default function DashboardLayout({ children }) {
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
 
-  const isAdmin = hasRole("admin");
   const menuItems = isAdmin ? adminMenu : cashierMenu;
   const cashierAllowedAdminPaths = [
     "/admin/products",

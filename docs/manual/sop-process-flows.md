@@ -259,3 +259,4 @@ Stop and ask for admin support if:
 - the system will not allow you to close a session
 - pricing looks wrong for a wholesale sale
 - a production item is missing from the sale process
+- you need to **change or remove a sale or stock entry that was already saved** (only admins can edit or delete those records)

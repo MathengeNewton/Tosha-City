@@ -38,5 +38,13 @@ export class CreateSaleDto {
   @IsOptional()
   @IsNumber()
   customerId?: number;
+
+  @ApiProperty({
+    description: 'When set, links this sale to a restaurant/kitchen order (validated server-side)',
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  restaurantOrderId?: number;
 }
 

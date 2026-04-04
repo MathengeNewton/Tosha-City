@@ -1,6 +1,7 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
+import { RestaurantOrdersService } from '../restaurant-orders/restaurant-orders.service';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,7 +13,10 @@ import { UserRole } from '../roles/entities/role.entity';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly restaurantOrdersService: RestaurantOrdersService,
+  ) {}
 
   @Get('sales')
   @UseGuards(RolesGuard)
@@ -93,6 +97,15 @@ export class ReportsController {
   @ApiQuery({ name: 'branchId', required: false, type: Number })
   getProductionReport(@Query() filters: ReportFiltersDto) {
     return this.reportsService.getProductionReport(filters);
+  }
+
+  @Get('kitchen')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Kitchen session summary (dine-in vs takeaway, prep by product)' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  getKitchenReport(@Query('sessionId') sessionId: string, @Request() req) {
+    return this.restaurantOrdersService.getKitchenSummary(+sessionId, req.user);
   }
 }
 

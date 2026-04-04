@@ -48,12 +48,16 @@ Cashiers see:
 ### Stock Session
 Use this area to open the day, record stock, manage production, and close the day.
 
+**Role note:** Cashiers can **add** opening, incoming, closing, and wastage entries during operations. **Editing or deleting a stock entry that was already saved** is **admin only** (corrections and governance).
+
 ### Sales
 Use this area to:
 - create a new sale
 - review existing sales
 - record payment
 - print a receipt for paid sales
+
+**Role note:** Cashiers can create sales and record payments. **Changing or deleting an existing sale** (for example correcting payment method or removing a mistaken unpaid sale) is **admin only**.
 
 ### Products
 Use this area to create and maintain items sold or consumed by the business.
@@ -143,6 +147,7 @@ Stock given to a partner and tracked separately for payment follow-up.
 - Some products are sold by weight, some by portions, cups, or pieces.
 - Recipes can only use a final product that already exists as a production item.
 - A stock session should only be closed after required work is complete.
+- **Corrections:** only **admins** can edit or delete **existing** sales and **saved** stock entries. Cashiers should get an admin if something was entered wrong after it was saved.
 
 ## Recommended Learning Path
 If you are new:

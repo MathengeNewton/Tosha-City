@@ -3,6 +3,8 @@
 ## Purpose
 This section helps admin users understand what each report shows and how to use it for branch review.
 
+**Branch detail and exports:** Deeper branch-level metrics (for example product mix **per** branch, branch-type roll-ups, and a single “branch cockpit” screen for admins) are described in the engineering roadmap: `docs/plans/reports-branch-cockpit-rbac.md`. Until those items are built, rely on **branch** and **date** filters here plus the **Sales** and **Stock Session** pages for session-level detail.
+
 ## Intended Audience
 - Admin users
 
@@ -41,7 +43,7 @@ Use this report when you want to answer:
 - high `Total Revenue` means more paid income
 - high `Unpaid Amount` needs follow-up
 - use `Sales by Branch` to compare branch performance
-- use `Sales by Product` to see the strongest items
+- use `Sales by Product` to see the strongest items overall (product totals are not always broken out by branch in the same table—use branch filter plus other screens for strict per-branch product review until enhanced report slices are available)
 
 ## Stock Report
 
@@ -238,3 +240,4 @@ Check:
 - read totals before reading detail lines
 - compare branch rows before drawing conclusions
 - export Excel only after you confirm the filters are correct
+- financial or stock **corrections** after mistakes are done by **admins** (edit/delete sales, edit/delete stock entries), not cashiers—see the role guide

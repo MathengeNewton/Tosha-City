@@ -8,10 +8,12 @@ import { StockEntry } from '../stock-entries/entities/stock-entry.entity';
 import { Product } from '../products/entities/product.entity';
 import { StockShare } from '../stock-share/entities/stock-share.entity';
 import { ProductionRun } from '../production/entities/production-run.entity';
+import { RestaurantOrdersModule } from '../restaurant-orders/restaurant-orders.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Sale, SaleItem, StockEntry, Product, StockShare, ProductionRun]),
+    RestaurantOrdersModule,
   ],
   controllers: [ReportsController],
   providers: [ReportsService],
