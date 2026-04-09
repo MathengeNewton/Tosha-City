@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ToshaCity Butchery - Local Development Script
+# LakeTown Butchery - Local Development Script
 # Starts services locally using localhost URLs
 
 set +e  # Don't exit on error - continue even if health checks fail
@@ -51,9 +51,9 @@ cleanup_matching_containers() {
 }
 
 reset_docker_stack() {
-    log_info "Stopping existing ToshaCity containers..."
+    log_info "Stopping existing LakeTown containers..."
     $COMPOSE_CMD down --remove-orphans > /dev/null 2>&1 || true
-    cleanup_matching_containers "toshacity"
+    cleanup_matching_containers "laketown"
 }
 
 prune_docker_dangling() {
@@ -123,7 +123,7 @@ fi
 
 log_info "Using: $COMPOSE_CMD_BASE"
 
-log "🚀 Starting ToshaCity Butchery - Local Development"
+log "🚀 Starting LakeTown Butchery - Local Development"
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 log ""
@@ -144,7 +144,7 @@ if ! $COMPOSE_CMD up -d db; then
     log_error "Failed to start database container"
     log_warning "Attempting to fix Docker Compose metadata issue..."
     $COMPOSE_CMD_BASE -f $COMPOSE_FILE down 2>/dev/null || true
-    docker ps -a | grep toshacity | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a | grep laketown | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
     log_info "Retrying database startup..."
     $COMPOSE_CMD up -d db || {
         log_error "Database startup failed. Check Docker and try: $COMPOSE_CMD_BASE down"
@@ -153,8 +153,8 @@ if ! $COMPOSE_CMD up -d db; then
 fi
 
 log "Waiting for database to be ready..."
-DB_USER=${DATABASE_USER:-toshacity}
-DB_NAME=${DATABASE_NAME:-toshacity_butchery}
+DB_USER=${DATABASE_USER:-laketown}
+DB_NAME=${DATABASE_NAME:-laketown_butchery}
 
 for i in $(seq 1 $MAX_RETRIES); do
     if $COMPOSE_CMD exec -T db pg_isready -U $DB_USER -d $DB_NAME > /dev/null 2>&1; then

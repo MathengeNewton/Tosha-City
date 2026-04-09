@@ -14,7 +14,7 @@ export default function ReceiptView({ sale, payment }) {
   return (
     <div className="receipt-print-only bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 lg:p-8 max-w-lg mx-auto">
       <div className="text-center mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">ToshaCity Butchery</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">LakeTown Butchery</h2>
         <p className="text-gray-600 text-sm mt-1">Sale Receipt</p>
       </div>
 

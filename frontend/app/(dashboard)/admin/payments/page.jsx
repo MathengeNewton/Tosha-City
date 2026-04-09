@@ -31,7 +31,7 @@ const PaymentsPage = () => {
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
           Payments Management
         </h1>
-        <p className="text-gray-600 mt-1">View PCEA payment records</p>
+        <p className="text-gray-600 mt-1">View payment records</p>
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">

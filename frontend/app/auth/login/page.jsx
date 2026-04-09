@@ -4,9 +4,9 @@ import Image from "next/image";
 import LoginForm from "./LoginForm";
 
 export const metadata = {
-  title: "Login | ToshaCity Butchery",
+  title: "Login | LakeTown Butchery",
   description:
-    "Access your ToshaCity Butchery Management System to manage stock, sales, and daily operations.",
+    "Access your LakeTown Butchery Management System to manage stock, sales, and daily operations.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
@@ -40,7 +40,7 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">
-                    ToshaCity Butchery
+                    LakeTown Butchery
                   </h1>
                   <p className="text-sm text-gray-600">Management System</p>
                 </div>

@@ -15,8 +15,8 @@ async function bootstrap() {
 
   // Enable CORS
   const allowedOrigins = [
-    'https://admin.toshacity.co.ke', // Production frontend
-    'http://admin.toshacity.co.ke', // Production frontend (HTTP redirect)
+    'https://admin.laketown.co.ke', // Production frontend
+    'http://admin.laketown.co.ke', // Production frontend (HTTP redirect)
     'http://localhost:3000', // Local development
     'http://localhost:3001', // Alternative local port
     'http://localhost:3015', // Docker frontend port
@@ -88,8 +88,8 @@ async function bootstrap() {
 
   // Swagger setup
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('ToshaCity Butchery API')
-    .setDescription('API documentation for the ToshaCity Butchery platform')
+    .setTitle('LakeTown Butchery API')
+    .setDescription('API documentation for the LakeTown Butchery platform')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

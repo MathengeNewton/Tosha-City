@@ -1,35 +1,35 @@
 import UserDashboardPage from "./UserDashboard";
 
 export const metadata = {
-  title: "User Dashboard | PCEA Church Kenya",
+  title: "User Dashboard | LakeTown Butchery",
   description:
-    "Access your personal dashboard at PCEA Church Kenya. View your account details, member services, and personalized ministry resources.",
+    "Access your LakeTown Butchery dashboard — account details, activity, and personalized tools.",
   icons: {
-    icon: "/pcea-seeklogo.svg",
-    shortcut: "/icons/favicon-16x16.png",
-    apple: "/icons/apple-touch-icon.png",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   openGraph: {
-    title: "User Dashboard | PCEA Church Kenya",
+    title: "User Dashboard | LakeTown Butchery",
     description:
-      "Securely manage your PCEA Church Kenya account and access member-specific resources through your dashboard.",
-    url: "https://pceachurch.or.ke/dashboard/user",
-    siteName: "PCEA Church Kenya",
+      "Manage your LakeTown Butchery account and access your dashboard resources.",
+    url: "https://admin.laketown.co.ke/dashboard/user",
+    siteName: "LakeTown Butchery",
     type: "website",
     images: [
       {
         url: "/images/og-dashboard.png",
         width: 1200,
         height: 630,
-        alt: "PCEA Church Kenya User Dashboard",
+        alt: "LakeTown Butchery user dashboard",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "User Dashboard | PCEA Church Kenya",
+    title: "User Dashboard | LakeTown Butchery",
     description:
-      "Access your personal dashboard to view account details and member services at PCEA Church Kenya.",
+      "View your LakeTown Butchery dashboard and account details.",
     images: ["/images/og-dashboard.png"],
   },
 };

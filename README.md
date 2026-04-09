@@ -1,4 +1,4 @@
-# ToshaCity Butchery Management System
+# LakeTown Butchery Management System
 
 A comprehensive management system for small to medium-sized butcheries to track stock, sales, wastage, and generate reports.
 
@@ -91,14 +91,14 @@ Two deployment scripts are available:
 
 ## Production URLs
 
-- **Backend API**: `https://apis.toshacity.co.ke`
-- **Frontend**: `https://admin.toshacity.co.ke`
-- **API Docs**: `https://apis.toshacity.co.ke/api/docs`
+- **Backend API**: `https://apis.laketown.co.ke`
+- **Frontend**: `https://admin.laketown.co.ke`
+- **API Docs**: `https://apis.laketown.co.ke/api/docs`
 
 ## Default Credentials
 
 - **Username**: `admin`
-- **Email**: `admin@toshacity.co.ke`
+- **Email**: `admin@laketown.co.ke`
 - **Password**: `admin123`
 
 ⚠️ **Change the default password immediately after first login!**

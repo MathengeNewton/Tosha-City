@@ -9,9 +9,9 @@ services:
     image: postgres:15
     restart: always
     environment:
-      POSTGRES_USER: ${DATABASE_USER:-toshacity}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-toshacity_pass}
-      POSTGRES_DB: ${DATABASE_NAME:-toshacity_butchery}
+      POSTGRES_USER: ${DATABASE_USER:-laketown}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-laketown_pass}
+      POSTGRES_DB: ${DATABASE_NAME:-laketown_butchery}
     ports:
       - "5432:5432" 
     volumes:
@@ -19,14 +19,14 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-toshacity} -d ${DATABASE_NAME:-toshacity_butchery}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-laketown} -d ${DATABASE_NAME:-laketown_butchery}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   backend:
     build: ./backend
-    container_name: toshacity-backend
+    container_name: laketown-backend
     deploy:
       resources:
         limits: { memory: 1G }
@@ -37,9 +37,9 @@ services:
     environment:
       DATABASE_HOST: db
       DATABASE_PORT: 5432
-      DATABASE_USER: ${DATABASE_USER:-toshacity}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-toshacity_pass}
-      DATABASE_NAME: ${DATABASE_NAME:-toshacity_butchery}
+      DATABASE_USER: ${DATABASE_USER:-laketown}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-laketown_pass}
+      DATABASE_NAME: ${DATABASE_NAME:-laketown_butchery}
       PORT: 3000
       NODE_ENV: ${NODE_ENV:-production}
       JWT_SECRET: ${JWT_SECRET:-default_secret_key_change_in_production}
@@ -66,7 +66,7 @@ services:
         limits: { memory: 1G }
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4515/api}
-    container_name: toshacity-frontend
+    container_name: laketown-frontend
     restart: unless-stopped
     ports:
       - "3015:3000"

@@ -9,33 +9,33 @@ const albertSans = Albert_Sans({
 });
 
 export const metadata = {
-  title: "ToshaCity Butchery | Management System",
+  title: "LakeTown Butchery | Management System",
   description:
-    "ToshaCity Butchery Management System — Manage stock, sales, and daily operations for your butchery business.",
+    "LakeTown Butchery Management System — Manage stock, sales, and daily operations for your butchery business.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
     apple: "/favicon.ico",
   },
   openGraph: {
-    title: "ToshaCity Butchery | Management System",
+    title: "LakeTown Butchery | Management System",
     description:
       "Manage your butchery operations efficiently. Track stock, sales, wastage, and generate comprehensive reports.",
-    url: "https://admin.toshacity.co.ke",
-    siteName: "ToshaCity Butchery",
+    url: "https://admin.laketown.co.ke",
+    siteName: "LakeTown Butchery",
     type: "website",
     images: [
       {
         url: "/images/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ToshaCity Butchery Management System",
+        alt: "LakeTown Butchery Management System",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ToshaCity Butchery | Management System",
+    title: "LakeTown Butchery | Management System",
     description:
       "Manage your butchery operations efficiently. Track stock, sales, wastage, and generate comprehensive reports.",
     images: ["/images/og-image.png"],

@@ -161,7 +161,7 @@ const DistrictsPage = () => {
           Districts Management
         </h1>
         <p className="text-gray-600 mt-1">
-          Manage PCEA districts and district leadership
+          Manage districts and district leadership
         </p>
       </div>
 

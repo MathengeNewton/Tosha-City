@@ -40,7 +40,7 @@ export default function SideBar({
           <div>
             <Link href={"/"}>
               <span className="text-xl lg:text-2xl font-bold text-blue-900">
-                ToshaCity
+                LakeTown
               </span>
             </Link>
           </div>

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ToshaCity Butchery - Production Deployment Script
+# LakeTown Butchery - Production Deployment Script
 # Deploys to staging/production server using domain URLs
 # This script should be run on the production server
 
@@ -48,9 +48,9 @@ cleanup_matching_containers() {
 }
 
 reset_docker_stack() {
-    log_info "Stopping existing ToshaCity containers..."
+    log_info "Stopping existing LakeTown containers..."
     $COMPOSE_CMD down --remove-orphans > /dev/null 2>&1 || true
-    cleanup_matching_containers "toshacity"
+    cleanup_matching_containers "laketown"
 }
 
 prune_docker_dangling() {
@@ -65,13 +65,13 @@ prune_docker_dangling() {
 service_container_name() {
     case "$1" in
         db)
-            echo "toshacity_db_1"
+            echo "laketown_db_1"
             ;;
         backend)
-            echo "toshacity-backend"
+            echo "laketown-backend"
             ;;
         frontend)
-            echo "toshacity-frontend"
+            echo "laketown-frontend"
             ;;
         *)
             echo ""
@@ -141,13 +141,13 @@ if [ ! -f "$ENV_FILE" ]; then
     log_error ""
     log_error "Example:"
     log_error "  cat > $ENV_FILE << 'EOF'"
-    log_error "  DATABASE_USER=toshacity"
+    log_error "  DATABASE_USER=laketown"
     log_error "  DATABASE_PASSWORD=your_secure_password_here"
-    log_error "  DATABASE_NAME=toshacity_butchery"
+    log_error "  DATABASE_NAME=laketown_butchery"
     log_error "  JWT_SECRET=your_jwt_secret_here"
     log_error "  JWT_EXPIRES_IN=7d"
-    log_error "  FRONTEND_URL=https://admin.toshacity.co.ke"
-    log_error "  NEXT_PUBLIC_API_URL=https://apis.toshacity.co.ke/api"
+    log_error "  FRONTEND_URL=https://admin.laketown.co.ke"
+    log_error "  NEXT_PUBLIC_API_URL=https://apis.laketown.co.ke/api"
     log_error "  EOF"
     exit 1
 fi
@@ -171,10 +171,10 @@ fi
 log_success "Critical environment variables are set"
 
 # Set production URLs (use from env or defaults)
-BACKEND_URL=${NEXT_PUBLIC_API_URL:-https://apis.toshacity.co.ke/api}
-FRONTEND_URL=${FRONTEND_URL:-https://admin.toshacity.co.ke}
+BACKEND_URL=${NEXT_PUBLIC_API_URL:-https://apis.laketown.co.ke/api}
+FRONTEND_URL=${FRONTEND_URL:-https://admin.laketown.co.ke}
 
-log "🚀 Starting ToshaCity Butchery - Production Deployment"
+log "🚀 Starting LakeTown Butchery - Production Deployment"
 log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Step 1: Git Operations
@@ -228,7 +228,7 @@ if ! $COMPOSE_CMD up -d db; then
     log_error "Failed to start database container"
     log_warning "Attempting to fix Docker Compose metadata issue..."
     $COMPOSE_CMD_BASE -f $COMPOSE_FILE down 2>/dev/null || true
-    docker ps -a | grep toshacity | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a | grep laketown | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
     log_info "Retrying database startup..."
     recover_service_container "db" "" || {
         log_error "Database startup failed. Check Docker and try: $COMPOSE_CMD_BASE down"
@@ -237,8 +237,8 @@ if ! $COMPOSE_CMD up -d db; then
 fi
 
 log "Waiting for database to be ready..."
-DB_USER=${DATABASE_USER:-toshacity}
-DB_NAME=${DATABASE_NAME:-toshacity_butchery}
+DB_USER=${DATABASE_USER:-laketown}
+DB_NAME=${DATABASE_NAME:-laketown_butchery}
 
 for i in $(seq 1 $MAX_RETRIES); do
     if $COMPOSE_CMD exec -T db pg_isready -U $DB_USER -d $DB_NAME > /dev/null 2>&1; then

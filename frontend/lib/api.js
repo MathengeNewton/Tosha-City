@@ -4,7 +4,7 @@ import axios from 'axios';
  * API Configuration
  * Backend API base URL - must be set via NEXT_PUBLIC_API_URL environment variable
  */
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://apis.toshacity.co.ke/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://apis.laketown.co.ke/api';
 
 // Create axios instance
 const api = axios.create({
@@ -18,7 +18,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = typeof window !== 'undefined' 
-      ? localStorage.getItem('toshacity-token') || sessionStorage.getItem('toshacity-token')
+      ? localStorage.getItem('laketown-token') || sessionStorage.getItem('laketown-token')
       : null;
     
     if (token) {
@@ -39,9 +39,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Unauthorized - clear token and redirect to login
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('toshacity-token');
-        sessionStorage.removeItem('toshacity-token');
-        sessionStorage.removeItem('toshacity-user');
+        localStorage.removeItem('laketown-token');
+        sessionStorage.removeItem('laketown-token');
+        sessionStorage.removeItem('laketown-user');
         window.location.href = '/auth/login';
       }
     }
@@ -62,9 +62,9 @@ export const apiClient = {
     },
     logout: () => {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('toshacity-token');
-        sessionStorage.removeItem('toshacity-token');
-        sessionStorage.removeItem('toshacity-user');
+        localStorage.removeItem('laketown-token');
+        sessionStorage.removeItem('laketown-token');
+        sessionStorage.removeItem('laketown-user');
       }
     },
   },

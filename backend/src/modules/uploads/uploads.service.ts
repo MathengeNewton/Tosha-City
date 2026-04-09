@@ -49,7 +49,7 @@ export class UploadsService {
       return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: 'toshacity/wastage',
+            folder: 'laketown/wastage',
             resource_type: 'image',
           },
           (error, result) => {
@@ -96,7 +96,7 @@ export class UploadsService {
         // Extract public_id from Cloudinary URL
         const urlParts = filename.split('/');
         const filenameWithExt = urlParts[urlParts.length - 1];
-        const publicId = `toshacity/wastage/${filenameWithExt.split('.')[0]}`;
+        const publicId = `laketown/wastage/${filenameWithExt.split('.')[0]}`;
         await cloudinary.uploader.destroy(publicId);
       } catch (error) {
         console.error('Error deleting from Cloudinary:', error);

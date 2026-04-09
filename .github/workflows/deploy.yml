@@ -103,8 +103,8 @@ jobs:
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }} || echo "Frontend image not found in registry, will build locally"
             
             # Tag images as latest if pulled successfully
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }} toshacity-backend:latest 2>/dev/null || true
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }} toshacity-frontend:latest 2>/dev/null || true
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }} laketown-backend:latest 2>/dev/null || true
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }} laketown-frontend:latest 2>/dev/null || true
             
             # Detect docker-compose command (v1 or v2)
             if command -v docker-compose > /dev/null 2>&1; then

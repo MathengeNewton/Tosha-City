@@ -37,10 +37,10 @@ ChartJS.register(
 
 const UserDashboardPage = () => {
   const [userStats, setUserStats] = useState({
-    myContributions: "KES 48,500",
-    attendanceThisYear: 42,
-    upcomingEvents: 5,
-    familyMembers: 6,
+    myPurchases: "KES 48,500",
+    activeDaysThisYear: 42,
+    upcomingPromos: 5,
+    linkedAccounts: 6,
   });
 
   // Simulate live updates (e.g. new contribution notification)
@@ -48,13 +48,13 @@ const UserDashboardPage = () => {
     const timer = setInterval(() => {
       setUserStats((prev) => ({
         ...prev,
-        attendanceThisYear: Math.min(
+        activeDaysThisYear: Math.min(
           52,
-          prev.attendanceThisYear + Math.floor(Math.random() * 2)
+          prev.activeDaysThisYear + Math.floor(Math.random() * 2)
         ),
-        upcomingEvents: Math.max(
+        upcomingPromos: Math.max(
           3,
-          prev.upcomingEvents + Math.random() > 0.7 ? 1 : 0
+          prev.upcomingPromos + Math.random() > 0.7 ? 1 : 0
         ),
       }));
     }, 10000);
@@ -78,7 +78,7 @@ const UserDashboardPage = () => {
     ],
     datasets: [
       {
-        label: "Sunday Services Attended",
+        label: "Active sales days",
         data: [
           4,
           3,
@@ -90,7 +90,7 @@ const UserDashboardPage = () => {
           5,
           4,
           5,
-          userStats.attendanceThisYear >= 42 ? 5 : 4,
+          userStats.activeDaysThisYear >= 42 ? 5 : 4,
         ],
         borderColor: "#0D47A1",
         backgroundColor: "rgba(13, 71, 161, 0.1)",
@@ -104,7 +104,7 @@ const UserDashboardPage = () => {
     labels: ["Jul", "Aug", "Sep", "Oct", "Nov"],
     datasets: [
       {
-        label: "My Tithes & Offerings (KES)",
+        label: "My purchases (KES)",
         data: [8500, 9200, 10500, 9800, 9500],
         backgroundColor: "#10b981",
       },
@@ -114,24 +114,24 @@ const UserDashboardPage = () => {
   // Upcoming Events (Simple List)
   const upcomingEvents = [
     {
-      name: "Youth Fellowship",
+      name: "Weekend grill specials",
       date: "Sat, 22 Nov 2025",
-      location: "PCEA Lang'ata",
+      location: "LakeTown Main Branch",
     },
     {
-      name: "Family Sunday",
+      name: "Bulk beef week",
       date: "Sun, 30 Nov 2025",
-      location: "Main Sanctuary",
+      location: "LakeTown Express",
     },
     {
-      name: "Christmas Carol Service",
+      name: "Holiday hampers",
       date: "Sun, 21 Dec 2025",
-      location: "St. Andrews",
+      location: "LakeTown Westlands",
     },
     {
-      name: "Men's Breakfast",
+      name: "Cash & carry day",
       date: "Sat, 10 Jan 2026",
-      location: "Church Hall",
+      location: "LakeTown HQ",
     },
   ];
 
@@ -145,10 +145,10 @@ const UserDashboardPage = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Karibu, Brother/Sister John Kamau
+              Karibu, John Kamau
             </h1>
             <p className="text-gray-600">
-              PCEA Lang'ata Parish • Membership ID: PC/KE/2021/4872
+              LakeTown Main Branch • Staff ID: LT/KE/2026/1001
             </p>
           </div>
         </div>
@@ -156,15 +156,15 @@ const UserDashboardPage = () => {
 
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* My Contributions */}
+        {/* Purchases */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 font-medium">
-                My Contributions (2025)
+                My purchases (2025)
               </p>
               <p className="text-3xl font-bold text-[#0D47A1] mt-2">
-                {userStats.myContributions}
+                {userStats.myPurchases}
               </p>
               <p className="text-xs text-green-600 mt-1">
                 ↑ KES 9,500 this month
@@ -176,15 +176,15 @@ const UserDashboardPage = () => {
           </div>
         </div>
 
-        {/* Attendance This Year */}
+        {/* Active days */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 font-medium">
-                Services Attended (2025)
+                Active days (2025)
               </p>
               <p className="text-3xl font-bold text-gray-900 mt-2">
-                {userStats.attendanceThisYear}/48
+                {userStats.activeDaysThisYear}/48
               </p>
               <p className="text-xs text-blue-600 mt-1">Great consistency!</p>
             </div>
@@ -194,17 +194,17 @@ const UserDashboardPage = () => {
           </div>
         </div>
 
-        {/* Family Members */}
+        {/* Linked accounts */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 font-medium">
-                Family Registered
+                Linked accounts
               </p>
               <p className="text-3xl font-bold text-purple-600 mt-2">
-                {userStats.familyMembers}
+                {userStats.linkedAccounts}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Spouse + 4 children</p>
+              <p className="text-xs text-gray-500 mt-1">Household + team</p>
             </div>
             <div className="p-4 bg-purple-100 rounded-full">
               <UsersIcon className="h-8 w-8 text-purple-600" />
@@ -212,18 +212,18 @@ const UserDashboardPage = () => {
           </div>
         </div>
 
-        {/* Upcoming Events */}
+        {/* Upcoming promos */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 font-medium">
-                My Upcoming Events
+                Upcoming promos
               </p>
               <p className="text-3xl font-bold text-orange-600 mt-2">
-                {userStats.upcomingEvents}
+                {userStats.upcomingPromos}
               </p>
               <p className="text-xs text-orange-600 mt-1">
-                Youth Fellowship this Saturday
+                Weekend grill this Saturday
               </p>
             </div>
             <div className="p-4 bg-orange-100 rounded-full">
@@ -235,10 +235,10 @@ const UserDashboardPage = () => {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Attendance Trend */}
+        {/* Activity trend */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            My Attendance Trend 2025
+            My activity trend 2025
           </h3>
           <Line
             data={attendanceData}
@@ -250,10 +250,10 @@ const UserDashboardPage = () => {
           />
         </div>
 
-        {/* My Monthly Giving */}
+        {/* Monthly purchases */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            My Monthly Contributions
+            My monthly purchases
           </h3>
           <Bar
             data={contributionsData}
@@ -265,12 +265,12 @@ const UserDashboardPage = () => {
         </div>
       </div>
 
-      {/* Upcoming Events List */}
+      {/* Upcoming promos list */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <CalendarIcon className="h-6 w-6 text-[#0D47A1]" />
-            My Upcoming Events
+            Upcoming promos
           </h3>
         </div>
         <div className="divide-y divide-gray-200">
@@ -288,7 +288,7 @@ const UserDashboardPage = () => {
                   {event.date}
                 </p>
                 <button className="text-xs text-[#0D47A1] hover:underline mt-1">
-                  RSVP →
+                  Details →
                 </button>
               </div>
             </div>
@@ -300,7 +300,7 @@ const UserDashboardPage = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <button className="bg-[#0D47A1] text-white p-5 rounded-xl hover:bg-[#0D47A1]/90 transition-colors flex flex-col items-center gap-2">
           <BanknotesIcon className="h-8 w-8" />
-          <span className="font-medium">Give Now</span>
+          <span className="font-medium">Reorder</span>
         </button>
         <button className="bg-gray-100 text-gray-800 p-5 rounded-xl hover:bg-gray-200 transition-colors flex flex-col items-center gap-2">
           <EnvelopeIcon className="h-8 w-8" />

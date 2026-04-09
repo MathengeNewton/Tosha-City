@@ -101,7 +101,7 @@ const RegionsPage = () => {
           Regions Management
         </h1>
         <p className="text-gray-600 mt-1">
-          Manage PCEA regions and member origins
+          Manage regions and territories
         </p>
       </div>
 

@@ -1,35 +1,35 @@
 import ForgotPasswordPage from "./ForgotPassword";
 
 export const metadata = {
-  title: "Forgot Password | PCEA Church Kenya",
+  title: "Forgot Password | LakeTown Butchery",
   description:
-    "Reset your PCEA Church Kenya account password securely and regain access to your member or admin portal.",
+    "Reset your LakeTown Butchery account password securely and regain access to the management system.",
   icons: {
-    icon: "/pcea-seeklogo.svg",
-    shortcut: "/icons/favicon-16x16.png",
-    apple: "/icons/apple-touch-icon.png",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   openGraph: {
-    title: "Forgot Password | PCEA Church Kenya",
+    title: "Forgot Password | LakeTown Butchery",
     description:
-      "Use this secure portal to reset your PCEA Church Kenya account password.",
-    url: "https://pceachurch.or.ke/forgot-password",
-    siteName: "PCEA Church Kenya",
+      "Use this secure portal to reset your LakeTown Butchery account password.",
+    url: "https://admin.laketown.co.ke/forgot-password",
+    siteName: "LakeTown Butchery",
     type: "website",
     images: [
       {
         url: "/images/og-image.png",
         width: 1200,
         height: 630,
-        alt: "PCEA Church Kenya",
+        alt: "LakeTown Butchery",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Forgot Password | PCEA Church Kenya",
+    title: "Forgot Password | LakeTown Butchery",
     description:
-      "Reset your PCEA Church Kenya account password securely through our portal.",
+      "Reset your LakeTown Butchery account password securely through our portal.",
     images: ["/images/og-image.png"],
   },
 };

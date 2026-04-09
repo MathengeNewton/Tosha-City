@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This document provides instructions for deploying ToshaCity Butchery to production.
+This document provides instructions for deploying LakeTown Butchery to production.
 
 ## Prerequisites
 
@@ -10,8 +10,8 @@ This document provides instructions for deploying ToshaCity Butchery to producti
    - Git installed
    - SSH access configured
    - Domain names configured:
-     - `apis.toshacity.co.ke` → Backend API
-     - `admin.toshacity.co.ke` → Frontend Application
+     - `apis.laketown.co.ke` → Backend API
+     - `admin.laketown.co.ke` → Frontend Application
 
 2. **SSL Certificates:**
    - Configure SSL certificates on your nginx server (separate from Docker)
@@ -25,29 +25,29 @@ Add the following secrets to your GitHub repository (Settings → Secrets and va
 ### Required Secrets
 
 1. **SSH_HOST** - Production server IP or hostname
-   - Example: `123.456.789.0` or `server.toshacity.co.ke`
+   - Example: `123.456.789.0` or `server.laketown.co.ke`
 
 2. **SSH_USER** - SSH username for deployment
    - Example: `deploy` or `ubuntu`
 
 3. **SSH_PRIVATE_KEY** - Private SSH key for server access
-   - Generate with: `ssh-keygen -t ed25519 -C "deploy@toshacity"`
+   - Generate with: `ssh-keygen -t ed25519 -C "deploy@laketown"`
    - Copy the private key content (including `-----BEGIN` and `-----END` lines)
 
 4. **SSH_PORT** - SSH port (optional, defaults to 22)
    - Example: `22`
 
 5. **DEPLOY_PATH** - Path on server where code is deployed
-   - Example: `/var/www/toshacity` or `/home/deploy/toshacity`
+   - Example: `/var/www/laketown` or `/home/deploy/laketown`
 
 6. **DATABASE_USER** - PostgreSQL database user
-   - Example: `toshacity`
+   - Example: `laketown`
 
 7. **DATABASE_PASSWORD** - PostgreSQL database password
    - Use a strong, unique password
 
 8. **DATABASE_NAME** - PostgreSQL database name
-   - Example: `toshacity_butchery`
+   - Example: `laketown_butchery`
 
 9. **JWT_SECRET** - Secret key for JWT token signing
    - Generate with: `openssl rand -base64 32`
@@ -57,10 +57,10 @@ Add the following secrets to your GitHub repository (Settings → Secrets and va
     - Example: `7d` (7 days)
 
 11. **FRONTEND_URL** - Frontend application URL
-    - Example: `https://admin.toshacity.co.ke`
+    - Example: `https://admin.laketown.co.ke`
 
 12. **NEXT_PUBLIC_API_URL** - Public API URL (used by frontend)
-    - Example: `https://apis.toshacity.co.ke/api`
+    - Example: `https://apis.laketown.co.ke/api`
 
 ### Optional Secrets
 
@@ -91,11 +91,11 @@ sudo usermod -aG docker $USER
 
 ```bash
 # Create deployment directory
-sudo mkdir -p /var/www/toshacity
-sudo chown $USER:$USER /var/www/toshacity
+sudo mkdir -p /var/www/laketown
+sudo chown $USER:$USER /var/www/laketown
 
 # Clone repository
-cd /var/www/toshacity
+cd /var/www/laketown
 git clone <your-repo-url> .
 ```
 
@@ -106,7 +106,7 @@ git clone <your-repo-url> .
 sudo apt install certbot -y
 
 # Generate certificates for both domains
-sudo certbot certonly --standalone -d apis.toshacity.co.ke -d admin.toshacity.co.ke
+sudo certbot certonly --standalone -d apis.laketown.co.ke -d admin.laketown.co.ke
 
 # Note: Configure nginx separately on the host server
 # SSL certificates should be configured in your nginx setup
@@ -117,13 +117,13 @@ sudo certbot certonly --standalone -d apis.toshacity.co.ke -d admin.toshacity.co
 ```bash
 # Create .env.production file
 cat > .env.production << EOF
-DATABASE_USER=toshacity
+DATABASE_USER=laketown
 DATABASE_PASSWORD=your_strong_password_here
-DATABASE_NAME=toshacity_butchery
+DATABASE_NAME=laketown_butchery
 JWT_SECRET=your_jwt_secret_here
 JWT_EXPIRES_IN=7d
-FRONTEND_URL=https://admin.toshacity.co.ke
-NEXT_PUBLIC_API_URL=https://apis.toshacity.co.ke/api
+FRONTEND_URL=https://admin.laketown.co.ke
+NEXT_PUBLIC_API_URL=https://apis.laketown.co.ke/api
 EOF
 
 # Secure the file
@@ -151,13 +151,13 @@ sudo ufw enable
 **Or manually:**
 ```bash
 # Generate SSH key pair (on your LOCAL machine)
-ssh-keygen -t ed25519 -C "github-actions-deploy@toshacity" -f ~/.ssh/toshacity_deploy_key
+ssh-keygen -t ed25519 -C "github-actions-deploy@laketown" -f ~/.ssh/laketown_deploy_key
 
 # Copy public key to server
-ssh-copy-id -i ~/.ssh/toshacity_deploy_key.pub user@your-server-ip
+ssh-copy-id -i ~/.ssh/laketown_deploy_key.pub user@your-server-ip
 
 # Display private key (copy this to GitHub Secrets → SSH_PRIVATE_KEY)
-cat ~/.ssh/toshacity_deploy_key
+cat ~/.ssh/laketown_deploy_key
 ```
 
 The steps above are sufficient for most setups; the rest of this guide covers deployment methods and troubleshooting.
@@ -181,7 +181,7 @@ The steps above are sufficient for most setups; the rest of this guide covers de
 ssh user@your-server
 
 # Navigate to project directory
-cd /var/www/toshacity
+cd /var/www/laketown
 
 # Pull latest code
 git pull origin development
@@ -195,7 +195,7 @@ chmod +x .deployment.sh
 
 ```bash
 # Navigate to project directory
-cd /var/www/toshacity
+cd /var/www/laketown
 
 # Note: Configure nginx separately on the host server
 
@@ -215,8 +215,8 @@ docker-compose -f docker-compose.prod.yml ps
 docker-compose -f docker-compose.prod.yml logs -f
 
 # Test endpoints
-curl https://apis.toshacity.co.ke/api/health
-curl https://admin.toshacity.co.ke
+curl https://apis.laketown.co.ke/api/health
+curl https://admin.laketown.co.ke
 ```
 
 ### 2. Set Up SSL Certificate Auto-Renewal
@@ -235,20 +235,20 @@ sudo crontab -e
 
 ```bash
 # Create backup script
-cat > /var/www/toshacity/backup-db.sh << 'EOF'
+cat > /var/www/laketown/backup-db.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR="/var/backups/toshacity"
+BACKUP_DIR="/var/backups/laketown"
 mkdir -p $BACKUP_DIR
-docker exec toshacity_db_1 pg_dump -U toshacity toshacity_butchery > $BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql
+docker exec laketown_db_1 pg_dump -U laketown laketown_butchery > $BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql
 # Keep only last 7 days
 find $BACKUP_DIR -name "backup_*.sql" -mtime +7 -delete
 EOF
 
-chmod +x /var/www/toshacity/backup-db.sh
+chmod +x /var/www/laketown/backup-db.sh
 
 # Add to crontab (daily at 2 AM)
 sudo crontab -e
-# Add: 0 2 * * * /var/www/toshacity/backup-db.sh
+# Add: 0 2 * * * /var/www/laketown/backup-db.sh
 ```
 
 ## Troubleshooting
@@ -270,10 +270,10 @@ docker-compose -f docker-compose.prod.yml restart
 
 ```bash
 # Check database container
-docker exec -it toshacity_db_1 psql -U toshacity -d toshacity_butchery
+docker exec -it laketown_db_1 psql -U laketown -d laketown_butchery
 
 # Check environment variables
-docker exec toshacity-backend env | grep DATABASE
+docker exec laketown-backend env | grep DATABASE
 ```
 
 ### SSL certificate issues
@@ -291,13 +291,13 @@ sudo tail -f /var/log/nginx/access.log
 
 ```bash
 # Check frontend logs
-docker logs toshacity-frontend
+docker logs laketown-frontend
 
 # Verify API URL is correct
-docker exec toshacity-frontend env | grep NEXT_PUBLIC_API_URL
+docker exec laketown-frontend env | grep NEXT_PUBLIC_API_URL
 
 # Check network connectivity
-docker network inspect toshacity_app-network
+docker network inspect laketown_app-network
 ```
 
 ## Monitoring

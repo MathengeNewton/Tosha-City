@@ -84,7 +84,7 @@ const AdminDashboardPage = () => {
       <div className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-            PCEA Church Admin Dashboard
+            LakeTown Butchery — Admin
           </h1>
           <p className="text-gray-600 mt-1">Welcome back! Here's what's happening.</p>
         </div>

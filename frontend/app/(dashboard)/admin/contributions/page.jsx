@@ -32,7 +32,7 @@ const ContributionsPage = () => {
           Contributions Management
         </h1>
         <p className="text-gray-600 mt-1">
-          View PCEA contributions and installments
+          View contributions and installments
         </p>
       </div>
 

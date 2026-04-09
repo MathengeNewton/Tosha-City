@@ -121,7 +121,7 @@ const FamiliesPage = () => {
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
           Families Management
         </h1>
-        <p className="text-gray-600 mt-1">Manage PCEA church family trees</p>
+        <p className="text-gray-600 mt-1">Manage customer family groups</p>
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">

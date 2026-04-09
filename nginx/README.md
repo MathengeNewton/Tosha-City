@@ -6,16 +6,16 @@ Single config for the **staging server**: nginx fronts both backend and frontend
 
 | Service  | Hostname                                      | Proxies to       |
 |----------|-----------------------------------------------|------------------|
-| Backend  | `toshacity-services.mangoseasonlabs.co.ke`   | `127.0.0.1:4515` |
-| Frontend | `toshacity-dashboard.mangoseasonlabs.co.ke` | `127.0.0.1:3015` |
+| Backend  | `laketown-services.mangoseasonlabs.co.ke`   | `127.0.0.1:4515` |
+| Frontend | `laketown-dashboard.mangoseasonlabs.co.ke` | `127.0.0.1:3015` |
 
 ## Install on server
 
 1. Copy the config and enable it:
 
    ```bash
-   sudo cp nginx/toshacity-staging.conf /etc/nginx/sites-available/
-   sudo ln -s /etc/nginx/sites-available/toshacity-staging.conf /etc/nginx/sites-enabled/
+   sudo cp nginx/laketown-staging.conf /etc/nginx/sites-available/
+   sudo ln -s /etc/nginx/sites-available/laketown-staging.conf /etc/nginx/sites-enabled/
    ```
 
 2. Test and reload nginx:
@@ -27,7 +27,7 @@ Single config for the **staging server**: nginx fronts both backend and frontend
 3. Get SSL with Certbot (if not already):
 
    ```bash
-   sudo certbot --nginx -d toshacity-services.mangoseasonlabs.co.ke -d toshacity-dashboard.mangoseasonlabs.co.ke
+   sudo certbot --nginx -d laketown-services.mangoseasonlabs.co.ke -d laketown-dashboard.mangoseasonlabs.co.ke
    ```
 
    Certbot will add HTTPS server blocks and redirects.
@@ -37,8 +37,8 @@ Single config for the **staging server**: nginx fronts both backend and frontend
 On the staging server, set these so the app uses the staging hostnames:
 
 ```bash
-FRONTEND_URL=https://toshacity-dashboard.mangoseasonlabs.co.ke
-NEXT_PUBLIC_API_URL=https://toshacity-services.mangoseasonlabs.co.ke/api
+FRONTEND_URL=https://laketown-dashboard.mangoseasonlabs.co.ke
+NEXT_PUBLIC_API_URL=https://laketown-services.mangoseasonlabs.co.ke/api
 ```
 
 Then (re)build/start the stack so the frontend is built with the correct API URL.

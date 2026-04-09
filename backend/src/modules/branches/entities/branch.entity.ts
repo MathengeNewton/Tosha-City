@@ -22,7 +22,7 @@ export class Branch {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ApiProperty({ description: 'Branch name', example: 'Tosha City Main Butchery' })
+  @ApiProperty({ description: 'Branch name', example: 'Lake Town Main Butchery' })
   @Column({ unique: true })
   name: string;
 

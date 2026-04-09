@@ -13,9 +13,9 @@ export function AuthProvider({ children }) {
   const router = useRouter();
 
   const logout = () => {
-    localStorage.removeItem("toshacity-token");
-    localStorage.removeItem("toshacity-user");
-    localStorage.removeItem("toshacity-remembered-email");
+    localStorage.removeItem("laketown-token");
+    localStorage.removeItem("laketown-user");
+    localStorage.removeItem("laketown-remembered-email");
     sessionStorage.clear();
     setToken(null);
     setUser(null);
@@ -29,8 +29,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = () => {
       try {
-        const storedToken = localStorage.getItem("toshacity-token");
-        const storedUser = localStorage.getItem("toshacity-user");
+        const storedToken = localStorage.getItem("laketown-token");
+        const storedUser = localStorage.getItem("laketown-user");
 
         if (storedToken && storedUser) {
           setToken(storedToken);
@@ -39,8 +39,8 @@ export function AuthProvider({ children }) {
       } catch (error) {
         console.error("Error initializing auth:", error);
         // Clear invalid data
-        localStorage.removeItem("toshacity-token");
-        localStorage.removeItem("toshacity-user");
+        localStorage.removeItem("laketown-token");
+        localStorage.removeItem("laketown-user");
       } finally {
         setLoading(false);
       }
@@ -59,8 +59,8 @@ export function AuthProvider({ children }) {
       const { access_token, user: userData } = response.data;
 
       // Store token and user
-      localStorage.setItem("toshacity-token", access_token);
-      localStorage.setItem("toshacity-user", JSON.stringify(userData));
+      localStorage.setItem("laketown-token", access_token);
+      localStorage.setItem("laketown-user", JSON.stringify(userData));
 
       setToken(access_token);
       setUser(userData);

@@ -49,7 +49,7 @@ const CampaignsPage = () => {
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
           Campaigns Management
         </h1>
-        <p className="text-gray-600 mt-1">Manage PCEA church campaigns</p>
+        <p className="text-gray-600 mt-1">Manage sales campaigns</p>
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">

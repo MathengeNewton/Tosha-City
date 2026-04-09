@@ -26,7 +26,7 @@ export default function LoginForm() {
 
   // Load remembered email on mount
   useEffect(() => {
-    const savedEmail = localStorage.getItem("toshacity-remembered-email");
+    const savedEmail = localStorage.getItem("laketown-remembered-email");
     if (savedEmail) {
       setEmail(savedEmail);
       setRememberMe(true);
@@ -89,16 +89,17 @@ export default function LoginForm() {
       if (result.success) {
         // Save email if "Remember me" is checked
         if (rememberMe) {
-          localStorage.setItem("toshacity-remembered-email", email.trim());
+          localStorage.setItem("laketown-remembered-email", email.trim());
         } else {
-          localStorage.removeItem("toshacity-remembered-email");
+          localStorage.removeItem("laketown-remembered-email");
         }
 
-        // Determine redirect based on user role
-        const userRole =
-          result.user.roles?.[0]?.name || result.user.roles?.[0];
-        // All users go to the main dashboard
-        const redirectPath = "/dashboard";
+        // Management admins land on admin home; branch staff on operational dashboard
+        const roles = result.user?.roles || [];
+        const isAdminUser = roles.some(
+          (r) => (typeof r === "string" ? r : r?.name) === "admin"
+        );
+        const redirectPath = isAdminUser ? "/admin/dashboard" : "/dashboard";
 
         // Redirect after successful login
         setTimeout(() => {
@@ -141,7 +142,7 @@ export default function LoginForm() {
                     ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                     : "border-gray-300 focus:border-blue-600 focus:ring-blue-600/20"
                 } outline-none transition-all`}
-                placeholder="admin@toshacity.co.ke"
+                placeholder="admin@laketown.co.ke"
                 disabled={isLoading}
               />
               <EnvelopeIcon className="absolute left-4 top-3.5 h-5 w-5 text-gray-400 pointer-events-none" />

@@ -1,4 +1,4 @@
-# ToshaCity Butchery User Manual
+# LakeTown Butchery User Manual
 
 ## Purpose
 This manual teaches a new admin or cashier how to use the application step by step.

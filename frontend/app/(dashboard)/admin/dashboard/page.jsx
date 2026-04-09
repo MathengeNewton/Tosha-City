@@ -1,37 +1,35 @@
 import AdminDashboardPage from "./AdminDashboard";
 
-// app/dashboard/admin/page.js or page.tsx
-
 export const metadata = {
-  title: "Admin Dashboard | PCEA Church Kenya",
+  title: "Admin home | LakeTown Butchery",
   description:
-    "Manage PCEA Church Kenya's administrative operations securely. Access member management, church events, and ministry resources from the admin portal.",
+    "Management overview — branches, users, and reporting for LakeTown Butchery.",
   icons: {
-    icon: "/pcea-seeklogo.svg",
-    shortcut: "/icons/favicon-16x16.png",
-    apple: "/icons/apple-touch-icon.png",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   openGraph: {
-    title: "Admin Dashboard | PCEA Church Kenya",
+    title: "Admin home | LakeTown Butchery",
     description:
-      "Access the PCEA Church Kenya admin portal to manage members, events, and church resources securely.",
-    url: "https://pceachurch.or.ke/dashboard/admin",
-    siteName: "PCEA Church Kenya",
+      "Access the LakeTown Butchery admin portal to manage branches, stock, and operations.",
+    url: "https://admin.laketown.co.ke/admin/dashboard",
+    siteName: "LakeTown Butchery",
     type: "website",
     images: [
       {
         url: "/images/og-admin-dashboard.png",
         width: 1200,
         height: 630,
-        alt: "PCEA Church Kenya Admin Dashboard",
+        alt: "LakeTown Butchery Admin Dashboard",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Admin Dashboard | PCEA Church Kenya",
+    title: "Admin home | LakeTown Butchery",
     description:
-      "Securely manage PCEA Church Kenya operations including members, events, and resources through the admin dashboard.",
+      "Manage LakeTown Butchery operations from the admin dashboard.",
     images: ["/images/og-admin-dashboard.png"],
   },
 };

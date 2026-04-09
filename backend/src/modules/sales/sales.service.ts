@@ -365,7 +365,7 @@ export class SalesService {
     const lines: string[] = [];
     
     // Header
-    lines.push('TOSHA CITY BUTCHERY');
+    lines.push('LAKE TOWN BUTCHERY');
     lines.push('----------------------------');
     lines.push(`SALE #${saleNumber}`);
     lines.push(dateTimeStr);

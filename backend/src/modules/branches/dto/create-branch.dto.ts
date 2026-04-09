@@ -3,7 +3,7 @@ import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-valid
 import { BranchType } from '../entities/branch.entity';
 
 export class CreateBranchDto {
-  @ApiProperty({ example: 'Tosha City Main Butchery' })
+  @ApiProperty({ example: 'Lake Town Main Butchery' })
   @IsString()
   @IsNotEmpty()
   name: string;

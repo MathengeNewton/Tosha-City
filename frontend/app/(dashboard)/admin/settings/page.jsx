@@ -44,7 +44,7 @@ export default function SettingsPage() {
       const response = await apiClient.profile.get();
       const updatedUser = response.data;
       // Update auth context
-      localStorage.setItem("pcea-user", JSON.stringify(updatedUser));
+      localStorage.setItem("laketown-user", JSON.stringify(updatedUser));
       window.location.reload(); // Simple refresh to update context
     } catch (error) {
       console.error("Error updating profile:", error);
