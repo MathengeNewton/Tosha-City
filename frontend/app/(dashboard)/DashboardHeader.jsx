@@ -69,16 +69,6 @@ export default function DashBoardHeader() {
           crumbs.push({ name, href });
         });
       }
-    } else if (segments[0] === "user") {
-      crumbs.push({ name: "Dashboard", href: "/dashboard" });
-      if (segments.length > 1) {
-        segments.slice(1).forEach((seg, i) => {
-          const href = `/user/${segments.slice(1, i + 2).join("/")}`;
-          const name =
-            seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " ");
-          crumbs.push({ name, href });
-        });
-      }
     }
 
     return crumbs;
@@ -166,16 +156,12 @@ export default function DashBoardHeader() {
 
             <div className="py-2">
               <Link
-                href={
-                  userRole === "admin" || userRole === "ADMIN"
-                    ? "/admin/dashboard/profile"
-                    : "/user/dashboard/profile"
-                }
+                href="/admin/settings"
                 className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px]"
                 onClick={() => setIsDropdownOpen(false)}
               >
                 <UserIcon className="w-5 h-5" />
-                My Profile
+                Settings
               </Link>
 
               <button

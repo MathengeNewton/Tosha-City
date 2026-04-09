@@ -26,6 +26,7 @@ import {
   ShareIcon,
   FireIcon,
   PlusCircleIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
@@ -59,7 +60,7 @@ export default function DashboardLayout({ children }) {
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
   ];
 
-  // Admin menu - Full access
+  // Admin on /dashboard/* — operations + management (full)
   const adminMenu = [
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     ...restaurantItems,
@@ -72,18 +73,45 @@ export default function DashboardLayout({ children }) {
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
-    { name: "Branches", href: "/admin/branches", icon: HomeIcon },
+    { name: "Branches", href: "/admin/branches", icon: BuildingOffice2Icon },
     { name: "Users", href: "/admin/users", icon: UserGroupIcon },
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
 
-  const menuItems = isAdmin ? adminMenu : cashierMenu;
+  // Admin on /admin/* — management only (no POS / stock / sales shortcuts)
+  const adminManagementMenu = [
+    { name: "Admin home", href: "/admin/dashboard", icon: HomeIcon },
+    { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
+    { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
+    { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
+    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
+    { name: "Customers", href: "/admin/customers", icon: UserIcon },
+    { name: "Partners", href: "/admin/partners", icon: ShareIcon },
+    { name: "Branches", href: "/admin/branches", icon: BuildingOffice2Icon },
+    { name: "Users", href: "/admin/users", icon: UserGroupIcon },
+    { name: "Settings", href: "/admin/settings", icon: CogIcon },
+    { name: "Store dashboard", href: "/dashboard", icon: ClipboardDocumentListIcon },
+  ];
+
+  const adminUseManagementSidebar =
+    pathname?.startsWith("/admin") ||
+    pathname === "/dashboard/reports" ||
+    pathname?.startsWith("/dashboard/reports/");
+
+  const menuItems =
+    !isAdmin
+      ? cashierMenu
+      : adminUseManagementSidebar
+        ? adminManagementMenu
+        : adminMenu;
   const cashierAllowedAdminPaths = [
     "/admin/products",
     "/admin/recipes",
     "/admin/suppliers",
     "/admin/customers",
     "/admin/partners",
+    "/admin/settings",
   ];
   const isCashierAllowedPath =
     pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
