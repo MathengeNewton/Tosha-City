@@ -1,6 +1,9 @@
+name: laketown
+
 services:
   # 1. The Database
   db:
+    container_name: laketown-db
     image: postgres:15
     restart: always
     environment:
@@ -18,6 +21,7 @@ services:
       retries: 5
 
   backend:
+    image: laketown-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -48,6 +52,7 @@ services:
       retries: 3
 
   frontend:
+    image: laketown-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
