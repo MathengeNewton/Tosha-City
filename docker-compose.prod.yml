@@ -42,7 +42,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       FRONTEND_URL: ${FRONTEND_URL:-https://admin.laketown.co.ke}
     ports:
-      - "4515:3000"  # Expose backend on host port 4515
+      - "${BACKEND_HOST_PORT:-4515}:3000"
     networks:
       - app-network
     healthcheck:
@@ -63,7 +63,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://apis.laketown.co.ke/api}
     ports:
-      - "3015:3000"  # Expose frontend on host port 3015
+      - "${FRONTEND_HOST_PORT:-3015}:3000"
     networks:
       - app-network
     depends_on:

@@ -51,9 +51,10 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       JWT_SECRET: ${JWT_SECRET:-default_secret_key_change_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3015}
+      # CORS: must match the URL users use to open the dashboard (include port if not 80/443)
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${FRONTEND_HOST_PORT:-3015}}
     ports:
-      - "4515:3000"
+      - "${BACKEND_HOST_PORT:-4515}:3000"
     command: npm run start:prod
     networks:
       - app-network
@@ -68,16 +69,17 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4515/api}
+        # If you change BACKEND_HOST_PORT, set NEXT_PUBLIC_API_URL to match (or rebuild after updating .env)
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_HOST_PORT:-4515}/api}
     deploy:
       resources:
         limits: { memory: 1G }
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4515/api}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${BACKEND_HOST_PORT:-4515}/api}
     container_name: laketown-frontend
     restart: unless-stopped
     ports:
-      - "3015:3000"
+      - "${FRONTEND_HOST_PORT:-3015}:3000"
     networks:
       - app-network
     depends_on:
