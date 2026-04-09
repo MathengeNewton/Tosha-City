@@ -34,7 +34,8 @@ export default function DashboardLayout({ children }) {
   const router = useRouter();
   const { hasRole, loading, user } = useAuth();
   const isAdmin = hasRole("admin");
-  const showRestaurant = isAdmin || user?.branch?.type === "PORK_BUTCHERY";
+  // Restaurant / kitchen nav only for cashiers on a pork branch — not for admins
+  const showRestaurant = !isAdmin && user?.branch?.type === "PORK_BUTCHERY";
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -60,13 +61,9 @@ export default function DashboardLayout({ children }) {
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
   ];
 
-  // Admin: one sidebar everywhere — home is /admin/dashboard; ops use /dashboard/* routes (no Recipes; cashiers keep Recipes below)
+  // Admin: management only — no floor ops (stock, sales, kitchen, table orders)
   const adminMenu = [
     { name: "Admin home", href: "/admin/dashboard", icon: HomeIcon },
-    { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
-    ...restaurantItems,
-    { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
-    { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
     { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
     { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
@@ -92,6 +89,21 @@ export default function DashboardLayout({ children }) {
 
   useEffect(() => {
     if (loading) return;
+
+    if (isAdmin && pathname) {
+      const adminOpsBlocked =
+        pathname === "/dashboard" ||
+        pathname.startsWith("/dashboard/stock") ||
+        pathname.startsWith("/dashboard/sales") ||
+        pathname.startsWith("/dashboard/table-orders") ||
+        pathname.startsWith("/dashboard/kitchen") ||
+        pathname.startsWith("/dashboard/restaurant-orders") ||
+        pathname.startsWith("/dashboard/production");
+      if (adminOpsBlocked) {
+        router.replace("/admin/dashboard");
+        return;
+      }
+    }
 
     if (isAdmin === false && pathname) {
       if (pathname === "/dashboard/reports") {
