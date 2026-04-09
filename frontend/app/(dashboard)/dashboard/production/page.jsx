@@ -75,7 +75,10 @@ export default function MorningProductionPage() {
     return (
       <div className="p-6 max-w-lg">
         <p className="text-gray-600">Morning production is set up for pork butchery branches.</p>
-        <Link href="/dashboard" className="text-blue-700 underline mt-3 inline-block">
+        <Link
+          href={isAdmin ? "/admin/dashboard" : "/dashboard"}
+          className="text-blue-700 underline mt-3 inline-block"
+        >
           Back to dashboard
         </Link>
       </div>

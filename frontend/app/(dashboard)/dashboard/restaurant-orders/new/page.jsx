@@ -106,7 +106,10 @@ export default function NewRestaurantOrderPage() {
     return (
       <div className="p-6">
         <p className="text-gray-600">Table orders are only for pork butchery branches.</p>
-        <Link href="/dashboard" className="text-blue-700 underline mt-2 inline-block">
+        <Link
+          href={isAdmin ? "/admin/dashboard" : "/dashboard"}
+          className="text-blue-700 underline mt-2 inline-block"
+        >
           Back
         </Link>
       </div>

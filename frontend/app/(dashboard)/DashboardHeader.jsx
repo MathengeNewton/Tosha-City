@@ -22,6 +22,8 @@ export default function DashBoardHeader() {
   const userName = user?.username || "User";
   const userEmail = user?.email || "";
   const userBranch = user?.branch?.name || (user?.branchId ? `Branch #${user.branchId}` : "Global access");
+  const isAdminUser =
+    user?.roles?.some((r) => (typeof r === "string" ? r : r?.name)?.toLowerCase?.() === "admin") ?? false;
 
   // Optional: Different avatar for regular members
   const getAvatar = () => {
@@ -50,7 +52,10 @@ export default function DashBoardHeader() {
     let crumbs = [];
 
     if (segments[0] === "dashboard") {
-      crumbs.push({ name: "Dashboard", href: "/dashboard" });
+      crumbs.push({
+        name: isAdminUser ? "Admin home" : "Dashboard",
+        href: isAdminUser ? "/admin/dashboard" : "/dashboard",
+      });
       if (segments.length > 1) {
         segments.slice(1).forEach((seg, i) => {
           const href = `/dashboard/${segments.slice(1, i + 2).join("/")}`;
@@ -60,7 +65,7 @@ export default function DashBoardHeader() {
         });
       }
     } else if (segments[0] === "admin" && (userRole === "admin" || userRole === "ADMIN")) {
-      crumbs.push({ name: "Dashboard", href: "/dashboard" });
+      crumbs.push({ name: "Admin home", href: "/admin/dashboard" });
       if (segments.length > 1) {
         segments.slice(1).forEach((seg, i) => {
           const href = `/admin/${segments.slice(1, i + 2).join("/")}`;

@@ -106,12 +106,6 @@ export default function AdminDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/dashboard"
-            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm"
-          >
-            Store dashboard
-          </Link>
-          <Link
             href="/dashboard/reports"
             className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
           >
