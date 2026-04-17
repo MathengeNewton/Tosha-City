@@ -7,6 +7,12 @@ import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportEx
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
 import ProductionTab from "../components/ProductionTab";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
+import {
+  ClipboardDocumentListIcon,
+  InformationCircleIcon,
+  ShareIcon,
+} from "@heroicons/react/24/outline";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -357,9 +363,9 @@ export default function StockManagementPage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading…" />
+      </PageShell>
     );
   }
 
@@ -477,7 +483,7 @@ export default function StockManagementPage() {
     };
 
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
+      <PageShell className="space-y-8">
         <div className="mb-8 flex justify-between items-center">
           <div>
             <button
@@ -642,7 +648,6 @@ export default function StockManagementPage() {
             {activeTab === 'stock-share' && (
               <StockShareTab
                 session={selectedSession}
-                partnerShareEntries={partnerShareEntries}
                 products={products}
                 canManage={canManageEntries}
                 onRefresh={() => loadSessionDetails(selectedSession.id)}
@@ -695,6 +700,7 @@ export default function StockManagementPage() {
                 canManage={canManageEntries}
                 productionRuns={productionRuns}
                 onRefresh={() => loadSessionDetails(selectedSession.id)}
+                variant="embedded"
               />
             )}
             {activeTab === 'closing' && (
@@ -743,28 +749,26 @@ export default function StockManagementPage() {
           </div>
         </div>
 
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-            Stock Management
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Manage stock sessions and entries
-            {(currentSession?.branch?.name || user?.branch?.name) ? ` for ${currentSession?.branch?.name || user?.branch?.name}` : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <PageShell className="space-y-8">
+      <PageHeader
+        title="Stock Management"
+        subtitle={`Manage stock sessions and entries${
+          currentSession?.branch?.name || user?.branch?.name
+            ? ` for ${currentSession?.branch?.name || user?.branch?.name}`
+            : ""
+        }`}
+      >
+        <div className="flex flex-wrap gap-2 items-center">
           {isAdmin && (
             <select
               value={selectedBranchId}
               onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm min-h-[44px]"
+              className="px-4 py-2 border border-gray-300 rounded-md bg-white text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
             >
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
@@ -773,23 +777,24 @@ export default function StockManagementPage() {
               ))}
             </select>
           )}
-          {/* View Toggle */}
-          <div className="flex bg-gray-100 rounded-lg p-1">
+          <div className="flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
             <button
+              type="button"
               onClick={() => setViewMode('list')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
                 viewMode === 'list'
-                  ? 'bg-white text-blue-900 shadow-sm'
+                  ? 'bg-[#0D47A1]/10 text-[#0D47A1] shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               List
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('calendar')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
                 viewMode === 'calendar'
-                  ? 'bg-white text-blue-900 shadow-sm'
+                  ? 'bg-[#0D47A1]/10 text-[#0D47A1] shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -798,6 +803,7 @@ export default function StockManagementPage() {
           </div>
           {!currentSession ? (
             <button
+              type="button"
               onClick={handleOpenSession}
               className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
             >
@@ -805,6 +811,7 @@ export default function StockManagementPage() {
             </button>
           ) : currentSession.status === 'OPEN' ? (
             <button
+              type="button"
               onClick={handleCloseSession}
               className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors text-sm min-h-[44px]"
             >
@@ -812,7 +819,7 @@ export default function StockManagementPage() {
             </button>
           ) : null}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Current Open Session Banner */}
       {currentSession && currentSession.status === 'OPEN' && (
@@ -867,7 +874,7 @@ export default function StockManagementPage() {
       )}
 
 
-    </div>
+    </PageShell>
   );
 }
 
@@ -1529,13 +1536,16 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
   );
 }
 
+const stockShareInputClass =
+  "w-full min-h-[44px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#0D47A1] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/25";
+
 // Stock Share tab: record and list shares for this session (from incoming stock)
-function StockShareTab({ session, partnerShareEntries, products, canManage, onRefresh }) {
+function StockShareTab({ session, products, canManage, onRefresh }) {
   const [shares, setShares] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ partnerId: '', productId: '', quantity: '', unit: 'kg', notes: '' });
+  const [form, setForm] = useState({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -1553,40 +1563,42 @@ function StockShareTab({ session, partnerShareEntries, products, canManage, onRe
           setPartners(partnersRes.data || []);
         }
       } catch (e) {
-        if (!cancelled) toast.error('Failed to load stock share data');
+        if (!cancelled) toast.error("Failed to load stock share data");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session?.id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const qty = parseFloat(form.quantity);
     if (!form.partnerId || !form.productId || isNaN(qty) || qty <= 0) {
-      toast.error('Select partner, product, and enter a valid quantity.');
+      toast.error("Select partner, product, and enter a valid quantity.");
       return;
     }
-    const product = products.find(p => p.id === parseInt(form.productId));
+    const product = products.find((p) => p.id === parseInt(form.productId, 10));
     setSubmitting(true);
     try {
       await apiClient.stockShare.create({
-        partnerId: parseInt(form.partnerId),
-        productId: parseInt(form.productId),
+        partnerId: parseInt(form.partnerId, 10),
+        productId: parseInt(form.productId, 10),
         sessionId: session.id,
         quantity: qty,
-        unit: form.unit || product?.unit || 'kg',
+        unit: form.unit || product?.unit || "kg",
         notes: form.notes || undefined,
       });
-      toast.success('Stock share recorded');
+      toast.success("Stock share recorded");
       setShowForm(false);
-      setForm({ partnerId: '', productId: '', quantity: '', unit: 'kg', notes: '' });
+      setForm({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
       onRefresh?.();
       const res = await apiClient.stockShare.getAll({ sessionId: session.id });
       setShares(res.data || []);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to record share');
+      toast.error(err.response?.data?.message || "Failed to record share");
     } finally {
       setSubmitting(false);
     }
@@ -1595,145 +1607,280 @@ function StockShareTab({ session, partnerShareEntries, products, canManage, onRe
   const handleMarkPaid = async (id) => {
     try {
       await apiClient.stockShare.markPaid(id);
-      toast.success('Marked as paid');
+      toast.success("Marked as paid");
       onRefresh?.();
       const res = await apiClient.stockShare.getAll({ sessionId: session.id });
       setShares(res.data || []);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update');
+      toast.error(err.response?.data?.message || "Failed to update");
     }
   };
 
   if (!session) return null;
-  const isOpen = session.status === 'OPEN';
+  const isOpen = session.status === "OPEN";
 
   return (
     <div className="space-y-6">
-      <p className="text-gray-600 text-sm">
-        Share part of today’s incoming stock with partners. Recorded shares are deducted from available session stock.
+      <p className="text-sm text-gray-600">
+        Share part of today&apos;s incoming stock with partners. Recorded shares are{" "}
+        <strong className="text-gray-800">deducted</strong> from available session stock.
       </p>
-      {canManage && isOpen && (
-        <div>
-          {!showForm ? (
+
+      <details className="group rounded-xl border border-gray-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 marker:hidden [&::-webkit-details-marker]:hidden">
+          <InformationCircleIcon className="h-5 w-5 shrink-0 text-[#0D47A1]" aria-hidden />
+          <span className="min-w-0 flex-1">How stock share works</span>
+          <span className="shrink-0 text-xs font-normal text-gray-500 group-open:hidden">Show</span>
+          <span className="hidden shrink-0 text-xs font-normal text-gray-500 group-open:inline">Hide</span>
+        </summary>
+        <div className="border-t border-gray-100 px-4 pb-4 pt-0 text-sm text-gray-700">
+          <ul className="mt-3 list-none space-y-2">
+            <li className="flex gap-2">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-800">
+                −
+              </span>
+              <span>
+                The quantity you record is removed from <strong className="text-gray-900">this session&apos;s</strong>{" "}
+                available stock for that product.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0D47A1]/10 text-xs font-bold text-[#0D47A1]">
+                i
+              </span>
+              <span>
+                Add partners under <strong className="text-gray-900">Admin → Partners</strong> if the dropdown is
+                empty.
+              </span>
+            </li>
+          </ul>
+        </div>
+      </details>
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-1 border-b border-gray-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D47A1]/10">
+              <ShareIcon className="h-6 w-6 text-[#0D47A1]" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Record stock share</h2>
+              <p className="text-sm text-gray-600">Log meat or product given to a partner from this session.</p>
+            </div>
+          </div>
+          {canManage && isOpen && !showForm && (
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] text-sm"
+              className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1e88b5] sm:mt-0 sm:w-auto"
             >
-              Record stock share
+              <ClipboardDocumentListIcon className="h-5 w-5" aria-hidden />
+              Start recording
             </button>
-          ) : (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-w-md space-y-3">
-              <h4 className="font-medium text-gray-900">Record stock share</h4>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Partner *</label>
-                  <select
-                    value={form.partnerId}
-                    onChange={(e) => setForm({ ...form, partnerId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  >
-                    <option value="">Select partner</option>
-                    {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Product *</label>
-                  <select
-                    value={form.productId}
-                    onChange={(e) => {
-                      const p = products.find(x => x.id === parseInt(e.target.value));
-                      setForm({ ...form, productId: e.target.value, unit: p?.unit || 'kg' });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  >
-                    <option value="">Select product</option>
-                    {products.filter(p => p.isActive !== false).map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">Quantity *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={form.quantity}
-                      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">Unit</label>
-                    <input
-                      type="text"
-                      value={form.unit}
-                      onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Notes</label>
-                  <input
-                    type="text"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={submitting} className="px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-[#1e88b5] disabled:opacity-50">
-                    {submitting ? 'Saving...' : 'Record share'}
-                  </button>
-                </div>
-              </form>
-            </div>
           )}
         </div>
-      )}
-      <div>
-        <h4 className="font-medium text-gray-900 mb-2">Shares for this session</h4>
+
+        <div className="pt-4">
+          {!isOpen && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              This session is <strong>not open</strong>. Stock share can only be recorded while the session status is{" "}
+              <strong>Open</strong>.
+            </div>
+          )}
+
+          {isOpen && !canManage && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+              You don&apos;t have permission to record stock share for this branch.
+            </div>
+          )}
+
+          {canManage && isOpen && showForm && (
+            <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-4">
+              {partners.length === 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  No active partners found. Add partners under Admin → Partners first.
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Partner <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={form.partnerId}
+                  onChange={(e) => setForm({ ...form, partnerId: e.target.value })}
+                  className={stockShareInputClass}
+                  required
+                >
+                  <option value="">Select partner</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Product <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={form.productId}
+                  onChange={(e) => {
+                    const p = products.find((x) => x.id === parseInt(e.target.value, 10));
+                    setForm({ ...form, productId: e.target.value, unit: p?.unit || "kg" });
+                  }}
+                  className={stockShareInputClass}
+                  required
+                >
+                  <option value="">Select product</option>
+                  {products
+                    .filter((p) => p.isActive !== false)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.unit})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Quantity <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={form.quantity}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                    className={stockShareInputClass}
+                    placeholder="e.g. 5.5"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Unit</label>
+                  <input
+                    type="text"
+                    value={form.unit}
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                    className={stockShareInputClass}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className={`${stockShareInputClass} min-h-[100px] resize-y`}
+                  rows={3}
+                  placeholder="Optional — e.g. agreed with partner by phone"
+                />
+              </div>
+              <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setForm({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
+                  }}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || partners.length === 0}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md bg-blue-900 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1e88b5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? "Saving…" : "Record share"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {canManage && isOpen && !showForm && (
+            <p className="text-center text-sm text-gray-500 sm:text-left">
+              Tap <strong className="text-gray-700">Start recording</strong> when you are ready to log a share.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <h2 className="text-base font-semibold text-gray-900">Shares for this session</h2>
+          <p className="text-xs text-gray-500">Each row is one recorded share.</p>
+        </div>
         {loading ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="px-4 py-8 text-center text-sm text-gray-500">Loading…</p>
+        ) : shares.length === 0 ? (
+          <div className="mx-4 my-6 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-4 py-8 text-center">
+            <ClipboardDocumentListIcon className="mx-auto h-10 w-10 text-gray-300" aria-hidden />
+            <p className="mt-2 text-sm font-medium text-gray-800">No stock shares yet</p>
+            <p className="mt-1 text-sm text-gray-600">
+              {canManage && isOpen
+                ? "When you record a share, it will appear here."
+                : "Shares for this session will show up here once recorded."}
+            </p>
+          </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
-                  {canManage && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Partner
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Product
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Qty
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Paid
+                  </th>
+                  {canManage && (
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {shares.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No stock shares recorded for this session yet.</td></tr>
-                ) : (
-                  shares.map(s => (
-                    <tr key={s.id}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.partner?.name || '–'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{s.product?.name || '–'}</td>
-                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(s.quantity).toFixed(2)} {s.unit}</td>
-                      <td className="px-4 py-3"><span className={s.paid ? 'text-green-600' : 'text-amber-600'}>{s.paid ? 'Yes' : 'No'}</span></td>
-                      {canManage && (
-                        <td className="px-4 py-3">
-                          {!s.paid && <button type="button" onClick={() => handleMarkPaid(s.id)} className="text-blue-600 hover:underline text-sm">Mark paid</button>}
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {shares.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-50/80">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.partner?.name || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{s.product?.name || "—"}</td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-900">
+                      {parseFloat(s.quantity).toFixed(2)} {s.unit}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          s.paid ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {s.paid ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    {canManage && (
+                      <td className="px-4 py-3 text-sm">
+                        {!s.paid && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkPaid(s.id)}
+                            className="font-medium text-blue-900 hover:text-[#1e88b5] hover:underline"
+                          >
+                            Mark paid
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

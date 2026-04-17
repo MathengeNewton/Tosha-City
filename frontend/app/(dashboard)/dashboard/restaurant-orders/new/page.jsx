@@ -7,6 +7,7 @@ import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import ProductPicker from "../../../../../components/restaurant/ProductPicker";
+import { PageShell, PageHeader } from "../../../components/shell";
 
 export default function NewRestaurantOrderPage() {
   const router = useRouter();
@@ -114,26 +115,26 @@ export default function NewRestaurantOrderPage() {
 
   if (!allowed && !isAdmin) {
     return (
-      <div className="p-6">
-        <p className="text-slate-600">Table orders are only for pork butchery branches.</p>
-        <Link
-          href={isAdmin ? "/admin/dashboard" : "/dashboard"}
-          className="text-emerald-800 underline mt-2 inline-block font-medium"
-        >
-          Back
-        </Link>
-      </div>
+      <PageShell>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm max-w-lg">
+          <p className="text-gray-600">Table orders are only for pork butchery branches.</p>
+          <Link
+            href={isAdmin ? "/admin/dashboard" : "/dashboard"}
+            className="text-blue-900 hover:text-[#1e88b5] underline mt-2 inline-block font-medium"
+          >
+            Back
+          </Link>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="max-w-2xl sm:max-w-3xl mx-auto px-3 sm:px-4 pb-36 pt-4 space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">New table order</h1>
-        <p className="text-slate-600 text-sm mt-1">
-          Sends a ticket to the kitchen for today&apos;s session. Add dishes below — table number helps wait staff.
-        </p>
-      </div>
+    <PageShell className="max-w-2xl sm:max-w-3xl space-y-5 pb-36 pt-2">
+      <PageHeader
+        title="New table order"
+        subtitle={`Sends a ticket to the kitchen for today's session. Add dishes below — table number helps wait staff.`}
+      />
 
       {isAdmin && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -276,6 +277,6 @@ export default function NewRestaurantOrderPage() {
           </Link>
         </div>
       </form>
-    </div>
+    </PageShell>
   );
 }

@@ -10,6 +10,7 @@ import {
   ShieldCheckIcon,
   GlobeAltIcon,
 } from "@heroicons/react/24/outline";
+import { PageShell, PageHeader } from "../../components/shell";
 
 export default function SettingsPage() {
   const { user, login } = useAuth();
@@ -92,16 +93,8 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-          Settings
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Manage your account settings and preferences
-        </p>
-      </div>
+    <PageShell className="space-y-6">
+      <PageHeader title="Settings" subtitle="Manage your account settings and preferences" />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar */}
@@ -114,9 +107,9 @@ export default function SettingsPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors min-h-[44px] ${
                       activeTab === tab.id
-                        ? "bg-blue-50 text-blue-900 font-semibold"
+                        ? "bg-[#0D47A1]/10 text-[#0D47A1] font-semibold"
                         : "text-gray-700 hover:bg-gray-50"
                     }`}
                   >
@@ -325,7 +318,7 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

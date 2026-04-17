@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
+import { PageShell, PageHeader } from "../../components/shell";
 
 export default function PartnersPage() {
   const { hasRole } = useAuth();
@@ -197,13 +198,11 @@ export default function PartnersPage() {
   const activePartners = partners.filter((p) => p.isActive !== false);
 
   return (
-    <div className="w-full lg:p-2 space-y-6 bg-gray-50 min-h-screen">
-      <div>
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Partners</h1>
-        <p className="text-gray-600 mt-1 text-sm sm:text-base">
-          People you share meat with – track what has been shared and what has been paid
-        </p>
-      </div>
+    <PageShell className="space-y-6">
+      <PageHeader
+        title="Partners"
+        subtitle="People you share meat with – track what has been shared and what has been paid"
+      />
 
       <div className="border-b border-gray-200">
         <nav className="flex -mb-px">
@@ -591,6 +590,6 @@ export default function PartnersPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

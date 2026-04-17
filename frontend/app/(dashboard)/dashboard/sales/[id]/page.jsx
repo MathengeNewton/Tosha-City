@@ -6,6 +6,7 @@ import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import ReceiptView from "../ReceiptView";
 import { useAuth } from "../../../../../contexts/AuthContext";
+import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
 
 export default function SaleDetailsPage() {
   const router = useRouter();
@@ -180,30 +181,24 @@ export default function SaleDetailsPage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading sale details...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading sale details…" />
+      </PageShell>
     );
   }
 
   if (!sale) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
+      <PageShell>
         <p className="text-gray-600">Sale not found</p>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
+    <PageShell className="space-y-4 sm:space-y-8">
       {/* Header and actions - hidden when printing */}
-      <div className="no-print mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-            Sale Details
-          </h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">Sale #{sale.saleNumber}</p>
-        </div>
+      <PageHeader className="no-print" title="Sale Details" subtitle={`Sale #${sale.saleNumber}`}>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {sale.paymentStatus === "PAID" && (
             <button
@@ -238,7 +233,7 @@ export default function SaleDetailsPage() {
             </button>
           )}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Products in this sale – pill list, scrollable */}
       {sale.items?.length > 0 && (
@@ -382,7 +377,7 @@ export default function SaleDetailsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

@@ -11,7 +11,7 @@ import {
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Link from "next/link";
-import { useAuth } from "../../../contexts/AuthContext";
+import { useAuth, isKitchenOnlyAccount } from "../../../contexts/AuthContext";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -99,7 +99,11 @@ export default function LoginForm() {
         const isAdminUser = roles.some(
           (r) => (typeof r === "string" ? r : r?.name) === "admin"
         );
-        const redirectPath = isAdminUser ? "/admin/dashboard" : "/dashboard";
+        const redirectPath = isAdminUser
+          ? "/admin/dashboard"
+          : isKitchenOnlyAccount(result.user)
+            ? "/dashboard/kitchen"
+            : "/dashboard";
 
         // Redirect after successful login
         setTimeout(() => {

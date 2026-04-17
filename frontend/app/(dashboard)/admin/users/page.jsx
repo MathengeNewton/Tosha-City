@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -230,22 +231,15 @@ const UsersPage = () => {
 
   if (loading) {
     return (
-      <div className="w-full space-y-8 bg-gray-50 min-h-screen p-6 flex items-center justify-center">
-        <div className="text-gray-600">Loading users...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading users…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full space-y-8 bg-gray-50 min-h-screen p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-          Users Management
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Manage users and roles
-        </p>
-      </div>
+    <PageShell className="space-y-8">
+      <PageHeader title="Users Management" subtitle="Manage users and roles" />
 
       {/* Filter Section */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
@@ -256,7 +250,7 @@ const UsersPage = () => {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/40"
             />
           </div>
           <div>
@@ -265,7 +259,7 @@ const UsersPage = () => {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/40"
             />
           </div>
         </div>
@@ -481,7 +475,7 @@ const UsersPage = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 

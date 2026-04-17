@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import ProductPicker from "../../../../components/restaurant/ProductPicker";
+import { PageShell, PageHeader } from "../../components/shell";
 
 const fmtKes = (n) =>
   `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} KES`;
@@ -18,7 +19,10 @@ function orderStatusBadge(status) {
   return { label: status, sub: "", pill: "bg-slate-200 text-slate-700" };
 }
 
-function lineStatusLabel(st) {
+function lineStatusLabel(st, line) {
+  if (st === "QUEUED" && line?.product?.category === "CONSUMABLE") {
+    return "Counter / no cooking";
+  }
   const m = {
     QUEUED: "Waiting to cook",
     COOKING: "Cooking",
@@ -27,6 +31,27 @@ function lineStatusLabel(st) {
   };
   return m[st] || st;
 }
+
+function lineStatusPillClass(st, line) {
+  switch (st) {
+    case "QUEUED":
+      if (line?.product?.category === "CONSUMABLE") {
+        return "bg-teal-100 text-teal-900 ring-1 ring-teal-200/80";
+      }
+      return "bg-amber-100 text-amber-900 ring-1 ring-amber-200/80";
+    case "COOKING":
+      return "bg-blue-100 text-blue-900 ring-1 ring-blue-200/80";
+    case "READY":
+      return "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200/80";
+    case "SERVED":
+      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200/80";
+    default:
+      return "bg-gray-100 text-gray-700 ring-1 ring-gray-200/80";
+  }
+}
+
+const orderModalField =
+  "w-full min-h-[44px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#0D47A1] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/25";
 
 function orderLineSummary(order) {
   const lines = order?.lines || [];
@@ -297,28 +322,28 @@ export default function TableOrdersPage() {
 
   if (!porkOnly && !isAdmin) {
     return (
-      <div className="p-6">
-        <p className="text-gray-600">Table orders are only for pork butchery branches.</p>
-      </div>
+      <PageShell>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm max-w-lg">
+          <p className="text-gray-600">Table orders are only for pork butchery branches.</p>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="max-w-2xl sm:max-w-3xl mx-auto w-full min-h-[70vh] pb-28 px-3 sm:px-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between pt-2">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Table orders</h1>
-          <p className="text-slate-600 text-sm mt-0.5">
-            Kitchen tickets for this session — tap a card to add items, bill, or pay.
-          </p>
-        </div>
+    <PageShell className="max-w-2xl sm:max-w-3xl pb-28 space-y-4">
+      <PageHeader
+        className="pt-2"
+        title="Table orders"
+        subtitle="Kitchen tickets for this session — tap a card to add items, bill, or pay."
+      >
         <Link
           href="/dashboard/restaurant-orders/new"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-emerald-700 min-h-[48px] shrink-0"
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 text-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-emerald-700 min-h-[48px] shrink-0"
         >
           + New order
         </Link>
-      </div>
+      </PageHeader>
 
       {isAdmin && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -441,126 +466,156 @@ export default function TableOrdersPage() {
             aria-hidden
             onClick={() => setDetailId(null)}
           />
-          <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white shadow-xl border border-slate-200">
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-white px-4 py-3">
-              <h2 className="text-lg font-bold text-slate-900 truncate">
-                {detail?.orderNumber || "Order"}
-              </h2>
+          <div className="relative flex max-h-[92vh] w-full max-w-2xl flex-col rounded-t-2xl border border-gray-200 bg-white shadow-xl sm:max-h-[88vh] sm:rounded-2xl">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-bold text-gray-900">{detail?.orderNumber || "Order"}</h2>
+                <p className="text-xs text-gray-500">Table, dishes, billing — scroll sections below.</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setDetailId(null)}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 min-h-[44px]"
+                className="shrink-0 rounded-md px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 min-h-[44px]"
               >
                 Close
               </button>
             </div>
 
-            <div className="p-4 space-y-6 pb-10">
-              {detailLoading && <p className="text-slate-500">Loading…</p>}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              {detailLoading && <p className="text-center text-sm text-gray-500">Loading…</p>}
 
               {!detailLoading && detail?.status === "OPEN" && (
-                <>
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Table & staff</p>
-                    <label className="block text-sm text-slate-700">Table / label</label>
-                    <input
-                      value={metaTable}
-                      onChange={(e) => setMetaTable(e.target.value)}
-                      className="w-full border rounded-xl px-3 py-3 text-base min-h-[48px]"
-                      placeholder="e.g. 4"
-                    />
-                    <label className="block text-sm text-slate-700">Notes</label>
-                    <textarea
-                      value={metaNotes}
-                      onChange={(e) => setMetaNotes(e.target.value)}
-                      rows={2}
-                      className="w-full border rounded-xl px-3 py-2 text-base"
-                      placeholder="Optional"
-                    />
-                    <label className="block text-sm text-slate-700">Staff</label>
-                    <select
-                      value={metaStaff}
-                      onChange={(e) => setMetaStaff(e.target.value)}
-                      className="w-full border rounded-xl px-3 py-3 text-base min-h-[48px]"
-                    >
-                      <option value="">— None —</option>
-                      {staffOptions.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.username}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={saveMeta}
-                      className="w-full rounded-xl bg-slate-900 text-white py-3 text-sm font-semibold min-h-[48px] hover:bg-slate-800"
-                    >
-                      Save details
-                    </button>
+                <div className="space-y-4 pb-2">
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900">Table & notes</h3>
+                        <p className="text-xs text-gray-500">Who is serving and table label — save when you change them.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={saveMeta}
+                        className="inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-md bg-blue-900 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#1e88b5] sm:text-sm"
+                      >
+                        Save
+                      </button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="sm:col-span-1">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Table / label</label>
+                        <input
+                          value={metaTable}
+                          onChange={(e) => setMetaTable(e.target.value)}
+                          className={orderModalField}
+                          placeholder="e.g. 4, Counter"
+                        />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Staff</label>
+                        <select
+                          value={metaStaff}
+                          onChange={(e) => setMetaStaff(e.target.value)}
+                          className={orderModalField}
+                        >
+                          <option value="">— None —</option>
+                          {staffOptions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.username}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Order notes</label>
+                        <textarea
+                          value={metaNotes}
+                          onChange={(e) => setMetaNotes(e.target.value)}
+                          rows={2}
+                          className={`${orderModalField} min-h-[80px] resize-y py-2`}
+                          placeholder="Optional — visible to kitchen"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Lines</p>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/40 p-4 shadow-sm">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-gray-900">Dishes on this ticket</h3>
+                      <span className="text-xs text-gray-500">{(detail.lines || []).length} line(s)</span>
+                    </div>
                     <ul className="space-y-3">
                       {(detail.lines || []).map((line) => {
                         const queued = line.status === "QUEUED";
                         return (
-                          <li key={line.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-                            <div className="font-medium text-slate-900">{line.product?.name}</div>
-                            <div className="text-xs text-slate-600 mt-0.5 font-medium">{lineStatusLabel(line.status)}</div>
+                          <li
+                            key={line.id}
+                            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <p className="font-medium text-gray-900">{line.product?.name}</p>
+                              <span
+                                className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${lineStatusPillClass(line.status, line)}`}
+                              >
+                                {lineStatusLabel(line.status, line)}
+                              </span>
+                            </div>
                             {queued ? (
-                              <div className="mt-2 grid grid-cols-2 gap-2">
-                                <div>
-                                  <label className="text-xs text-slate-600">Qty</label>
-                                  <input
-                                    type="number"
-                                    min="0.01"
-                                    step="any"
-                                    defaultValue={line.quantity}
-                                    id={`line-qty-${line.id}`}
-                                    className="w-full border rounded-lg px-2 py-2 text-sm"
-                                  />
+                              <div className="mt-3 space-y-3">
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-12 sm:items-end">
+                                  <div className="col-span-1 sm:col-span-3">
+                                    <label className="mb-1 block text-xs font-medium text-gray-600">Qty</label>
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="any"
+                                      defaultValue={line.quantity}
+                                      id={`line-qty-${line.id}`}
+                                      className={orderModalField}
+                                    />
+                                  </div>
+                                  <div className="col-span-1 sm:col-span-4">
+                                    <label className="mb-1 block text-xs font-medium text-gray-600">Unit (KES)</label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      defaultValue={line.unitPrice}
+                                      id={`line-price-${line.id}`}
+                                      className={orderModalField}
+                                    />
+                                  </div>
+                                  <div className="col-span-2 sm:col-span-5">
+                                    <label className="mb-1 block text-xs font-medium text-gray-600">Line notes</label>
+                                    <input
+                                      defaultValue={line.notes || ""}
+                                      id={`line-notes-${line.id}`}
+                                      className={orderModalField}
+                                      placeholder="Optional"
+                                    />
+                                  </div>
                                 </div>
-                                <div>
-                                  <label className="text-xs text-slate-600">Unit (KES)</label>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="any"
-                                    defaultValue={line.unitPrice}
-                                    id={`line-price-${line.id}`}
-                                    className="w-full border rounded-lg px-2 py-2 text-sm"
-                                  />
-                                </div>
-                                <div className="col-span-2">
-                                  <label className="text-xs text-slate-600">Notes</label>
-                                  <input
-                                    defaultValue={line.notes || ""}
-                                    id={`line-notes-${line.id}`}
-                                    className="w-full border rounded-lg px-2 py-2 text-sm"
-                                  />
-                                </div>
-                                <div className="col-span-2 flex gap-2">
+                                <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
                                   <button
                                     type="button"
                                     onClick={() => updateQueuedLine(line)}
-                                    className="flex-1 rounded-lg bg-white border py-2 text-sm font-medium min-h-[44px]"
+                                    className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                                   >
                                     Update line
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => removeLine(line.id)}
-                                    className="rounded-lg px-3 text-sm text-red-600 min-h-[44px]"
+                                    className="min-h-[40px] px-2 text-sm font-medium text-red-600 hover:underline"
                                   >
                                     Remove
                                   </button>
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-sm text-slate-700 mt-1">
-                                × {line.quantity} @ {fmtKes(line.unitPrice)}
-                              </div>
+                              <p className="mt-2 text-sm text-gray-600">
+                                × <span className="font-medium tabular-nums">{line.quantity}</span> @{" "}
+                                {fmtKes(line.unitPrice)}
+                              </p>
                             )}
                           </li>
                         );
@@ -568,99 +623,107 @@ export default function TableOrdersPage() {
                     </ul>
                   </div>
 
-                  <div className="rounded-xl border border-dashed border-slate-200 p-3 space-y-3 bg-slate-50/30">
-                    <p className="text-sm font-medium text-slate-800">Add item</p>
-                    <ProductPicker
-                      products={products}
-                      value={addProductId}
-                      onChange={setAddProductId}
-                      idPrefix="add-line"
-                    />
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="any"
-                        value={addQty}
-                        onChange={(e) => setAddQty(e.target.value)}
-                        className="w-24 border rounded-xl px-2 py-3 text-base"
+                  <details className="group rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-gray-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <span className="flex items-center justify-between gap-2">
+                        <span>Add another dish</span>
+                        <span className="text-xs font-normal text-gray-500 group-open:hidden">Expand</span>
+                        <span className="hidden text-xs font-normal text-gray-500 group-open:inline">Collapse</span>
+                      </span>
+                    </summary>
+                    <div className="space-y-3 border-t border-gray-100 px-4 pb-4 pt-2">
+                      <ProductPicker
+                        products={products}
+                        value={addProductId}
+                        onChange={setAddProductId}
+                        idPrefix="add-line"
                       />
-                      <input
-                        value={addNotes}
-                        onChange={(e) => setAddNotes(e.target.value)}
-                        placeholder="Line notes"
-                        className="flex-1 border rounded-xl px-3 py-3 text-base"
-                      />
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="any"
+                          value={addQty}
+                          onChange={(e) => setAddQty(e.target.value)}
+                          className={`${orderModalField} w-24 shrink-0`}
+                        />
+                        <input
+                          value={addNotes}
+                          onChange={(e) => setAddNotes(e.target.value)}
+                          placeholder="Line notes"
+                          className={`${orderModalField} min-w-0 flex-1`}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addLines}
+                        disabled={!addProductId}
+                        className="w-full rounded-md border-2 border-emerald-600 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-40 min-h-[44px]"
+                      >
+                        Add to order
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={addLines}
-                      disabled={!addProductId}
-                      className="w-full rounded-xl border-2 border-emerald-600 text-emerald-700 py-3 font-semibold min-h-[48px] disabled:opacity-40"
-                    >
-                      Add to order
-                    </button>
-                  </div>
+                  </details>
 
-                  <div className="rounded-xl bg-slate-900 text-white p-4 space-y-3">
-                    <p className="text-sm font-semibold">Bill (creates sale)</p>
-                    <select
-                      value={billMethod}
-                      onChange={(e) => setBillMethod(e.target.value)}
-                      className="w-full rounded-lg px-3 py-3 text-slate-900 min-h-[48px]"
-                    >
-                      <option value="CASH">Cash</option>
-                      <option value="MPESA">M-Pesa</option>
-                      <option value="CREDIT">Credit</option>
-                    </select>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={billIncomplete}
-                        onChange={(e) => setBillIncomplete(e.target.checked)}
-                        className="h-5 w-5"
-                      />
-                      Bill before all lines served (rush / pay first)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={bill}
-                      className="w-full rounded-xl bg-white text-slate-900 py-3 font-bold min-h-[48px]"
-                    >
-                      Create bill
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={voidOrder}
-                    className="w-full text-red-600 py-2 text-sm font-medium"
-                  >
-                    Void order
-                  </button>
-                </>
+                  <details className="group rounded-xl border border-gray-900 bg-gray-900 text-white shadow-sm">
+                    <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+                      <span className="flex items-center justify-between gap-2">
+                        <span>Bill customer (creates sale)</span>
+                        <span className="text-xs font-normal text-white/70 group-open:hidden">Expand</span>
+                        <span className="hidden text-xs font-normal text-white/70 group-open:inline">Collapse</span>
+                      </span>
+                    </summary>
+                    <div className="space-y-3 border-t border-white/10 px-4 pb-4 pt-3">
+                      <select
+                        value={billMethod}
+                        onChange={(e) => setBillMethod(e.target.value)}
+                        className="w-full min-h-[44px] rounded-md border-0 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm"
+                      >
+                        <option value="CASH">Cash</option>
+                        <option value="MPESA">M-Pesa</option>
+                        <option value="CREDIT">Credit</option>
+                      </select>
+                      <label className="flex items-start gap-2 text-sm text-white/90">
+                        <input
+                          type="checkbox"
+                          checked={billIncomplete}
+                          onChange={(e) => setBillIncomplete(e.target.checked)}
+                          className="mt-1 h-4 w-4 shrink-0 rounded border-white/40"
+                        />
+                        <span>Bill before all lines served (rush / pay first)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={bill}
+                        className="w-full rounded-md bg-white py-2.5 text-sm font-bold text-gray-900 min-h-[44px] hover:bg-gray-100"
+                      >
+                        Create bill
+                      </button>
+                    </div>
+                  </details>
+                </div>
               )}
 
               {!detailLoading && detail?.status === "BILLED" && detail.linkedSale && (
                 <div className="space-y-4">
-                  <div className="rounded-xl border p-4">
-                    <p className="text-sm text-slate-600">Sale</p>
-                    <p className="text-xl font-bold text-slate-900">{detail.linkedSale.saleNumber}</p>
-                    <p className="text-slate-700 mt-1">Total {fmtKes(detail.linkedSale.totalAmount)}</p>
-                    <p className="text-sm mt-2">
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Sale</p>
+                    <p className="text-xl font-bold text-gray-900">{detail.linkedSale.saleNumber}</p>
+                    <p className="mt-1 text-gray-700">Total {fmtKes(detail.linkedSale.totalAmount)}</p>
+                    <p className="mt-2 text-sm text-gray-600">
                       Payment:{" "}
-                      <span className="font-semibold">{detail.linkedSale.paymentStatus}</span>
+                      <span className="font-semibold text-gray-900">{detail.linkedSale.paymentStatus}</span>
                       {detail.linkedSale.paymentMethod ? ` · ${detail.linkedSale.paymentMethod}` : ""}
                     </p>
                   </div>
 
                   {detail.linkedSale.paymentStatus === "PENDING" && !detail.linkedSale.payment && (
-                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
+                    <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                       <p className="font-semibold text-emerald-900">Record payment</p>
                       <select
                         value={payMethod}
                         onChange={(e) => setPayMethod(e.target.value)}
-                        className="w-full border rounded-xl px-3 py-3 min-h-[48px]"
+                        className={orderModalField}
                       >
                         <option value="CASH">Cash</option>
                         <option value="MPESA">M-Pesa</option>
@@ -670,13 +733,13 @@ export default function TableOrdersPage() {
                           value={payMpesa}
                           onChange={(e) => setPayMpesa(e.target.value)}
                           placeholder="M-Pesa ref"
-                          className="w-full border rounded-xl px-3 py-3 min-h-[48px]"
+                          className={orderModalField}
                         />
                       )}
                       <button
                         type="button"
                         onClick={recordPayment}
-                        className="w-full rounded-xl bg-emerald-600 text-white py-3 font-bold min-h-[48px] hover:bg-emerald-700"
+                        className="w-full rounded-md bg-emerald-600 py-2.5 text-sm font-bold text-white min-h-[44px] hover:bg-emerald-700"
                       >
                         Confirm payment
                       </button>
@@ -684,12 +747,12 @@ export default function TableOrdersPage() {
                   )}
 
                   {detail.linkedSale.paymentStatus === "PAID" && (
-                    <p className="text-center text-emerald-700 font-semibold py-2">Paid</p>
+                    <p className="py-2 text-center text-sm font-semibold text-emerald-700">Paid</p>
                   )}
 
                   <Link
                     href={`/dashboard/sales/${detail.linkedSale.id}`}
-                    className="block text-center text-blue-700 underline py-2"
+                    className="block rounded-md py-2 text-center text-sm font-medium text-blue-900 hover:text-[#1e88b5] hover:underline"
                   >
                     Open sale #{detail.linkedSale.id}
                   </Link>
@@ -697,9 +760,21 @@ export default function TableOrdersPage() {
               )}
 
               {!detailLoading && detail?.status === "VOID" && (
-                <p className="text-slate-600 text-center py-6">This order was voided.</p>
+                <p className="py-8 text-center text-sm text-gray-600">This order was voided.</p>
               )}
             </div>
+
+            {!detailLoading && detail?.status === "OPEN" && (
+              <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={voidOrder}
+                  className="w-full rounded-md py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                >
+                  Void entire order…
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -711,6 +786,6 @@ export default function TableOrdersPage() {
       >
         +
       </Link>
-    </div>
+    </PageShell>
   );
 }

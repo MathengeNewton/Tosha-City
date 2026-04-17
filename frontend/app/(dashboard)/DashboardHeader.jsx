@@ -8,12 +8,13 @@ import {
   ChevronDownIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth, isKitchenOnlyAccount } from "../../contexts/AuthContext";
 
 export default function DashBoardHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const kitchenOnlyUser = isKitchenOnlyAccount(user);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -52,6 +53,10 @@ export default function DashBoardHeader() {
     let crumbs = [];
 
     if (segments[0] === "dashboard") {
+      if (kitchenOnlyUser) {
+        crumbs.push({ name: "Kitchen", href: "/dashboard/kitchen" });
+        return crumbs;
+      }
       crumbs.push({
         name: isAdminUser ? "Admin home" : "Dashboard",
         href: isAdminUser ? "/admin/dashboard" : "/dashboard",
@@ -160,14 +165,16 @@ export default function DashBoardHeader() {
             </div>
 
             <div className="py-2">
-              <Link
-                href="/admin/settings"
-                className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px]"
-                onClick={() => setIsDropdownOpen(false)}
-              >
-                <UserIcon className="w-5 h-5" />
-                Settings
-              </Link>
+              {!kitchenOnlyUser ? (
+                <Link
+                  href="/admin/settings"
+                  className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px]"
+                  onClick={() => setIsDropdownOpen(false)}
+                >
+                  <UserIcon className="w-5 h-5" />
+                  Settings
+                </Link>
+              ) : null}
 
               <button
                 onClick={handleLogout}

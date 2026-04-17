@@ -19,6 +19,7 @@ import { Branch, BranchType } from '../branches/entities/branch.entity';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { ProductsService } from '../products/products.service';
+import { ProductCategory } from '../products/entities/product.entity';
 import { SalesService } from '../sales/sales.service';
 import { PaymentsService } from '../sales/payments.service';
 import { Sale } from '../sales/entities/sale.entity';
@@ -445,7 +446,16 @@ export class RestaurantOrdersService {
 
   /** Kitchen prep summary: counts by product for open lines in session */
   async getKitchenSummary(sessionId: number, user: RequestUser): Promise<{
-    byProduct: { productId: number; productName: string; quantity: number; queued: number; cooking: number; ready: number }[];
+    byProduct: {
+      productId: number;
+      productName: string;
+      quantity: number;
+      queued: number;
+      cooking: number;
+      ready: number;
+      /** Groceries / drinks — no grill step; hand out when queued */
+      skipCookPrep: boolean;
+    }[];
     dineInOrders: number;
     takeawayOrders: number;
   }> {
@@ -464,7 +474,15 @@ export class RestaurantOrdersService {
 
     const byProduct = new Map<
       number,
-      { productId: number; productName: string; quantity: number; queued: number; cooking: number; ready: number }
+      {
+        productId: number;
+        productName: string;
+        quantity: number;
+        queued: number;
+        cooking: number;
+        ready: number;
+        skipCookPrep: boolean;
+      }
     >();
 
     let dineInOrders = 0;
@@ -486,6 +504,7 @@ export class RestaurantOrdersService {
             queued: 0,
             cooking: 0,
             ready: 0,
+            skipCookPrep: line.product?.category === ProductCategory.CONSUMABLE,
           });
         }
         const row = byProduct.get(pid)!;

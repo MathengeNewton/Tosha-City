@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth, isKitchenOnlyAccount } from "../../contexts/AuthContext";
 
 import SideBar from "./SideBar";
 import DashBoardHeader from "./DashboardHeader";
@@ -36,8 +36,9 @@ export default function DashboardLayout({ children }) {
   const router = useRouter();
   const { hasRole, loading, user } = useAuth();
   const isAdmin = hasRole("admin");
+  const kitchenOnly = isKitchenOnlyAccount(user);
   // Restaurant / kitchen nav only for cashiers on a pork branch — not for admins
-  const showRestaurant = !isAdmin && user?.branch?.type === "PORK_BUTCHERY";
+  const showRestaurant = !isAdmin && !kitchenOnly && user?.branch?.type === "PORK_BUTCHERY";
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -59,6 +60,8 @@ export default function DashboardLayout({ children }) {
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
   ];
 
+  const kitchenOnlyMenu = [{ name: "Kitchen", href: "/dashboard/kitchen", icon: FireIcon }];
+
   const adminMenu = [
     { name: "Admin home", href: "/admin/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
@@ -76,26 +79,35 @@ export default function DashboardLayout({ children }) {
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
 
-  const menuItems = isAdmin ? adminMenu : cashierMenu;
+  const menuItems = isAdmin ? adminMenu : kitchenOnly ? kitchenOnlyMenu : cashierMenu;
   const cashierAllowedAdminPaths = ["/admin/settings"];
   const isCashierAllowedPath =
     pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !pathname) return;
 
-    if (isAdmin === false && pathname) {
+    if (kitchenOnly) {
+      const onKitchen =
+        pathname === "/dashboard/kitchen" || pathname.startsWith("/dashboard/kitchen/");
+      if (!onKitchen) {
+        router.replace("/dashboard/kitchen");
+      }
+      return;
+    }
+
+    if (isAdmin === false) {
       if (pathname === "/dashboard/reports") {
         router.replace("/dashboard");
       } else if (pathname.startsWith("/admin") && !isCashierAllowedPath) {
         router.replace("/dashboard");
       }
     }
-  }, [isAdmin, loading, pathname, router, isCashierAllowedPath]);
+  }, [isAdmin, kitchenOnly, loading, pathname, router, isCashierAllowedPath]);
 
   return (
     <ProtectedRoute>
-      <div className="flex h-screen overflow-hidden bg-gray-100 relative">
+      <div className="flex h-screen overflow-hidden bg-gray-50 relative">
         <SideBar
           isCollapsed={isCollapsed}
           setIsCollapsed={setIsCollapsed}
@@ -103,11 +115,12 @@ export default function DashboardLayout({ children }) {
           setIsMobileOpen={setIsMobileOpen}
           pathname={pathname}
           menuItems={menuItems}
+          brandHref={kitchenOnly ? "/dashboard/kitchen" : "/"}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <DashBoardHeader />
-          <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-white/50">
+          <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-gradient-to-b from-white/70 via-gray-50/40 to-gray-100/60">
             {children}
           </main>
           <DashboardFooter />

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { apiClient } from "../../../../lib/api";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 const BRANCH_TYPES = [
   { value: "GENERAL_BUTCHERY", label: "General butchery" },
@@ -110,19 +111,15 @@ export default function BranchesPage() {
 
   if (loading) {
     return (
-      <div className="w-full space-y-8 bg-gray-50 min-h-screen p-6 flex items-center justify-center">
-        <div className="text-gray-600">Loading branches...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading branches…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full space-y-8 bg-gray-50 min-h-screen p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Branches</h1>
-          <p className="text-gray-600 mt-1">Create branches and assign staff to them.</p>
-        </div>
+    <PageShell className="space-y-8">
+      <PageHeader title="Branches" subtitle="Create branches and assign staff to them.">
         <button
           type="button"
           onClick={openCreate}
@@ -130,7 +127,7 @@ export default function BranchesPage() {
         >
           Add Branch
         </button>
-      </div>
+      </PageHeader>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -249,6 +246,6 @@ export default function BranchesPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

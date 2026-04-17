@@ -12,6 +12,7 @@ export default function SideBar({
   pathname,
 
   menuItems,
+  brandHref = "/",
 }) {
   const showText = !isCollapsed || isMobileOpen;
   const isMobile = isMobileOpen;
@@ -38,7 +39,7 @@ export default function SideBar({
       <div className="p-4 flex items-center justify-between border-b border-gray-200">
         {showText && (
           <div>
-            <Link href={"/"}>
+            <Link href={brandHref}>
               <span className="text-xl lg:text-2xl font-bold text-blue-900">
                 LakeTown
               </span>

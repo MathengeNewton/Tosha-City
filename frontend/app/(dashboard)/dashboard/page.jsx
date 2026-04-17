@@ -5,6 +5,7 @@ import { apiClient } from "../../../lib/api";
 import { toast } from "react-toastify";
 import Link from "next/link";
 import CurrentSessionBanner from "../components/CurrentSessionBanner";
+import { PageShell, PageHeader, PageLoading } from "../components/shell";
 import { useAuth } from "../../../contexts/AuthContext";
 
 /** Cashier / branch staff home. Admins are redirected to /admin/dashboard (single admin home). */
@@ -82,45 +83,43 @@ export default function CashierDashboard() {
 
   if (authLoading || isAdmin) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading…" />
+      </PageShell>
     );
   }
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading dashboard...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading dashboard…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">LakeTown Butchery Dashboard</h1>
-          <p className="text-gray-600 mt-1">Welcome back! Here&apos;s today&apos;s overview.</p>
-        </div>
-        <div className="flex gap-2">
-          {!currentSession ? (
-            <button
-              onClick={handleOpenSession}
-              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
-            >
-              Open Stock Session
-            </button>
-          ) : (
-            <Link
-              href="/dashboard/sales/new"
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
-            >
-              New Sale
-            </Link>
-          )}
-        </div>
-      </div>
+    <PageShell className="space-y-8">
+      <PageHeader
+        title="LakeTown Butchery Dashboard"
+        subtitle="Welcome back! Here's today's overview."
+      >
+        {!currentSession ? (
+          <button
+            type="button"
+            onClick={handleOpenSession}
+            className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
+          >
+            Open Stock Session
+          </button>
+        ) : (
+          <Link
+            href="/dashboard/sales/new"
+            className="inline-flex items-center bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm min-h-[44px]"
+          >
+            New Sale
+          </Link>
+        )}
+      </PageHeader>
 
       {currentSession && currentSession.status === "OPEN" && (
         <CurrentSessionBanner
@@ -230,7 +229,7 @@ export default function CashierDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           href="/dashboard/stock"
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all"
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:border-blue-900/40 hover:shadow-md transition-all"
         >
           <h3 className="font-semibold text-gray-900 mb-2">Stock Management</h3>
           <p className="text-sm text-gray-600">Manage opening stock, incoming stock, and closing stock</p>
@@ -238,7 +237,7 @@ export default function CashierDashboard() {
 
         <Link
           href="/dashboard/sales/new"
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:border-green-500 hover:shadow-md transition-all"
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:border-green-600/50 hover:shadow-md transition-all"
         >
           <h3 className="font-semibold text-gray-900 mb-2">New Sale</h3>
           <p className="text-sm text-gray-600">Create a new sale and generate receipt</p>
@@ -246,12 +245,12 @@ export default function CashierDashboard() {
 
         <Link
           href="/dashboard/sales"
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:border-purple-500 hover:shadow-md transition-all"
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:border-[#0D47A1]/35 hover:shadow-md transition-all"
         >
           <h3 className="font-semibold text-gray-900 mb-2">View Sales</h3>
           <p className="text-sm text-gray-600">View all sales and manage payments</p>
         </Link>
       </div>
-    </div>
+    </PageShell>
   );
 }

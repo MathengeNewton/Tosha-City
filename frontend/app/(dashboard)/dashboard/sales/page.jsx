@@ -6,6 +6,7 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 export default function SalesListPage() {
   const router = useRouter();
@@ -134,21 +135,15 @@ export default function SalesListPage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading sales...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading sales…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-            Sales
-          </h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">View and manage all sales</p>
-        </div>
+    <PageShell className="space-y-4 sm:space-y-8">
+      <PageHeader title="Sales" subtitle="View and manage all sales">
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
@@ -187,7 +182,7 @@ export default function SalesListPage() {
             New Sale
           </Link>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
@@ -438,7 +433,7 @@ export default function SalesListPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

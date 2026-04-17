@@ -6,6 +6,19 @@ import { toast } from "react-toastify";
 
 const AuthContext = createContext(undefined);
 
+/**
+ * Kitchen-only accounts: `kitchen` role without `admin` or `cashier`.
+ * Used to lock navigation to the kitchen board (till-capable users keep full cashier menu).
+ */
+export function isKitchenOnlyAccount(user) {
+  if (!user?.roles?.length) return false;
+  const names = user.roles
+    .map((r) => (typeof r === "string" ? r : r?.name) || "")
+    .filter(Boolean);
+  const has = (role) => names.some((n) => n === role);
+  return has("kitchen") && !has("admin") && !has("cashier");
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);

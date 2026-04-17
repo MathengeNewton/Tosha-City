@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import ProductWizard from "./ProductWizard";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -212,21 +213,15 @@ export default function ProductsPage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading products...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading products…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-            Products Management
-          </h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage butchery products</p>
-        </div>
+    <PageShell className="space-y-4 sm:space-y-8">
+      <PageHeader title="Products Management" subtitle="Manage butchery products">
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
@@ -268,7 +263,7 @@ export default function ProductsPage() {
             Add Product
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
@@ -279,7 +274,7 @@ export default function ProductsPage() {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/40 text-base min-h-[44px]"
             />
           </div>
           <div>
@@ -288,7 +283,7 @@ export default function ProductsPage() {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/40 text-base min-h-[44px]"
             />
           </div>
         </div>
@@ -385,11 +380,11 @@ export default function ProductsPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-4 sm:p-6 w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
               {editingProduct ? "Edit product" : "Add product"}
             </h2>
-            <p className="text-xs text-slate-600 mb-4">
+            <p className="text-xs text-gray-600 mb-4">
               {editingProduct
                 ? "Update prices, units, or prompts — advanced settings stay available below."
                 : "Choose a type, then name and price. Optional: parent product and till prompts."}
@@ -405,7 +400,7 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

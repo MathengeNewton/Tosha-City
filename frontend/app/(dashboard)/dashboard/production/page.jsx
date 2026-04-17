@@ -6,6 +6,7 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
 import ProductionTab from "../components/ProductionTab";
+import { PageShell, PageHeader } from "../../components/shell";
 
 /**
  * Shortcut to morning production against the **current open** session for a pork branch.
@@ -73,36 +74,34 @@ export default function MorningProductionPage() {
 
   if (!allowed && !isAdmin) {
     return (
-      <div className="p-6 max-w-lg">
-        <p className="text-gray-600">Morning production is set up for pork butchery branches.</p>
-        <Link
-          href={isAdmin ? "/admin/dashboard" : "/dashboard"}
-          className="text-blue-700 underline mt-3 inline-block"
-        >
-          Back to dashboard
-        </Link>
-      </div>
+      <PageShell>
+        <div className="max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <p className="text-gray-600">Morning production is set up for pork butchery branches.</p>
+          <Link
+            href={isAdmin ? "/admin/dashboard" : "/dashboard"}
+            className="text-blue-900 hover:text-[#1e88b5] underline mt-3 inline-block font-medium"
+          >
+            Back to dashboard
+          </Link>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-3 sm:p-4 space-y-6 pb-24">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Morning production</h1>
-        <p className="text-gray-600 text-sm mt-1">
-          After opening the day&apos;s session and recording incoming stock, log every batch you precook for service
-          (roasts, chips, soups, etc.) — one run per recipe. This updates prepared-item stock for the kitchen and
-          tills.
-        </p>
-      </div>
+    <PageShell className="max-w-4xl space-y-6 pb-24">
+      <PageHeader
+        title="Morning production"
+        subtitle="Log each precook batch for today's open session. Saving moves stock automatically — details below."
+      />
 
       {isAdmin && branches.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-gray-700">Pork branch</label>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+          <label className="text-sm font-medium text-gray-700">Pork branch</label>
           <select
             value={selectedBranchId}
             onChange={(e) => setSelectedBranchId(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm min-h-[44px]"
+            className="min-h-[44px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
           >
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
@@ -113,38 +112,63 @@ export default function MorningProductionPage() {
         </div>
       )}
 
-      {loading && <p className="text-gray-500">Loading…</p>}
+      {loading && (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-white py-12 text-center text-sm text-gray-500">
+          Loading session…
+        </div>
+      )}
 
       {!loading && !session?.id && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 text-sm">
-          No open stock session for this branch. Open a session on{" "}
-          <Link href="/dashboard/stock" className="font-medium underline">
-            Stock Session
-          </Link>{" "}
-          first, then capture opening / incoming stock before production runs.
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm">
+          <p className="font-medium">No open stock session for this branch</p>
+          <p className="mt-1">
+            Open a session on{" "}
+            <Link href="/dashboard/stock" className="font-semibold text-blue-900 underline hover:text-[#1e88b5]">
+              Stock session
+            </Link>
+            , then add opening / incoming stock before logging production.
+          </p>
         </div>
       )}
 
       {!loading && session?.id && (
         <>
-          <p className="text-sm text-gray-500">
-            Session #{session.id} · {session.date ? new Date(session.date).toLocaleDateString() : ""}
-            {" · "}
-            <Link
-              href={`/dashboard/stock?sessionId=${session.id}&tab=production`}
-              className="text-blue-700 underline font-medium"
-            >
-              Open in Stock Session (Production tab)
-            </Link>
-          </p>
+          <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Active session</p>
+              <p className="mt-0.5 text-sm font-semibold text-gray-900">
+                #{session.id}
+                {session.date ? ` · ${new Date(session.date).toLocaleDateString()}` : ""}
+                {session.branch?.name ? ` · ${session.branch.name}` : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  session.status === "OPEN"
+                    ? "bg-green-100 text-green-800"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {session.status === "OPEN" ? "Open" : session.status || "—"}
+              </span>
+              <Link
+                href={`/dashboard/stock?sessionId=${session.id}&tab=production`}
+                className="inline-flex min-h-[40px] items-center justify-center rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100"
+              >
+                Open full session
+              </Link>
+            </div>
+          </div>
           <ProductionTab
             session={session}
             canManage={canManage}
             productionRuns={productionRuns}
             onRefresh={load}
+            variant="page"
           />
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

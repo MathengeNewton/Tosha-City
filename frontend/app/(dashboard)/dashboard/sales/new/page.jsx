@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
+import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
 
 function getPromptLabel(product) {
   if (!product) return "Quantity";
@@ -270,15 +271,15 @@ export default function NewSalePage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading…" />
+      </PageShell>
     );
   }
 
   if (!currentSession) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
+      <PageShell className="space-y-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">New Sale</h1>
@@ -309,23 +310,16 @@ export default function NewSalePage() {
             Go to Stock Sessions
           </button>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-4 sm:space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-4 sm:mb-8">
-        <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-            New Sale
-          </h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">Create a new sale and generate receipt</p>
-          <p className="text-gray-500 mt-1 text-sm">
-            Branch: {currentSession.branch?.name || user?.branch?.name || "Unassigned"}
-          </p>
-        </div>
-      </div>
+    <PageShell className="space-y-4 sm:space-y-8">
+      <PageHeader title="New Sale" subtitle="Create a new sale and generate receipt" />
+      <p className="text-gray-500 text-sm -mt-2">
+        Branch: {currentSession.branch?.name || user?.branch?.name || "Unassigned"}
+      </p>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <div className="space-y-6 pb-24 sm:pb-28">
@@ -568,7 +562,7 @@ export default function NewSalePage() {
           </div>
         </div>
       </form>
-    </div>
+    </PageShell>
   );
 }
 

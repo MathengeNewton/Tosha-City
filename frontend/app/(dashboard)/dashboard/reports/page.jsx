@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { PageShell, PageHeader } from "../../components/shell";
 
 function localDateStr(d) {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
@@ -84,13 +85,11 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-          Reports & Analytics
-        </h1>
-        <p className="text-gray-600 mt-1">Track branch performance across sales, stock, wastage, stock share, and production.</p>
-      </div>
+    <PageShell className="space-y-8">
+      <PageHeader
+        title="Reports & Analytics"
+        subtitle="Track branch performance across sales, stock, wastage, stock share, and production."
+      />
 
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -100,9 +99,9 @@ export default function ReportsPage() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 text-sm font-medium border-b-2 ${
+                className={`px-6 py-4 text-sm font-medium border-b-2 min-h-[48px] ${
                   activeTab === tab
-                    ? 'border-blue-900 text-blue-900'
+                    ? 'border-[#0D47A1] text-[#0D47A1]'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -316,7 +315,7 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

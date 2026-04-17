@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 function StatCard({ label, value, color }) {
   const colorClasses = {
@@ -89,83 +90,80 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading admin dashboard...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading admin dashboard…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">LakeTown Butchery — Admin</h1>
-          <p className="text-gray-600 mt-1">
-            Branches, stock sessions, and quick links to management tools.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <PageShell className="space-y-8">
+      <PageHeader
+        title="LakeTown Butchery — Admin"
+        subtitle="Branches, stock sessions, and quick links to management tools."
+      >
+        <>
           <Link
             href="/dashboard/stock"
-            className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800 transition-colors text-sm"
+            className="inline-flex items-center justify-center bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800 transition-colors text-sm min-h-[44px]"
           >
             Stock session
           </Link>
           <Link
             href="/dashboard/sales"
-            className="bg-emerald-700 text-white px-4 py-2 rounded-md hover:bg-emerald-800 transition-colors text-sm"
+            className="inline-flex items-center justify-center bg-emerald-700 text-white px-4 py-2 rounded-md hover:bg-emerald-800 transition-colors text-sm min-h-[44px]"
           >
             Sales
           </Link>
           <Link
             href="/dashboard/reports"
-            className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
+            className="inline-flex items-center justify-center bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
           >
             Reports
           </Link>
           <Link
             href="/admin/branches"
-            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
+            className="inline-flex items-center justify-center bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm min-h-[44px]"
           >
             Branches
           </Link>
-        </div>
-      </div>
+        </>
+      </PageHeader>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           href="/admin/products"
-          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-900/30 shadow-sm transition-all text-sm font-medium text-gray-900"
         >
           Products
         </Link>
         <Link
           href="/admin/recipes"
-          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-900/30 shadow-sm transition-all text-sm font-medium text-gray-900"
         >
           Recipes
         </Link>
         <Link
           href="/admin/suppliers"
-          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-900/30 shadow-sm transition-all text-sm font-medium text-gray-900"
         >
           Suppliers
         </Link>
         <Link
           href="/admin/customers"
-          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-900/30 shadow-sm transition-all text-sm font-medium text-gray-900"
         >
           Customers
         </Link>
         <Link
           href="/admin/partners"
-          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-900/30 shadow-sm transition-all text-sm font-medium text-gray-900"
         >
           Partners
         </Link>
         <Link
           href="/admin/users"
-          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-900/30 shadow-sm transition-all text-sm font-medium text-gray-900"
         >
           Users
         </Link>
@@ -297,6 +295,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

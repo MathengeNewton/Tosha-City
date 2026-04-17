@@ -4,6 +4,7 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -126,17 +127,17 @@ export default function SuppliersPage() {
   };
 
   if (loading) {
-    return <div className="p-6">Loading suppliers...</div>;
+    return (
+      <PageShell>
+        <PageLoading message="Loading suppliers…" />
+      </PageShell>
+    );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Suppliers</h1>
-          <p className="text-gray-600 mt-1">Manage your suppliers</p>
-        </div>
-        <div className="flex gap-2">
+    <PageShell className="space-y-8">
+      <PageHeader title="Suppliers" subtitle="Manage your suppliers">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => {
@@ -175,7 +176,7 @@ export default function SuppliersPage() {
             Add Supplier
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
@@ -361,7 +362,7 @@ export default function SuppliersPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 
