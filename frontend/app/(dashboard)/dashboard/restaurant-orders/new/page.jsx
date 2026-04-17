@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
+import ProductPicker from "../../../../../components/restaurant/ProductPicker";
 
 export default function NewRestaurantOrderPage() {
   const router = useRouter();
@@ -53,6 +54,15 @@ export default function NewRestaurantOrderPage() {
 
   const addLine = () => {
     setLines([...lines, { productId: "", quantity: "1", notes: "" }]);
+  };
+
+  const duplicateLastProduct = () => {
+    const last = lines[lines.length - 1];
+    if (!last?.productId) {
+      toast.info("Pick a product on the last line first.");
+      return;
+    }
+    setLines([...lines, { productId: last.productId, quantity: "1", notes: "" }]);
   };
 
   const updateLine = (i, field, val) => {
@@ -105,10 +115,10 @@ export default function NewRestaurantOrderPage() {
   if (!allowed && !isAdmin) {
     return (
       <div className="p-6">
-        <p className="text-gray-600">Table orders are only for pork butchery branches.</p>
+        <p className="text-slate-600">Table orders are only for pork butchery branches.</p>
         <Link
           href={isAdmin ? "/admin/dashboard" : "/dashboard"}
-          className="text-blue-700 underline mt-2 inline-block"
+          className="text-emerald-800 underline mt-2 inline-block font-medium"
         >
           Back
         </Link>
@@ -117,19 +127,21 @@ export default function NewRestaurantOrderPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-6">
+    <div className="max-w-2xl sm:max-w-3xl mx-auto px-3 sm:px-4 pb-36 pt-4 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">New table order</h1>
-        <p className="text-gray-600 text-sm mt-1">Creates a kitchen ticket for the current session.</p>
+        <h1 className="text-2xl font-bold text-slate-900">New table order</h1>
+        <p className="text-slate-600 text-sm mt-1">
+          Sends a ticket to the kitchen for today&apos;s session. Add dishes below — table number helps wait staff.
+        </p>
       </div>
 
       {isAdmin && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
           <select
             value={selectedBranchId}
             onChange={(e) => setSelectedBranchId(e.target.value)}
-            className="w-full border rounded-md px-3 py-2"
+            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base min-h-[48px] focus:outline-none focus:ring-2 focus:ring-emerald-500/25"
           >
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
@@ -141,103 +153,126 @@ export default function NewRestaurantOrderPage() {
       )}
 
       {!session?.id && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           No open session. Open one under{" "}
-          <Link href="/dashboard/stock" className="underline font-medium">
-            Stock Session
-          </Link>
-          .
+          <Link href="/dashboard/stock" className="underline font-semibold">
+            Stock session
+          </Link>{" "}
+          first.
         </div>
       )}
 
-      <form onSubmit={submit} className="space-y-4 bg-white rounded-xl border p-4 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
-            <select
-              value={serviceType}
-              onChange={(e) => setServiceType(e.target.value)}
-              className="w-full border rounded-md px-3 py-2"
-            >
-              <option value="DINE_IN">Dine-in</option>
-              <option value="TAKEAWAY">Takeaway</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Table / label</label>
-            <input
-              value={tableLabel}
-              onChange={(e) => setTableLabel(e.target.value)}
-              placeholder="e.g. 3"
-              className="w-full border rounded-md px-3 py-2"
-            />
+      <form id="new-table-order-form" onSubmit={submit} className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Service</label>
+              <select
+                value={serviceType}
+                onChange={(e) => setServiceType(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base min-h-[48px]"
+              >
+                <option value="DINE_IN">Dine-in</option>
+                <option value="TAKEAWAY">Takeaway</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Table / label</label>
+              <input
+                value={tableLabel}
+                onChange={(e) => setTableLabel(e.target.value)}
+                placeholder="e.g. 3 or Counter"
+                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base min-h-[48px]"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="font-medium text-sm">Lines</span>
-            <button type="button" onClick={addLine} className="text-sm text-blue-800 hover:underline">
-              + Add line
-            </button>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-semibold text-slate-900">Dishes on this ticket</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={duplicateLastProduct}
+                className="text-sm font-semibold text-slate-700 rounded-xl border border-slate-200 px-3 py-2 min-h-[40px] hover:bg-slate-50"
+              >
+                Same again
+              </button>
+              <button
+                type="button"
+                onClick={addLine}
+                className="text-sm font-semibold text-emerald-800 rounded-xl border-2 border-emerald-600 px-3 py-2 min-h-[40px] hover:bg-emerald-50"
+              >
+                + Add line
+              </button>
+            </div>
           </div>
+
           {lines.map((line, i) => (
-            <div key={i} className="flex flex-wrap gap-2 items-end border-b border-gray-100 pb-3">
-              <div className="flex-1 min-w-[140px]">
-                <label className="text-xs text-gray-500">Product</label>
-                <select
-                  value={line.productId}
-                  onChange={(e) => updateLine(i, "productId", e.target.value)}
-                  className="w-full border rounded-md px-2 py-2 text-sm"
-                >
-                  <option value="">Select…</option>
-                  {products
-                    .filter((p) => p.isActive !== false)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                </select>
+            <div
+              key={`line-${i}`}
+              className="rounded-2xl border border-slate-200 bg-slate-50/40 p-4 space-y-3 shadow-sm"
+            >
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Item {i + 1}</span>
+                {lines.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeLine(i)}
+                    className="text-sm font-medium text-red-600 min-h-[40px] px-2"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
-              <div className="w-24">
-                <label className="text-xs text-gray-500">Qty</label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="any"
-                  value={line.quantity}
-                  onChange={(e) => updateLine(i, "quantity", e.target.value)}
-                  className="w-full border rounded-md px-2 py-2 text-sm"
-                />
+              <ProductPicker
+                products={products}
+                value={line.productId}
+                onChange={(id) => updateLine(i, "productId", id)}
+                disabled={!session?.id}
+                idPrefix={`line-${i}`}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="any"
+                    value={line.quantity}
+                    onChange={(e) => updateLine(i, "quantity", e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base min-h-[48px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Notes for kitchen</label>
+                  <input
+                    value={line.notes}
+                    onChange={(e) => updateLine(i, "notes", e.target.value)}
+                    placeholder="e.g. No salt, extra ugali"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base min-h-[48px]"
+                  />
+                </div>
               </div>
-              <div className="flex-1 min-w-[100px]">
-                <label className="text-xs text-gray-500">Notes</label>
-                <input
-                  value={line.notes}
-                  onChange={(e) => updateLine(i, "notes", e.target.value)}
-                  className="w-full border rounded-md px-2 py-2 text-sm"
-                />
-              </div>
-              {lines.length > 1 && (
-                <button type="button" onClick={() => removeLine(i)} className="text-red-600 text-sm pb-2">
-                  Remove
-                </button>
-              )}
             </div>
           ))}
         </div>
 
-        <div className="flex gap-3 pt-2">
+        <div className="sticky bottom-0 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 pt-3 pb-4 bg-white/95 backdrop-blur border-t border-slate-200 mt-8 flex flex-col sm:flex-row gap-3">
           <button
             type="submit"
+            form="new-table-order-form"
             disabled={submitting || !session?.id}
-            className="bg-green-600 text-white px-6 py-2.5 rounded-lg font-medium disabled:opacity-50"
+            className="flex-1 rounded-xl bg-emerald-600 text-white px-5 py-3.5 text-base font-bold min-h-[52px] shadow-sm hover:bg-emerald-700 disabled:opacity-50"
           >
             {submitting ? "Sending…" : "Send to kitchen"}
           </button>
-          <Link href="/dashboard/kitchen" className="px-4 py-2.5 text-gray-700 border rounded-lg">
-            Cancel
+          <Link
+            href="/dashboard/table-orders"
+            className="inline-flex flex-1 sm:flex-none items-center justify-center rounded-xl border-2 border-slate-200 text-slate-800 px-5 py-3.5 text-base font-semibold min-h-[52px] hover:bg-slate-50"
+          >
+            Back to table orders
           </Link>
         </div>
       </form>

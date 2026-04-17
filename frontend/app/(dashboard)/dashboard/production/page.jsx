@@ -8,8 +8,8 @@ import { useAuth } from "../../../../contexts/AuthContext";
 import ProductionTab from "../components/ProductionTab";
 
 /**
- * Pork-focused hub for morning production runs (precook / batch prep) against the current stock session.
- * Same data as Stock session → Morning production tab; kept in the nav for quick access.
+ * Shortcut to morning production against the **current open** session for a pork branch.
+ * Primary UI: Stock Session → open a session → **Production** tab (session details).
  */
 export default function MorningProductionPage() {
   const { user, hasRole } = useAuth();
@@ -130,8 +130,11 @@ export default function MorningProductionPage() {
           <p className="text-sm text-gray-500">
             Session #{session.id} · {session.date ? new Date(session.date).toLocaleDateString() : ""}
             {" · "}
-            <Link href={`/dashboard/stock?sessionId=${session.id}`} className="text-blue-700 underline font-medium">
-              Open in Stock Session
+            <Link
+              href={`/dashboard/stock?sessionId=${session.id}&tab=production`}
+              className="text-blue-700 underline font-medium"
+            >
+              Open in Stock Session (Production tab)
             </Link>
           </p>
           <ProductionTab

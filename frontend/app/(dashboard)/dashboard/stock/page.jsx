@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
+import ProductionTab from "../components/ProductionTab";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -74,13 +75,6 @@ export default function StockManagementPage() {
   const [showSessionPopup, setShowSessionPopup] = useState(false);
   const [popupSession, setPopupSession] = useState(null);
 
-  // Session details no longer has a Production tab; avoid a blank panel if state was 'production'
-  useEffect(() => {
-    if (activeTab === 'production') {
-      setActiveTab('overview');
-    }
-  }, [activeTab, selectedSession?.id]);
-
   const filteredStockEntries = useMemo(
     () => filterByDateRange(stockEntries, filters.dateFrom, filters.dateTo, "recordedAt"),
     [stockEntries, filters.dateFrom, filters.dateTo]
@@ -101,6 +95,13 @@ export default function StockManagementPage() {
       loadSessionDetails(parseInt(sessionIdParam));
     }
   }, [sessionIdParam]);
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "production" && selectedSession?.id) {
+      setActiveTab("production");
+    }
+  }, [searchParams, selectedSession?.id]);
 
   // Reload sessions when filters or branch change (skip initial load)
   useEffect(() => {
@@ -371,6 +372,11 @@ export default function StockManagementPage() {
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
 
     const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const productionUsageEntries = stockEntries.filter((e) => e.type === "PRODUCTION_USAGE");
+    const totalProductionUsageQty = productionUsageEntries.reduce(
+      (sum, e) => sum + parseFloat(e.quantity || 0),
+      0
+    );
     const partnerShareKg = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const soldKg = sales.reduce((total, s) => total + (s.items || []).reduce((sum, it) => sum + parseFloat(it.quantity || 0), 0), 0);
     const availableKg = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
@@ -513,6 +519,43 @@ export default function StockManagementPage() {
           </div>
         </div>
 
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 sm:p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Today&apos;s stock flow</h3>
+          <p className="text-xs text-emerald-900/85 mt-1 mb-4 max-w-3xl">
+            Follow the day: deliveries and opening → kitchen uses ingredients (production) → sales remove stock.
+            Tap a step to jump to that tab.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab("incoming")}
+              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
+            >
+              <span className="text-xs font-semibold text-emerald-800 uppercase">Incoming</span>
+              <span className="block text-lg font-bold text-gray-900 mt-1">{incomingKg.toFixed(2)}</span>
+              <span className="text-xs text-gray-600">Total qty logged (same units as entries)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("production")}
+              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
+            >
+              <span className="text-xs font-semibold text-emerald-800 uppercase">Production use</span>
+              <span className="block text-lg font-bold text-gray-900 mt-1">{totalProductionUsageQty.toFixed(2)}</span>
+              <span className="text-xs text-gray-600">{productionUsageEntries.length} ingredient pulls</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sales")}
+              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
+            >
+              <span className="text-xs font-semibold text-emerald-800 uppercase">Sales</span>
+              <span className="block text-lg font-bold text-gray-900 mt-1">{sales.length}</span>
+              <span className="text-xs text-gray-600">Tickets · qty sum {soldKg.toFixed(2)} (all line units)</span>
+            </button>
+          </div>
+        </div>
+
         {/* Session Information Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Session Information</h3>
@@ -563,7 +606,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'production', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -576,6 +619,7 @@ export default function StockManagementPage() {
                   {tab === 'overview' ? 'Overview' :
                    tab === 'opening' ? 'Opening Stock' : 
                    tab === 'incoming' ? 'Incoming Stock' :
+                   tab === 'production' ? 'Production' :
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
                    tab === 'stock-share' ? 'Stock Share' :
@@ -644,6 +688,14 @@ export default function StockManagementPage() {
                   <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
+            )}
+            {activeTab === 'production' && (
+              <ProductionTab
+                session={selectedSession}
+                canManage={canManageEntries}
+                productionRuns={productionRuns}
+                onRefresh={() => loadSessionDetails(selectedSession.id)}
+              />
             )}
             {activeTab === 'closing' && (
               <div>
@@ -1291,8 +1343,8 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
         unit: editForm.unit || 'kg',
         notes: editForm.notes || undefined,
       };
-      if (entryType === 'INCOMING' && editForm.supplierId) {
-        payload.supplierId = parseInt(editForm.supplierId, 10);
+      if (entryType === 'INCOMING') {
+        payload.supplierId = editForm.supplierId ? parseInt(editForm.supplierId, 10) : null;
       }
       await apiClient.stockEntries.update(entryToEdit.id, payload);
       toast.success('Entry updated');
@@ -1405,15 +1457,16 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                   ))}
                 </select>
               </div>
-              {entryType === 'INCOMING' && suppliers.length > 0 && (
+              {entryType === 'INCOMING' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier (optional)</label>
+                  <p className="text-xs text-gray-500 mb-1">Leave blank for own-sourced meat or informal supply.</p>
                   <select
                     value={editForm.supplierId}
                     onChange={(e) => setEditForm({ ...editForm, supplierId: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Select supplier</option>
+                    <option value="">None</option>
                     {suppliers.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -2322,20 +2375,26 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
             </option>
           ))}
         </select>
+        {formData.productId &&
+          products.find((p) => String(p.id) === String(formData.productId))?.category === "CONSUMABLE" && (
+            <p className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Groceries & supplies: counts toward consumables used in this session (flour, salt, sauces, etc.).
+            </p>
+          )}
       </div>
 
       {type === 'INCOMING' && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Supplier *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Supplier (optional)</label>
+          <p className="text-xs text-gray-500 mb-1">
+            Skip if meat is your own source or you don&apos;t track a vendor for this delivery.
+          </p>
           <select
             value={formData.supplierId}
             onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
           >
-            <option value="">Select a supplier</option>
+            <option value="">None — quick entry</option>
             {suppliers.map((supplier) => (
               <option key={supplier.id} value={supplier.id}>
                 {supplier.name}

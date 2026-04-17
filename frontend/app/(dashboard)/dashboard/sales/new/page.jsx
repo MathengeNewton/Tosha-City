@@ -140,11 +140,19 @@ export default function NewSalePage() {
         const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
         item.price = useWholesale ? (product.wholesalePrice ?? retail) : retail;
         if (product.saleMode === "WEIGHT") {
-          item.quantity = item.quantity || '';
-          if (item.amount) {
+          const unitPrice = parseFloat(item.price || 0);
+          if (item.amount != null && String(item.amount).trim() !== '') {
             const amount = parseFloat(item.amount || 0);
-            const unitPrice = parseFloat(item.price || 0);
-            item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+            item.quantity =
+              unitPrice > 0 && Number.isFinite(amount) && amount > 0
+                ? (amount / unitPrice).toFixed(3)
+                : '';
+          } else if (item.quantity != null && String(item.quantity).trim() !== '') {
+            const qty = parseFloat(item.quantity || 0);
+            item.amount =
+              qty > 0 && unitPrice > 0 ? (qty * unitPrice).toFixed(2) : '';
+          } else {
+            item.quantity = item.quantity || '';
           }
         } else {
           const qty = parseFloat(item.quantity || 1);
@@ -157,26 +165,39 @@ export default function NewSalePage() {
       if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
         const amount = parseFloat(value || 0);
         const unitPrice = parseFloat(item.price || 0);
-        item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+        if (value === '' || String(value).trim() === '' || !Number.isFinite(amount) || amount <= 0) {
+          item.quantity = '';
+        } else {
+          item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+        }
       }
     } else if (field === 'price') {
       item.price = value;
+      const unitPrice = parseFloat(value || 0);
       if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
-        if (item.amount) {
+        if (item.amount && String(item.amount).trim() !== '') {
           const amount = parseFloat(item.amount || 0);
-          const unitPrice = parseFloat(value || 0);
           item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
+        } else if (item.quantity && String(item.quantity).trim() !== '') {
+          const qty = parseFloat(item.quantity || 0);
+          item.amount = qty > 0 && unitPrice > 0 ? (qty * unitPrice).toFixed(2) : '';
         }
       } else {
         const qty = parseFloat(item.quantity || 0);
-        item.amount = qty > 0 ? (qty * parseFloat(value || 0)).toFixed(2) : '';
+        item.amount = qty > 0 ? (qty * unitPrice).toFixed(2) : '';
       }
     } else if (field === 'quantity') {
       item.quantity = value;
-      if ((currentProduct?.saleMode || 'WEIGHT') !== 'WEIGHT') {
-        const qty = parseFloat(value || 0);
-        const unitPrice = parseFloat(item.price || 0);
-        item.amount = qty > 0 ? (qty * unitPrice).toFixed(2) : '';
+      const qty = parseFloat(value || 0);
+      const unitPrice = parseFloat(item.price || 0);
+      if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
+        if (value === '' || String(value).trim() === '' || !Number.isFinite(qty) || qty <= 0) {
+          item.amount = '';
+        } else {
+          item.amount = unitPrice > 0 ? (qty * unitPrice).toFixed(2) : '';
+        }
+      } else {
+        item.amount = qty > 0 && Number.isFinite(qty) ? (qty * unitPrice).toFixed(2) : '';
       }
     } else {
       item[field] = value;
@@ -361,9 +382,17 @@ export default function NewSalePage() {
                     const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
                     const newPrice = useWholesale ? (product.wholesalePrice ?? retail) : retail;
                     if ((product.saleMode || 'WEIGHT') === 'WEIGHT') {
-                      const amount = parseFloat(item.amount || 0);
-                      const quantity = newPrice > 0 && amount > 0 ? (amount / newPrice).toFixed(3) : item.quantity;
-                      return { ...item, price: newPrice, quantity };
+                      const amountNum = parseFloat(item.amount || 0);
+                      const qtyNum = parseFloat(item.quantity || 0);
+                      if (item.amount !== '' && item.amount != null && amountNum > 0 && newPrice > 0) {
+                        const quantity = (amountNum / newPrice).toFixed(3);
+                        return { ...item, price: newPrice, quantity };
+                      }
+                      if (item.quantity !== '' && item.quantity != null && qtyNum > 0 && newPrice > 0) {
+                        const amount = (qtyNum * newPrice).toFixed(2);
+                        return { ...item, price: newPrice, amount };
+                      }
+                      return { ...item, price: newPrice };
                     }
                     const quantity = parseFloat(item.quantity || 0);
                     const amount = quantity > 0 ? (quantity * newPrice).toFixed(2) : item.amount;
@@ -470,15 +499,18 @@ export default function NewSalePage() {
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {promptLabel}
+                        {isWeightSale ? (
+                          <span className="font-normal text-gray-500"> — enter weight or amount (KES)</span>
+                        ) : null}
                       </label>
                       <input
-                        type={isWeightSale ? "text" : "number"}
-                        step={isWeightSale ? undefined : "0.01"}
+                        type="number"
+                        step={isWeightSale ? "0.001" : "0.01"}
+                        min="0"
                         value={item.quantity || ''}
-                        readOnly={isWeightSale}
-                        onChange={isWeightSale ? undefined : (e) => updateItem(index, 'quantity', e.target.value)}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-md text-base min-h-[44px] ${isWeightSale ? 'bg-gray-50 cursor-not-allowed' : 'focus:outline-none focus:ring-2 focus:ring-blue-500'}`}
-                        placeholder={isWeightSale ? "Auto-calculated" : `Enter ${selectedProduct?.unit || 'quantity'}`}
+                        onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-base min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder={isWeightSale ? `e.g. 0.5 ${selectedProduct?.unit || 'kg'}` : `Enter ${selectedProduct?.unit || 'quantity'}`}
                       />
                     </div>
 

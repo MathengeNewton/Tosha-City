@@ -11,7 +11,7 @@ export class CreateStockEntryDto {
   @IsNumber()
   productId: number;
 
-  @ApiProperty({ description: 'Supplier ID (required for incoming stock)', required: false, example: 1 })
+  @ApiProperty({ description: 'Supplier ID (optional for incoming stock)', required: false, example: 1 })
   @IsOptional()
   @IsNumber()
   supplierId?: number;

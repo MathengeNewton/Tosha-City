@@ -11,6 +11,8 @@ export default function SalesListPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
+  const canAdminEditSale = (sale) =>
+    isAdmin && sale.paymentStatus === "PENDING" && sale.session?.status === "OPEN";
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
@@ -311,7 +313,7 @@ export default function SalesListPage() {
                             Record Payment
                           </button>
                         )}
-                        {isAdmin && sale.paymentStatus === 'PENDING' && (
+                        {canAdminEditSale(sale) && (
                           <button
                             onClick={() => handleOpenEditSale(sale)}
                             className="text-gray-700 hover:text-gray-900 min-h-[44px] text-left sm:text-left"
@@ -319,7 +321,7 @@ export default function SalesListPage() {
                             Edit
                           </button>
                         )}
-                        {isAdmin && (
+                        {canAdminEditSale(sale) && (
                           <button
                             onClick={() => handleDeleteSale(sale)}
                             className="text-red-600 hover:text-red-800 min-h-[44px] text-left sm:text-left"

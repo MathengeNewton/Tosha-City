@@ -24,6 +24,12 @@ export default function SaleDetailsPage() {
   const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
+  const canAdminEditSale =
+    !!sale &&
+    isAdmin &&
+    sale.paymentStatus === "PENDING" &&
+    sale.session?.status === "OPEN";
+
   useEffect(() => {
     if (saleId) {
       loadSaleData();
@@ -215,7 +221,7 @@ export default function SaleDetailsPage() {
               Record Payment
             </button>
           )}
-          {isAdmin && sale.paymentStatus === "PENDING" && (
+          {canAdminEditSale && (
             <button
               onClick={handleOpenEditModal}
               className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
@@ -223,7 +229,7 @@ export default function SaleDetailsPage() {
               Edit Sale
             </button>
           )}
-          {isAdmin && (
+          {canAdminEditSale && (
             <button
               onClick={handleDeleteSale}
               className="flex-1 sm:flex-none bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors text-sm min-h-[44px]"

@@ -99,8 +99,16 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
+        <p className="font-semibold text-slate-900">What production does</p>
+        <p className="mt-1 text-slate-700">
+          Each run <strong>deducts</strong> the ingredient quantities from stock and <strong>adds</strong> the finished
+          output for this session. Recipes must use products marked as <strong>Production item</strong> in Admin →
+          Products (otherwise saving a recipe will fail).
+        </p>
+      </div>
       <p className="text-gray-600 text-sm">
-        Record mutura, soup, pork fry, and other prepared-item production from the stock session for this branch.
+        Record mutura, soup, pork fry, and other prepared items from this branch&apos;s stock session.
       </p>
 
       {canManage && session?.status === "OPEN" && (

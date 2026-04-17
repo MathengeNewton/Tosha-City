@@ -8,15 +8,8 @@ const defaultEnd = new Date();
 const defaultStart = new Date();
 defaultStart.setDate(defaultStart.getDate() - 365);
 
-const HIDDEN_ROLE_NAMES = new Set([
-  "field_agent",
-  "staff",
-  "vet",
-  "partner",
-  "app",
-  "guest",
-  "owner",
-]);
+/** Only these roles can be assigned in the UI (matches product roles). */
+const ASSIGNABLE_ROLE_NAMES = new Set(["admin", "cashier"]);
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -61,10 +54,16 @@ const UsersPage = () => {
     [roles]
   );
 
-  const assignableRoles = useMemo(
-    () => roles.filter((role) => !HIDDEN_ROLE_NAMES.has(role.name?.toLowerCase())),
-    [roles]
-  );
+  const assignableRoles = useMemo(() => {
+    const filtered = roles.filter((role) =>
+      ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
+    );
+    const order = { admin: 0, cashier: 1 };
+    return [...filtered].sort(
+      (a, b) =>
+        (order[a.name?.toLowerCase()] ?? 99) - (order[b.name?.toLowerCase()] ?? 99)
+    );
+  }, [roles]);
 
   const filteredUsers = useMemo(
     () => filterByDateRange(users, filters.dateFrom, filters.dateTo),
@@ -130,7 +129,7 @@ const UsersPage = () => {
       password: "",
       roleIds:
         user.roles
-          ?.filter((role) => !HIDDEN_ROLE_NAMES.has(role.name?.toLowerCase()))
+          ?.filter((role) => ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase()))
           .map((role) => role.id) || [],
       branchId: user.branchId ? String(user.branchId) : "",
     });
@@ -210,9 +209,20 @@ const UsersPage = () => {
   };
 
   const getUserRoles = (user) => {
-    const visibleRoles =
-      user.roles?.filter((role) => !HIDDEN_ROLE_NAMES.has(role.name?.toLowerCase())) || [];
-    return visibleRoles.map((role) => role.name).join(", ") || "No roles";
+    const assignable =
+      user.roles?.filter((role) =>
+        ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
+      ) || [];
+    const legacy =
+      user.roles?.filter(
+        (role) => !ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
+      ) || [];
+    const main = assignable.map((role) => role.name).join(", ");
+    if (legacy.length) {
+      const legacyStr = legacy.map((role) => role.name).join(", ");
+      return main ? `${main} · legacy: ${legacyStr}` : `legacy: ${legacyStr}`;
+    }
+    return main || "No roles";
   };
 
   const selectedRoles = assignableRoles.filter((role) => formData.roleIds.includes(role.id));
@@ -271,7 +281,7 @@ const UsersPage = () => {
                 const rows = filteredUsers.map((u) => ({
                   username: u.username,
                   email: u.email || "",
-                  roles: u.roles?.map((r) => r.name).join(", ") || "",
+                  roles: getUserRoles(u),
                   branch: u.branch?.name || "",
                 }));
                 exportToExcel(

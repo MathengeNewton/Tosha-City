@@ -48,11 +48,7 @@ export class StockEntriesService {
       }
     }
 
-    // Validate supplier for incoming stock
-    if (createEntryDto.type === StockEntryType.INCOMING) {
-      if (!createEntryDto.supplierId) {
-        throw new BadRequestException('Supplier is required for incoming stock');
-      }
+    if (createEntryDto.type === StockEntryType.INCOMING && createEntryDto.supplierId != null) {
       await this.suppliersService.findOne(createEntryDto.supplierId);
     }
 

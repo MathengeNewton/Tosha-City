@@ -424,6 +424,10 @@ export class SalesService {
         throw new BadRequestException('Cannot update a paid sale');
       }
 
+      if (sale.session?.status !== SessionStatus.OPEN) {
+        throw new BadRequestException('Sales can only be edited while their stock session is still open');
+      }
+
       if (updateSaleDto.paymentMethod) {
         sale.paymentMethod = updateSaleDto.paymentMethod;
       }
@@ -458,6 +462,10 @@ export class SalesService {
 
       if (sale.paymentStatus === PaymentStatus.PAID) {
         throw new BadRequestException('Cannot delete a paid sale');
+      }
+
+      if (sale.session?.status !== SessionStatus.OPEN) {
+        throw new BadRequestException('Sales can only be deleted while their stock session is still open');
       }
 
       await this.saleRepository.remove(sale);

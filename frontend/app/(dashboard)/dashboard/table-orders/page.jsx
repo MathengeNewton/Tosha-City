@@ -5,9 +5,35 @@ import Link from "next/link";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
+import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
+import ProductPicker from "../../../../components/restaurant/ProductPicker";
 
 const fmtKes = (n) =>
   `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} KES`;
+
+function orderStatusBadge(status) {
+  if (status === "OPEN") return { label: "Kitchen", sub: "Order open", pill: "bg-emerald-100 text-emerald-900" };
+  if (status === "BILLED") return { label: "Billed", sub: "Check payment if needed", pill: "bg-blue-100 text-blue-900" };
+  if (status === "VOID") return { label: "Voided", sub: "Cancelled", pill: "bg-slate-200 text-slate-700" };
+  return { label: status, sub: "", pill: "bg-slate-200 text-slate-700" };
+}
+
+function lineStatusLabel(st) {
+  const m = {
+    QUEUED: "Waiting to cook",
+    COOKING: "Cooking",
+    READY: "Ready to serve",
+    SERVED: "Served",
+  };
+  return m[st] || st;
+}
+
+function orderLineSummary(order) {
+  const lines = order?.lines || [];
+  const count = lines.length;
+  const total = lines.reduce((s, l) => s + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0);
+  return { count, total };
+}
 
 export default function TableOrdersPage() {
   const { user, hasRole } = useAuth();
@@ -278,19 +304,19 @@ export default function TableOrdersPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto w-full min-h-[70vh] pb-28 px-2 sm:px-4">
+    <div className="max-w-2xl sm:max-w-3xl mx-auto w-full min-h-[70vh] pb-28 px-3 sm:px-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Table orders</h1>
-          <p className="text-gray-600 text-sm mt-0.5">
-            Active and closed orders for this session — tap a card to manage.
+          <h1 className="text-2xl font-bold text-slate-900">Table orders</h1>
+          <p className="text-slate-600 text-sm mt-0.5">
+            Kitchen tickets for this session — tap a card to add items, bill, or pay.
           </p>
         </div>
         <Link
           href="/dashboard/restaurant-orders/new"
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-emerald-700 min-h-[48px] shrink-0"
         >
-          New order
+          + New order
         </Link>
       </div>
 
@@ -343,41 +369,66 @@ export default function TableOrdersPage() {
           {loading && <p className="text-slate-500 mt-4">Loading…</p>}
 
           {!loading && orders.length === 0 && (
-            <p className="text-slate-500 mt-6 text-center text-sm">
-              No {listTab === "active" ? "active" : "closed"} orders in this session.
-            </p>
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-10 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm border border-slate-200 text-slate-500" aria-hidden>
+                <ClipboardDocumentListIcon className="h-8 w-8" />
+              </div>
+              <p className="mt-4 text-base font-semibold text-slate-900">
+                No {listTab === "active" ? "open" : "closed"} table orders yet
+              </p>
+              <ul className="mt-3 text-sm text-slate-600 text-left max-w-sm mx-auto space-y-2 list-disc pl-5">
+                <li>Start a table order — the kitchen sees it on the Kitchen screen.</li>
+                <li>Use Table / label (e.g. 3) so wait staff can find the ticket.</li>
+              </ul>
+              <Link
+                href="/dashboard/restaurant-orders/new"
+                className="mt-6 inline-flex items-center justify-center rounded-xl bg-emerald-600 text-white px-5 py-3 text-sm font-semibold shadow-sm hover:bg-emerald-700 min-h-[48px]"
+              >
+                + New table order
+              </Link>
+              <p className="mt-4 text-xs text-slate-500">
+                <Link href="/dashboard/kitchen" className="text-emerald-800 font-medium underline">
+                  Open Kitchen view
+                </Link>
+              </p>
+            </div>
           )}
 
           <ul className="mt-4 space-y-3">
-            {orders.map((o) => (
+            {orders.map((o) => {
+              const badge = orderStatusBadge(o.status);
+              const { count, total } = orderLineSummary(o);
+              return (
               <li key={o.id}>
                 <button
                   type="button"
                   onClick={() => setDetailId(o.id)}
-                  className="w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 active:scale-[0.99] transition-transform min-h-[72px]"
+                  className="w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-emerald-200 hover:shadow-md active:scale-[0.99] transition-all min-h-[88px]"
                 >
-                  <div className="flex justify-between gap-2">
-                    <span className="font-semibold text-slate-900">{o.orderNumber}</span>
-                    <span
-                      className={`text-xs font-medium px-2 py-1 rounded-full ${
-                        o.status === "OPEN"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : o.status === "BILLED"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-slate-200 text-slate-700"
-                      }`}
-                    >
-                      {o.status}
+                  <div className="flex justify-between gap-2 items-start">
+                    <div>
+                      <span className="font-semibold text-slate-900 text-lg">{o.orderNumber}</span>
+                      <p className="text-xs text-slate-500 mt-0.5">{badge.sub}</p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${badge.pill}`}>
+                      {badge.label}
                     </span>
                   </div>
-                  <div className="text-sm text-slate-600 mt-1">
-                    {o.serviceType === "DINE_IN" ? "Dine-in" : "Takeaway"}
-                    {o.tableLabel ? ` · Table ${o.tableLabel}` : ""}
-                    {o.assignedStaff?.username ? ` · ${o.assignedStaff.username}` : ""}
+                  <div className="text-sm text-slate-600 mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                    <span>{o.serviceType === "DINE_IN" ? "Dine-in" : "Takeaway"}</span>
+                    {o.tableLabel ? <span>Table {o.tableLabel}</span> : null}
+                    {o.assignedStaff?.username ? <span>{o.assignedStaff.username}</span> : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                    <span className="font-medium text-slate-700">{count} line{count !== 1 ? "s" : ""}</span>
+                    {count > 0 ? (
+                      <span>Est. {fmtKes(total)}</span>
+                    ) : null}
                   </div>
                 </button>
               </li>
-            ))}
+            );
+            })}
           </ul>
         </>
       )}
@@ -390,7 +441,7 @@ export default function TableOrdersPage() {
             aria-hidden
             onClick={() => setDetailId(null)}
           />
-          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white shadow-xl border border-slate-200">
+          <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white shadow-xl border border-slate-200">
             <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-white px-4 py-3">
               <h2 className="text-lg font-bold text-slate-900 truncate">
                 {detail?.orderNumber || "Order"}
@@ -456,7 +507,7 @@ export default function TableOrdersPage() {
                         return (
                           <li key={line.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
                             <div className="font-medium text-slate-900">{line.product?.name}</div>
-                            <div className="text-xs text-slate-500 mt-0.5">{line.status}</div>
+                            <div className="text-xs text-slate-600 mt-0.5 font-medium">{lineStatusLabel(line.status)}</div>
                             {queued ? (
                               <div className="mt-2 grid grid-cols-2 gap-2">
                                 <div>
@@ -517,20 +568,14 @@ export default function TableOrdersPage() {
                     </ul>
                   </div>
 
-                  <div className="rounded-xl border border-dashed border-slate-200 p-3 space-y-2">
+                  <div className="rounded-xl border border-dashed border-slate-200 p-3 space-y-3 bg-slate-50/30">
                     <p className="text-sm font-medium text-slate-800">Add item</p>
-                    <select
+                    <ProductPicker
+                      products={products}
                       value={addProductId}
-                      onChange={(e) => setAddProductId(e.target.value)}
-                      className="w-full border rounded-xl px-3 py-3 text-base min-h-[48px]"
-                    >
-                      <option value="">Choose product</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setAddProductId}
+                      idPrefix="add-line"
+                    />
                     <div className="flex gap-2">
                       <input
                         type="number"

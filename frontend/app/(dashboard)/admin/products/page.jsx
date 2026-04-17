@@ -4,19 +4,7 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
-
-const PRODUCT_CATEGORIES = [
-  { value: "RAW_STOCK", label: "Raw stock" },
-  { value: "PRODUCTION_ITEM", label: "Production item" },
-  { value: "CONSUMABLE", label: "Consumable" },
-];
-
-const SALE_MODES = [
-  { value: "WEIGHT", label: "Weight" },
-  { value: "PORTION", label: "Portion" },
-  { value: "CUP", label: "Cup" },
-  { value: "PIECE", label: "Piece" },
-];
+import ProductWizard from "./ProductWizard";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -396,171 +384,24 @@ export default function ProductsPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
-              {editingProduct ? 'Edit Product' : 'Add Product'}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-4 sm:p-6 w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">
+              {editingProduct ? "Edit product" : "Add product"}
             </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    placeholder="kg"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Retail price per Unit (KES) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.pricePerUnit}
-                    onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Wholesale price (KES)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.wholesalePricePerUnit}
-                    onChange={(e) => setFormData({ ...formData, wholesalePricePerUnit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    placeholder="Optional"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Parent Product (for byproducts)
-                </label>
-                <select
-                  value={formData.parentProductId}
-                  onChange={(e) => setFormData({ ...formData, parentProductId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                >
-                  <option value="">None (Main Product)</option>
-                  {products.filter(p => p.isActive && (!editingProduct || p.id !== editingProduct.id)).map(product => (
-                    <option key={product.id} value={product.id.toString()}>
-                      {product.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Select a parent product if this is a byproduct (e.g., select "Beef" for "Minced Meat")
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category *
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  >
-                    {PRODUCT_CATEGORIES.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sale Mode *
-                  </label>
-                  <select
-                    value={formData.saleMode}
-                    onChange={(e) => setFormData({ ...formData, saleMode: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  >
-                    {SALE_MODES.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sales Prompt
-                </label>
-                <input
-                  type="text"
-                  value={formData.salesPrompt}
-                  onChange={(e) => setFormData({ ...formData, salesPrompt: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  placeholder="Example: Number of cups"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Helpful for mutura, soup, and other prepared items.
-                </p>
-              </div>
-
-              <div className="flex items-center min-h-[44px]">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="isActive" className="ml-2 block text-sm text-gray-700">
-                  Active
-                </label>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 transition-colors min-h-[44px] text-base"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-[#1e88b5] transition-colors min-h-[44px] text-base"
-                >
-                  {editingProduct ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
+            <p className="text-xs text-slate-600 mb-4">
+              {editingProduct
+                ? "Update prices, units, or prompts — advanced settings stay available below."
+                : "Choose a type, then name and price. Optional: parent product and till prompts."}
+            </p>
+            <ProductWizard
+              formData={formData}
+              setFormData={setFormData}
+              products={products}
+              editingProduct={editingProduct}
+              onSubmit={handleSubmit}
+              onCancel={handleCloseModal}
+            />
           </div>
         </div>
       )}

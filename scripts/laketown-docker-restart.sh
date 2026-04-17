@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run from repo root: bash scripts/laketown-docker-restart.sh
-# Stops this project's stack, then stops any *other* running containers that still publish
-# common host ports used by this stack (5432, 4515, 3015). Then docker compose up --build.
+# Brings the stack down, removes built app images, prunes dangling images, then rebuilds
+# (no cache) and starts. Also stops any *other* containers publishing host ports 5432, 4515, 3015.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -24,8 +24,17 @@ for p in 5432 4515 3015; do
   stop_containers_on_host_port "$p"
 done
 
-echo "==> docker compose up -d --build"
-docker compose up -d --build
+echo "==> Removing LakeTown app images (backend / frontend)"
+docker rmi -f laketown-backend:latest laketown-frontend:latest 2>/dev/null || true
+
+echo "==> Pruning dangling images (unused layers)"
+docker image prune -f
+
+echo "==> docker compose build --no-cache"
+docker compose build --no-cache
+
+echo "==> docker compose up -d"
+docker compose up -d
 
 echo "==> docker compose ps"
 docker compose ps

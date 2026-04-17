@@ -29,8 +29,8 @@ export class PartnersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Create a partner (Admin/Cashier)' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Create a partner (Admin only)' })
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   create(@Body() createPartnerDto: CreatePartnerDto) {
     return this.partnersService.create(createPartnerDto);
@@ -51,8 +51,8 @@ export class PartnersController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Update a partner (Admin/Cashier)' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update a partner (Admin only)' })
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   update(@Param('id') id: string, @Body() updatePartnerDto: UpdatePartnerDto) {
     return this.partnersService.update(+id, updatePartnerDto);

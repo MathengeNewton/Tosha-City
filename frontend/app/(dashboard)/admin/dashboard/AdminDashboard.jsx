@@ -106,6 +106,18 @@ export default function AdminDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
+            href="/dashboard/stock"
+            className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800 transition-colors text-sm"
+          >
+            Stock session
+          </Link>
+          <Link
+            href="/dashboard/sales"
+            className="bg-emerald-700 text-white px-4 py-2 rounded-md hover:bg-emerald-800 transition-colors text-sm"
+          >
+            Sales
+          </Link>
+          <Link
             href="/dashboard/reports"
             className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm"
           >
@@ -115,9 +127,48 @@ export default function AdminDashboardPage() {
             href="/admin/branches"
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
           >
-            Manage branches
+            Branches
           </Link>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Link
+          href="/admin/products"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+        >
+          Products
+        </Link>
+        <Link
+          href="/admin/recipes"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+        >
+          Recipes
+        </Link>
+        <Link
+          href="/admin/suppliers"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+        >
+          Suppliers
+        </Link>
+        <Link
+          href="/admin/customers"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+        >
+          Customers
+        </Link>
+        <Link
+          href="/admin/partners"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+        >
+          Partners
+        </Link>
+        <Link
+          href="/admin/users"
+          className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-400 shadow-sm transition-all text-sm font-medium text-gray-900"
+        >
+          Users
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">

@@ -27,6 +27,8 @@ import {
   FireIcon,
   PlusCircleIcon,
   BuildingOffice2Icon,
+  BookOpenIcon,
+  CpuChipIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
@@ -52,21 +54,20 @@ export default function DashboardLayout({ children }) {
     { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     ...restaurantItems,
+    { name: "Production", href: "/dashboard/production", icon: CpuChipIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
-    { name: "Products", href: "/admin/products", icon: CubeIcon },
-    { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
-    { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
-    { name: "Customers", href: "/admin/customers", icon: UserIcon },
-    { name: "Partners", href: "/admin/partners", icon: ShareIcon },
   ];
 
-  // Admin: management only — no floor ops (stock, sales, kitchen, table orders)
   const adminMenu = [
     { name: "Admin home", href: "/admin/dashboard", icon: HomeIcon },
+    { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
+    { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
+    { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
     { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
+    { name: "Recipes", href: "/admin/recipes", icon: BookOpenIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
@@ -76,34 +77,12 @@ export default function DashboardLayout({ children }) {
   ];
 
   const menuItems = isAdmin ? adminMenu : cashierMenu;
-  const cashierAllowedAdminPaths = [
-    "/admin/products",
-    "/admin/recipes",
-    "/admin/suppliers",
-    "/admin/customers",
-    "/admin/partners",
-    "/admin/settings",
-  ];
+  const cashierAllowedAdminPaths = ["/admin/settings"];
   const isCashierAllowedPath =
     pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   useEffect(() => {
     if (loading) return;
-
-    if (isAdmin && pathname) {
-      const adminOpsBlocked =
-        pathname === "/dashboard" ||
-        pathname.startsWith("/dashboard/stock") ||
-        pathname.startsWith("/dashboard/sales") ||
-        pathname.startsWith("/dashboard/table-orders") ||
-        pathname.startsWith("/dashboard/kitchen") ||
-        pathname.startsWith("/dashboard/restaurant-orders") ||
-        pathname.startsWith("/dashboard/production");
-      if (adminOpsBlocked) {
-        router.replace("/admin/dashboard");
-        return;
-      }
-    }
 
     if (isAdmin === false && pathname) {
       if (pathname === "/dashboard/reports") {
