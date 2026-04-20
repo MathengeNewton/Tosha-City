@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsNumber, IsOptional, IsBoolean, Min, IsEnum } from 'class-validator';
-import { ProductCategory, ProductSaleMode } from '../entities/product.entity';
+import { ProductCategory, ProductSaleMode, ProductSegment } from '../entities/product.entity';
 
 export class CreateProductDto {
   @ApiProperty({ description: 'Product name', example: 'Beef' })
@@ -28,6 +28,15 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductCategory)
   category?: ProductCategory;
+
+  @ApiProperty({
+    description: 'Business segment (must match category)',
+    enum: ProductSegment,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(ProductSegment)
+  segment?: ProductSegment;
 
   @ApiProperty({ description: 'Product sale mode', enum: ProductSaleMode, required: false })
   @IsOptional()

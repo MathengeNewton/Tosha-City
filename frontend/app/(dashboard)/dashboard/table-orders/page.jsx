@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import ProductPicker from "../../../../components/restaurant/ProductPicker";
+import { isRetailCounterProduct } from "../../../../lib/productSegment";
 import { PageShell, PageHeader } from "../../components/shell";
 
 const fmtKes = (n) =>
@@ -20,7 +21,7 @@ function orderStatusBadge(status) {
 }
 
 function lineStatusLabel(st, line) {
-  if (st === "QUEUED" && line?.product?.category === "CONSUMABLE") {
+  if (st === "QUEUED" && isRetailCounterProduct(line?.product)) {
     return "Counter / no cooking";
   }
   const m = {
@@ -35,7 +36,7 @@ function lineStatusLabel(st, line) {
 function lineStatusPillClass(st, line) {
   switch (st) {
     case "QUEUED":
-      if (line?.product?.category === "CONSUMABLE") {
+      if (isRetailCounterProduct(line?.product)) {
         return "bg-teal-100 text-teal-900 ring-1 ring-teal-200/80";
       }
       return "bg-amber-100 text-amber-900 ring-1 ring-amber-200/80";

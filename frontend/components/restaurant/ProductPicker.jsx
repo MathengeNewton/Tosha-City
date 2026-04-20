@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { segmentOfProduct } from "../../lib/productSegment";
 
 const CATEGORY_CHIPS = [
   { value: "ALL", label: "All" },
   { value: "RAW_STOCK", label: "Raw / meat" },
   { value: "PRODUCTION_ITEM", label: "Kitchen / plates" },
-  { value: "CONSUMABLE", label: "Groceries" },
+  { value: "CONSUMABLE", label: "Retail / drinks" },
 ];
 
 export default function ProductPicker({
@@ -20,7 +21,9 @@ export default function ProductPicker({
   const [chip, setChip] = useState("ALL");
 
   const filtered = useMemo(() => {
-    const active = (products || []).filter((p) => p.isActive !== false);
+    const active = (products || []).filter(
+      (p) => p.isActive !== false && segmentOfProduct(p) !== "KITCHEN_SUPPLY"
+    );
     const q = search.trim().toLowerCase();
     return active.filter((p) => {
       if (chip !== "ALL" && (p.category || "RAW_STOCK") !== chip) return false;
@@ -30,7 +33,7 @@ export default function ProductPicker({
   }, [products, search, chip]);
 
   const selected = (products || [])
-    .filter((p) => p.isActive !== false)
+    .filter((p) => p.isActive !== false && segmentOfProduct(p) !== "KITCHEN_SUPPLY")
     .find((p) => String(p.id) === String(value));
 
   return (

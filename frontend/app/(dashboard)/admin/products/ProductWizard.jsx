@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  PRODUCT_KIND_OPTIONS,
   applyKindToFormData,
   getKindOption,
   inferKindIdFromProduct,
+  kindOptionsForSegment,
 } from "./productKindMap";
 
 const UNIT_PRESETS = ["kg", "g", "piece", "portion", "cup", "packet", "bottle"];
+
+const SEGMENT_INTRO = {
+  MEAT: "Meat counter — raw weight or piece.",
+  PREPARED: "Prepared food — portions, cups, or cooked weight.",
+  RETAIL: "Retail — drinks and packs for the till or table.",
+  KITCHEN_SUPPLY: "Kitchen inputs — salt, oil, sauces (not on restaurant dish list).",
+};
 
 export default function ProductWizard({
   formData,
@@ -17,21 +24,32 @@ export default function ProductWizard({
   editingProduct,
   onSubmit,
   onCancel,
+  lockedSegment = null,
 }) {
   const [step, setStep] = useState(1);
   const [kindId, setKindId] = useState("RAW_WEIGHT");
 
   const isCreate = !editingProduct;
+  const kindList = useMemo(() => kindOptionsForSegment(lockedSegment), [lockedSegment]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-init wizard when product or locked segment changes
   useEffect(() => {
     if (editingProduct) {
       setKindId(inferKindIdFromProduct(editingProduct));
       setStep(2);
+      return;
+    }
+    const list = kindOptionsForSegment(lockedSegment);
+    if (list.length === 1) {
+      const id = list[0].id;
+      setKindId(id);
+      setFormData((prev) => applyKindToFormData(prev, id));
+      setStep(2);
     } else {
-      setKindId("RAW_WEIGHT");
+      setKindId(list[0]?.id || "RAW_WEIGHT");
       setStep(1);
     }
-  }, [editingProduct]);
+  }, [editingProduct, lockedSegment]);
 
   const selectKind = (id) => {
     setKindId(id);
@@ -50,6 +68,7 @@ export default function ProductWizard({
   const goBack = () => {
     if (step === 2) {
       if (editingProduct) onCancel();
+      else if (lockedSegment && kindList.length === 1) onCancel();
       else setStep(1);
     } else if (step === 3) {
       setStep(2);
@@ -60,10 +79,15 @@ export default function ProductWizard({
     <form onSubmit={onSubmit} className="space-y-5">
       {step === 1 && isCreate && (
         <div className="space-y-3">
+          {lockedSegment ? (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              {SEGMENT_INTRO[lockedSegment] || "Choose the product shape below."}
+            </p>
+          ) : null}
           <p className="text-sm font-medium text-slate-800">What kind of product is this?</p>
           <p className="text-xs text-slate-600">Pick one — prices and units are on the next screen.</p>
           <div className="grid gap-2 max-h-[50vh] overflow-y-auto pr-1">
-            {PRODUCT_KIND_OPTIONS.map((opt) => (
+            {kindList.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
@@ -84,7 +108,7 @@ export default function ProductWizard({
 
       {step === 2 && (
         <div className="space-y-4">
-          {isCreate && (
+          {isCreate && !lockedSegment && (
             <button
               type="button"
               onClick={() => setStep(1)}
@@ -240,6 +264,19 @@ export default function ProductWizard({
                     <option value="CUP">Cup</option>
                     <option value="PIECE">Piece</option>
                   </select>
+                  {formData.category === "CONSUMABLE" && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-600">Segment (retail vs kitchen)</label>
+                      <select
+                        value={formData.segment || "RETAIL"}
+                        onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
+                        className="w-full border rounded-lg px-2 py-2"
+                      >
+                        <option value="RETAIL">Retail — till / table</option>
+                        <option value="KITCHEN_SUPPLY">Kitchen supply — stock only</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </details>
             </>
@@ -310,7 +347,9 @@ export default function ProductWizard({
           }}
           className="flex-1 bg-slate-100 text-slate-800 px-4 py-3 rounded-xl hover:bg-slate-200 min-h-[44px] text-base font-medium"
         >
-          {step === 1 ? "Cancel" : "Back"}
+          {step === 1 || (step === 2 && isCreate && lockedSegment && kindList.length === 1)
+            ? "Cancel"
+            : "Back"}
         </button>
 
         {step === 1 && isCreate && (

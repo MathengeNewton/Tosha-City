@@ -5,7 +5,40 @@ import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import ProductWizard from "./ProductWizard";
+import { inferSegmentFromCategory } from "./productKindMap";
 import { PageShell, PageHeader, PageLoading } from "../../components/shell";
+
+const SEGMENT_TABS = [
+  { id: "MEAT", label: "Meat counter", hint: "Raw beef, pork, liver…" },
+  { id: "PREPARED", label: "Prepared", hint: "Plates, portions, cups…" },
+  { id: "RETAIL", label: "Retail", hint: "Soda, water, packs…" },
+  { id: "KITCHEN_SUPPLY", label: "Kitchen inputs", hint: "Salt, oil, sauces…" },
+];
+
+function defaultFormForSegment(segment) {
+  const base = {
+    name: "",
+    pricePerUnit: "",
+    wholesalePricePerUnit: "",
+    salesPrompt: "",
+    description: "",
+    isActive: true,
+    parentProductId: "",
+  };
+  if (segment === "MEAT") {
+    return { ...base, unit: "kg", category: "RAW_STOCK", saleMode: "WEIGHT", segment: "MEAT" };
+  }
+  if (segment === "PREPARED") {
+    return { ...base, unit: "portion", category: "PRODUCTION_ITEM", saleMode: "PORTION", segment: "PREPARED" };
+  }
+  if (segment === "RETAIL") {
+    return { ...base, unit: "piece", category: "CONSUMABLE", saleMode: "PIECE", segment: "RETAIL" };
+  }
+  if (segment === "KITCHEN_SUPPLY") {
+    return { ...base, unit: "piece", category: "CONSUMABLE", saleMode: "PIECE", segment: "KITCHEN_SUPPLY" };
+  }
+  return { ...base, unit: "kg", category: "RAW_STOCK", saleMode: "WEIGHT", segment: "MEAT" };
+}
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -37,6 +70,8 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [activeSegment, setActiveSegment] = useState("MEAT");
+  const [wizardLockedSegment, setWizardLockedSegment] = useState(null);
   const [filters, setFilters] = useState({
     dateFrom: defaultStart.toISOString().split("T")[0],
     dateTo: defaultEnd.toISOString().split("T")[0],
@@ -51,13 +86,15 @@ export default function ProductsPage() {
     salesPrompt: '',
     description: '',
     isActive: true,
-    parentProductId: '',
+    parentProductId: "",
+    segment: "MEAT",
   });
 
-  const filteredProducts = useMemo(
-    () => filterByDateRange(products, filters.dateFrom, filters.dateTo),
-    [products, filters.dateFrom, filters.dateTo]
-  );
+  const filteredProducts = useMemo(() => {
+    const byDate = filterByDateRange(products, filters.dateFrom, filters.dateTo);
+    const seg = (p) => p.segment || inferSegmentFromCategory(p.category);
+    return byDate.filter((p) => seg(p) === activeSegment);
+  }, [products, filters.dateFrom, filters.dateTo, activeSegment]);
 
   useEffect(() => {
     loadProducts();
@@ -68,9 +105,10 @@ export default function ProductsPage() {
       setLoading(true);
       const response = await apiClient.products.getAll();
       // Map defaultPrice to pricePerUnit for frontend display
-      const products = (response.data || []).map(product => ({
+      const products = (response.data || []).map((product) => ({
         ...product,
         pricePerUnit: product.defaultPrice || product.pricePerUnit || 0,
+        segment: product.segment || inferSegmentFromCategory(product.category),
       }));
       setProducts(products);
     } catch (error) {
@@ -83,33 +121,25 @@ export default function ProductsPage() {
 
   const handleOpenModal = (product = null) => {
     if (product) {
+      setWizardLockedSegment(null);
       setEditingProduct(product);
       setFormData({
         name: product.name,
         unit: product.unit,
         pricePerUnit: (product.defaultPrice || product.pricePerUnit || 0).toString(),
-        wholesalePricePerUnit: (product.wholesalePrice != null ? product.wholesalePrice : '').toString(),
-        category: product.category || 'RAW_STOCK',
-        saleMode: product.saleMode || 'WEIGHT',
-        salesPrompt: product.salesPrompt || '',
-        description: product.description || '',
+        wholesalePricePerUnit: (product.wholesalePrice != null ? product.wholesalePrice : "").toString(),
+        category: product.category || "RAW_STOCK",
+        saleMode: product.saleMode || "WEIGHT",
+        salesPrompt: product.salesPrompt || "",
+        description: product.description || "",
         isActive: product.isActive,
-        parentProductId: product.parentProductId ? product.parentProductId.toString() : '',
+        parentProductId: product.parentProductId ? product.parentProductId.toString() : "",
+        segment: product.segment || inferSegmentFromCategory(product.category),
       });
     } else {
+      setWizardLockedSegment(activeSegment);
       setEditingProduct(null);
-      setFormData({
-        name: '',
-        unit: 'kg',
-        pricePerUnit: '',
-        wholesalePricePerUnit: '',
-        category: 'RAW_STOCK',
-        saleMode: 'WEIGHT',
-        salesPrompt: '',
-        description: '',
-        isActive: true,
-        parentProductId: '',
-      });
+      setFormData(defaultFormForSegment(activeSegment));
     }
     setShowModal(true);
   };
@@ -117,18 +147,8 @@ export default function ProductsPage() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingProduct(null);
-    setFormData({
-      name: '',
-      unit: 'kg',
-      pricePerUnit: '',
-      wholesalePricePerUnit: '',
-      category: 'RAW_STOCK',
-      saleMode: 'WEIGHT',
-      salesPrompt: '',
-      description: '',
-      isActive: true,
-      parentProductId: '',
-    });
+    setWizardLockedSegment(null);
+    setFormData(defaultFormForSegment(activeSegment));
   };
 
   const handleSubmit = async (e) => {
@@ -148,6 +168,7 @@ export default function ProductsPage() {
     // Every product has both: if wholesale left blank, use retail so wholesale sales always have a price
     const wholesalePrice = wholesaleInput !== null && !isNaN(wholesaleInput) ? wholesaleInput : price;
     try {
+      const segment = formData.segment || inferSegmentFromCategory(formData.category);
       const data = {
         name: formData.name.trim(),
         unit: formData.unit.trim(),
@@ -155,12 +176,11 @@ export default function ProductsPage() {
         wholesalePrice,
         category: formData.category,
         saleMode: formData.saleMode,
+        segment,
         salesPrompt: formData.salesPrompt?.trim() || undefined,
         isActive: formData.isActive,
         parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
       };
-
-      console.log("Sending product data:", data); // Debug log
 
       if (editingProduct) {
         await apiClient.products.update(editingProduct.id, data);
@@ -199,8 +219,9 @@ export default function ProductsPage() {
         unit: product.unit,
         defaultPrice: product.defaultPrice || product.pricePerUnit || 0,
         wholesalePrice: product.wholesalePrice ?? undefined,
-        category: product.category || 'RAW_STOCK',
-        saleMode: product.saleMode || 'WEIGHT',
+        category: product.category || "RAW_STOCK",
+        saleMode: product.saleMode || "WEIGHT",
+        segment: product.segment || inferSegmentFromCategory(product.category),
         salesPrompt: product.salesPrompt || undefined,
         isActive: !product.isActive,
       });
@@ -221,7 +242,7 @@ export default function ProductsPage() {
 
   return (
     <PageShell className="space-y-4 sm:space-y-8">
-      <PageHeader title="Products Management" subtitle="Manage butchery products">
+      <PageHeader title="Products Management" subtitle="Work by area — meat, prepared plates, retail, or kitchen inputs.">
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
@@ -230,6 +251,7 @@ export default function ProductsPage() {
                 name: p.name,
                 unit: p.unit,
                 pricePerUnit: parseFloat(p.defaultPrice || p.pricePerUnit || 0),
+                segment: p.segment || inferSegmentFromCategory(p.category),
                 category: p.category || "",
                 saleMode: p.saleMode || "",
                 salesPrompt: p.salesPrompt || "",
@@ -242,13 +264,14 @@ export default function ProductsPage() {
                   { key: "name", label: "Name" },
                   { key: "unit", label: "Unit" },
                   { key: "pricePerUnit", label: "Price (KES)" },
+                  { key: "segment", label: "Segment" },
                   { key: "category", label: "Category" },
                   { key: "saleMode", label: "Sale Mode" },
                   { key: "salesPrompt", label: "Sales Prompt" },
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
-                `products-export-${new Date().toISOString().split("T")[0]}`
+                `products-${activeSegment}-${new Date().toISOString().split("T")[0]}`
               );
               toast.success("Excel exported");
             }}
@@ -260,10 +283,34 @@ export default function ProductsPage() {
             onClick={() => handleOpenModal()}
             className="flex-1 sm:flex-none bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
           >
-            Add Product
+            Add in this tab
           </button>
         </div>
       </PageHeader>
+
+      <div className="flex flex-wrap gap-2">
+        {SEGMENT_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveSegment(tab.id)}
+            className={`min-h-[48px] rounded-xl border-2 px-4 py-2 text-left text-sm font-semibold transition-colors sm:min-w-[160px] ${
+              activeSegment === tab.id
+                ? "border-blue-900 bg-blue-900 text-white shadow-sm"
+                : "border-gray-200 bg-white text-gray-800 hover:border-gray-300"
+            }`}
+          >
+            <span className="block">{tab.label}</span>
+            <span
+              className={`mt-0.5 block text-xs font-normal ${
+                activeSegment === tab.id ? "text-blue-100" : "text-gray-500"
+              }`}
+            >
+              {tab.hint}
+            </span>
+          </button>
+        ))}
+      </div>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
@@ -299,6 +346,7 @@ export default function ProductsPage() {
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Retail (KES)</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Wholesale (KES)</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Segment</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Category</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Sale Mode</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -308,8 +356,8 @@ export default function ProductsPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-4 sm:px-6 py-4 text-center text-gray-500">
-                    No products found. Create your first product!
+                  <td colSpan="9" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                    No products in this tab. Add one or switch segment.
                   </td>
                 </tr>
               ) : (
@@ -327,8 +375,11 @@ export default function ProductsPage() {
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 hidden md:table-cell">
                       {product.wholesalePrice != null ? `KES ${parseFloat(product.wholesalePrice).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '–'}
                     </td>
+                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-600 hidden lg:table-cell">
+                      {(product.segment || inferSegmentFromCategory(product.category))?.replace(/_/g, " ") || "—"}
+                    </td>
                     <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
-                      {product.category?.replace(/_/g, ' ') || '-'}
+                      {product.category?.replace(/_/g, " ") || "-"}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
                       {product.saleMode?.replace(/_/g, ' ') || '-'}
@@ -396,6 +447,7 @@ export default function ProductsPage() {
               editingProduct={editingProduct}
               onSubmit={handleSubmit}
               onCancel={handleCloseModal}
+              lockedSegment={wizardLockedSegment}
             />
           </div>
         </div>

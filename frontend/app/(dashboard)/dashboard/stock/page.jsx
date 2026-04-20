@@ -2523,11 +2523,22 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
           ))}
         </select>
         {formData.productId &&
-          products.find((p) => String(p.id) === String(formData.productId))?.category === "CONSUMABLE" && (
-            <p className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Groceries & supplies: counts toward consumables used in this session (flour, salt, sauces, etc.).
-            </p>
-          )}
+          (() => {
+            const p = products.find((x) => String(x.id) === String(formData.productId));
+            if (!p || p.category !== "CONSUMABLE") return null;
+            if (p.segment === "KITCHEN_SUPPLY") {
+              return (
+                <p className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Kitchen / recipe input (salt, oil, sauces). Tracked for production; not sold on table tickets.
+                </p>
+              );
+            }
+            return (
+              <p className="mt-2 text-xs text-teal-900 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+                Retail consumable (drinks, packs). Sold at the till or on table orders.
+              </p>
+            );
+          })()}
       </div>
 
       {type === 'INCOMING' && (

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import Link from "next/link";
 import { useAuth, isKitchenOnlyAccount } from "../../../../contexts/AuthContext";
 import { PageShell, PageHeader } from "../../components/shell";
+import { isRetailCounterProduct } from "../../../../lib/productSegment";
 
 /** Big-button labels for the next step in the kitchen line (grill / kitchen items). */
 const LINE_NEXT_ACTION = {
@@ -14,9 +15,9 @@ const LINE_NEXT_ACTION = {
   READY: { next: "SERVED", label: "Mark served" },
 };
 
-/** Groceries, drinks, etc. — category CONSUMABLE on the product. */
+/** Retail / drinks — counter handout, not grill (segment RETAIL). */
 function isCounterOnlyLine(line) {
-  return line?.product?.category === "CONSUMABLE";
+  return isRetailCounterProduct(line?.product);
 }
 
 /** Single primary action for this line (API allows any status jump). */

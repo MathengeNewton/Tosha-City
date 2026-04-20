@@ -1,25 +1,71 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Product } from './entities/product.entity';
+import { Product, ProductCategory, ProductSaleMode, ProductSegment } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
   ) {}
 
-  async create(createProductDto: CreateProductDto): Promise<Product> {
-    console.log('Creating product with DTO:', JSON.stringify(createProductDto, null, 2));
-    
-    // Ensure defaultPrice is a valid number
-    if (createProductDto.defaultPrice === undefined || createProductDto.defaultPrice === null) {
-      throw new Error('defaultPrice is required and must be a number');
+  async onModuleInit(): Promise<void> {
+    await this.syncSegmentsFromCategories();
+  }
+
+  /** Align segment with category for legacy rows and after enum migrations. */
+  private async syncSegmentsFromCategories(): Promise<void> {
+    try {
+      await this.productRepository.query(
+        `UPDATE product SET segment = 'MEAT' WHERE category = 'RAW_STOCK'`,
+      );
+      await this.productRepository.query(
+        `UPDATE product SET segment = 'PREPARED' WHERE category = 'PRODUCTION_ITEM'`,
+      );
+      await this.productRepository.query(
+        `UPDATE product SET segment = 'RETAIL' WHERE category = 'CONSUMABLE' AND segment != 'KITCHEN_SUPPLY'`,
+      );
+    } catch (e) {
+      console.warn('Product segment backfill skipped:', (e as Error)?.message);
     }
-    
+  }
+
+  private inferSegmentFromCategory(category: ProductCategory): ProductSegment {
+    switch (category) {
+      case ProductCategory.RAW_STOCK:
+        return ProductSegment.MEAT;
+      case ProductCategory.PRODUCTION_ITEM:
+        return ProductSegment.PREPARED;
+      case ProductCategory.CONSUMABLE:
+      default:
+        return ProductSegment.RETAIL;
+    }
+  }
+
+  private validateSegmentCategory(segment: ProductSegment, category: ProductCategory): void {
+    const ok =
+      (segment === ProductSegment.MEAT && category === ProductCategory.RAW_STOCK) ||
+      (segment === ProductSegment.PREPARED && category === ProductCategory.PRODUCTION_ITEM) ||
+      ((segment === ProductSegment.RETAIL || segment === ProductSegment.KITCHEN_SUPPLY) &&
+        category === ProductCategory.CONSUMABLE);
+    if (!ok) {
+      throw new BadRequestException(`Segment "${segment}" is not valid for category "${category}"`);
+    }
+  }
+
+  async create(createProductDto: CreateProductDto): Promise<Product> {
+    if (createProductDto.defaultPrice === undefined || createProductDto.defaultPrice === null) {
+      throw new BadRequestException('defaultPrice is required and must be a number');
+    }
+
+    const category = createProductDto.category ?? ProductCategory.RAW_STOCK;
+    const saleMode = createProductDto.saleMode ?? ProductSaleMode.WEIGHT;
+    const segment = createProductDto.segment ?? this.inferSegmentFromCategory(category);
+    this.validateSegmentCategory(segment, category);
+
     const productData = {
       name: createProductDto.name.trim(),
       unit: createProductDto.unit.trim(),
@@ -28,21 +74,16 @@ export class ProductsService {
         createProductDto.wholesalePrice !== undefined && createProductDto.wholesalePrice !== null
           ? Number(createProductDto.wholesalePrice)
           : null,
-      category: createProductDto.category,
-      saleMode: createProductDto.saleMode,
+      category,
+      saleMode,
+      segment,
       salesPrompt: createProductDto.salesPrompt?.trim() || null,
       isActive: createProductDto.isActive !== undefined ? createProductDto.isActive : true,
       parentProductId: createProductDto.parentProductId || null,
     };
-    
-    console.log('Product data to create:', JSON.stringify(productData, null, 2));
-    
+
     const product = this.productRepository.create(productData);
-    console.log('Product entity before save:', JSON.stringify(product, null, 2));
-    
-    const saved = await this.productRepository.save(product);
-    console.log('Product saved successfully:', saved.id);
-    return saved;
+    return await this.productRepository.save(product);
   }
 
   async findAll(): Promise<Product[]> {
@@ -61,7 +102,7 @@ export class ProductsService {
   }
 
   async findOne(id: number): Promise<Product> {
-    const product = await this.productRepository.findOne({ 
+    const product = await this.productRepository.findOne({
       where: { id },
       relations: ['parentProduct', 'byproducts'],
     });
@@ -73,10 +114,19 @@ export class ProductsService {
 
   async update(id: number, updateProductDto: UpdateProductDto): Promise<Product> {
     const product = await this.findOne(id);
+    const nextCategory = (updateProductDto.category ?? product.category) as ProductCategory;
+    let nextSegment = (updateProductDto.segment ?? product.segment) as ProductSegment;
+    if (updateProductDto.category !== undefined && updateProductDto.segment === undefined) {
+      nextSegment = this.inferSegmentFromCategory(nextCategory);
+    }
+    this.validateSegmentCategory(nextSegment, nextCategory);
+
     Object.assign(product, updateProductDto);
     if (typeof product.salesPrompt === 'string') {
       product.salesPrompt = product.salesPrompt.trim() || null;
     }
+    product.category = nextCategory;
+    product.segment = nextSegment;
     return await this.productRepository.save(product);
   }
 
@@ -85,4 +135,3 @@ export class ProductsService {
     await this.productRepository.remove(product);
   }
 }
-

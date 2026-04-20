@@ -19,7 +19,7 @@ import { Branch, BranchType } from '../branches/entities/branch.entity';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { ProductsService } from '../products/products.service';
-import { ProductCategory } from '../products/entities/product.entity';
+import { ProductSegment } from '../products/entities/product.entity';
 import { SalesService } from '../sales/sales.service';
 import { PaymentsService } from '../sales/payments.service';
 import { Sale } from '../sales/entities/sale.entity';
@@ -504,7 +504,7 @@ export class RestaurantOrdersService {
             queued: 0,
             cooking: 0,
             ready: 0,
-            skipCookPrep: line.product?.category === ProductCategory.CONSUMABLE,
+            skipCookPrep: line.product?.segment === ProductSegment.RETAIL,
           });
         }
         const row = byProduct.get(pid)!;

@@ -25,6 +25,14 @@ export enum ProductSaleMode {
   PIECE = 'PIECE',
 }
 
+/** Business grouping for admin UX and operational rules (restaurant picker, kitchen handout). */
+export enum ProductSegment {
+  MEAT = 'MEAT',
+  PREPARED = 'PREPARED',
+  RETAIL = 'RETAIL',
+  KITCHEN_SUPPLY = 'KITCHEN_SUPPLY',
+}
+
 @Entity()
 export class Product {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
@@ -62,6 +70,19 @@ export class Product {
     default: ProductSaleMode.WEIGHT,
   })
   saleMode: ProductSaleMode;
+
+  @ApiProperty({
+    description: 'Merchandising segment (meat counter, prepared food, retail packs, kitchen inputs)',
+    enum: ProductSegment,
+    example: ProductSegment.MEAT,
+  })
+  @Column({
+    type: 'enum',
+    enum: ProductSegment,
+    enumName: 'product_segment_enum',
+    default: ProductSegment.RETAIL,
+  })
+  segment: ProductSegment;
 
   @ApiProperty({ description: 'Optional sales prompt label', example: 'Number of cups', required: false })
   @Column({ type: 'varchar', nullable: true })
