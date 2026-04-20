@@ -45,13 +45,17 @@ export class ProductsService implements OnModuleInit {
     }
   }
 
-  private validateSegmentCategory(segment: ProductSegment, category: ProductCategory): void {
-    const ok =
+  private isValidSegmentForCategory(segment: ProductSegment, category: ProductCategory): boolean {
+    return (
       (segment === ProductSegment.MEAT && category === ProductCategory.RAW_STOCK) ||
       (segment === ProductSegment.PREPARED && category === ProductCategory.PRODUCTION_ITEM) ||
       ((segment === ProductSegment.RETAIL || segment === ProductSegment.KITCHEN_SUPPLY) &&
-        category === ProductCategory.CONSUMABLE);
-    if (!ok) {
+        category === ProductCategory.CONSUMABLE)
+    );
+  }
+
+  private validateSegmentCategory(segment: ProductSegment, category: ProductCategory): void {
+    if (!this.isValidSegmentForCategory(segment, category)) {
       throw new BadRequestException(`Segment "${segment}" is not valid for category "${category}"`);
     }
   }
@@ -117,6 +121,10 @@ export class ProductsService implements OnModuleInit {
     const nextCategory = (updateProductDto.category ?? product.category) as ProductCategory;
     let nextSegment = (updateProductDto.segment ?? product.segment) as ProductSegment;
     if (updateProductDto.category !== undefined && updateProductDto.segment === undefined) {
+      nextSegment = this.inferSegmentFromCategory(nextCategory);
+    }
+    // e.g. category changed to CONSUMABLE but client still sent segment PREPARED — align to category
+    if (!this.isValidSegmentForCategory(nextSegment, nextCategory)) {
       nextSegment = this.inferSegmentFromCategory(nextCategory);
     }
     this.validateSegmentCategory(nextSegment, nextCategory);

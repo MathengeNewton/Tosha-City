@@ -5,6 +5,7 @@ import {
   applyKindToFormData,
   getKindOption,
   inferKindIdFromProduct,
+  inferSegmentFromCategory,
   kindOptionsForSegment,
 } from "./productKindMap";
 
@@ -247,7 +248,14 @@ export default function ProductWizard({
                 <div className="grid grid-cols-1 gap-2">
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    onChange={(e) => {
+                      const category = e.target.value;
+                      setFormData({
+                        ...formData,
+                        category,
+                        segment: inferSegmentFromCategory(category),
+                      });
+                    }}
                     className="border rounded-lg px-2 py-2"
                   >
                     <option value="RAW_STOCK">Raw stock</option>
