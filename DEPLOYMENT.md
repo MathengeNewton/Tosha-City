@@ -186,9 +186,8 @@ cd /var/www/toshacity
 # Pull latest code
 git pull origin development
 
-# Run deployment script
-chmod +x .deployment.sh
-./.deployment.sh
+# Deploy (build + start)
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
 ### Method 3: Direct Docker Compose
@@ -336,7 +335,7 @@ docker-compose -f docker-compose.prod.yml down
 git checkout <previous-commit-hash>
 
 # Redeploy
-./.deployment.sh
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
 ## Security Checklist

@@ -21,28 +21,27 @@ A comprehensive management system for small to medium-sized butcheries to track 
 
 ## Quick Start
 
-### Development
+### Local stack (Docker)
 
 ```bash
-# Start all services locally (uses localhost URLs)
-./.dev.sh
+# Down, prune stopped/dangling images, rebuild, up, health checks (API + web)
+./scripts/restart.sh
 
-# Or use docker-compose directly
-docker-compose up
+# If you changed DATABASE_USER / DATABASE_PASSWORD in .env but Postgres was already initialized, either
+# put the old values back or wipe the local DB volume once (destructive): FRESH_DB=1 ./scripts/restart.sh
 
-# Services run on:
+# Or compose only
+docker compose up -d --build
+
+# Services (defaults):
 # Backend API: http://localhost:4515/api
 # Frontend: http://localhost:3015
 ```
 
-### Production Deployment
+### Production deployment
 
 ```bash
-# Deploy to production server (uses domain URLs)
-./.deployment.sh
-
-# Or use docker-compose directly
-docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
 **Quick Steps:** Add GitHub Secrets and SSH keys, create `.env.production` on the server, then push to `development` to trigger deployment. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full guide.
@@ -53,37 +52,7 @@ docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
 - **`frontend/`** – Next.js app (dashboard, stock, sales, reports, admin: products, suppliers, customers, users, activity log, settings; auth: login, forgot/reset password)
 - **`docker-compose.yml`** – Local development (db, backend, frontend)
 - **`docker-compose.prod.yml`** – Production (domain URLs)
-- **`.dev.sh`** / **`.deployment.sh`** – Start dev or production stack with health checks
-
-## Deployment Scripts
-
-Two deployment scripts are available:
-
-### `.dev.sh` - Local Development
-```bash
-./.dev.sh
-```
-- Uses `docker-compose.yml` (localhost URLs)
-- Uses `.env` file (optional, has defaults)
-- Health checks via `http://localhost:4515` and `http://localhost:3015`
-- Starts services sequentially with proper logging
-
-### `.deployment.sh` - Production Deployment
-```bash
-./.deployment.sh
-```
-- Uses `docker-compose.prod.yml` (domain URLs)
-- Requires `.env.production` file
-- Pulls latest code from `development` branch
-- Health checks via production domains
-- Starts services sequentially with proper logging
-
-**Features:**
-- ✅ Starts services sequentially (one after another)
-- ✅ Health checks for each service
-- ✅ Proper logging with timestamps
-- ✅ Retry logic for health checks
-- ✅ Optimized for minimal resources
+- **`scripts/restart.sh`** – Local: compose down, prune, rebuild, up, Postgres + API + frontend checks
 
 ## Documentation
 
