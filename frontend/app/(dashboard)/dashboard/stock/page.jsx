@@ -608,7 +608,7 @@ export default function StockManagementPage() {
             )}
             {activeTab === 'wastages' && (
               <div>
-                {canManageEntries && selectedSession.status === 'OPEN' && (
+                {canManageEntries && (selectedSession.status === 'OPEN' || selectedSession.status === 'CLOSED') && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -616,13 +616,26 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && canManageEntries && (
-                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                <div
+                  className={
+                    canManageEntries && (selectedSession.status === 'OPEN' || selectedSession.status === 'CLOSED')
+                      ? 'mt-6'
+                      : ''
+                  }
+                >
+                  {selectedSession?.status === 'CLOSED' && canManageEntries && (
+                    <p className="text-sm mb-4 text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                      Session is <strong>closed</strong> — you can still add wastage or edit/delete wastage rows (e.g. late spoilage or corrections).
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
+                  <StockEntriesTable
+                    stockEntries={wastageEntries}
+                    canEdit={canManageEntries}
+                    onEdit={() => loadSessionDetails(selectedSession.id)}
+                    products={products}
+                    suppliers={[]}
+                    entryType="WASTAGE"
+                  />
                 </div>
               </div>
             )}

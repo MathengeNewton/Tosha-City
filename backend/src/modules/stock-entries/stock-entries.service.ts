@@ -37,13 +37,13 @@ export class StockEntriesService {
 
     if (
       createEntryDto.type === StockEntryType.CLOSING ||
-      createEntryDto.type === StockEntryType.WASTAGE ||
       createEntryDto.type === StockEntryType.PARTNER_SHARE
     ) {
       if (session.status !== SessionStatus.OPEN) {
-        throw new BadRequestException('Cannot add closing/wastage/partner share to a closed session');
+        throw new BadRequestException('Cannot add closing or partner share to a closed session');
       }
     }
+    // WASTAGE: allowed on OPEN or CLOSED (record after session close when needed).
 
     // Validate supplier for incoming stock
     if (createEntryDto.type === StockEntryType.INCOMING) {
@@ -122,13 +122,19 @@ export class StockEntriesService {
     try {
       const entry = await this.findOne(id);
 
+      if (updateEntryDto.type != null && updateEntryDto.type !== entry.type) {
+        throw new BadRequestException('Cannot change stock entry type');
+      }
+
       const session = await this.stockSessionsService.findOne(entry.sessionId);
-      if (session.status === SessionStatus.CLOSED) {
+      const isWastage = entry.type === StockEntryType.WASTAGE;
+
+      if (!isWastage && session.status === SessionStatus.CLOSED) {
         throw new BadRequestException('Cannot update stock entry in a closed session');
       }
 
       const salesCount = await this.saleRepository.count({ where: { sessionId: entry.sessionId } });
-      if (salesCount > 0) {
+      if (!isWastage && salesCount > 0) {
         throw new BadRequestException(
           'Cannot edit stock entries when this session has sales. Adjust or remove sales first.',
         );
@@ -164,12 +170,14 @@ export class StockEntriesService {
       const entry = await this.findOne(id);
 
       const session = await this.stockSessionsService.findOne(entry.sessionId);
-      if (session.status === SessionStatus.CLOSED) {
+      const isWastage = entry.type === StockEntryType.WASTAGE;
+
+      if (!isWastage && session.status === SessionStatus.CLOSED) {
         throw new BadRequestException('Cannot delete stock entry in a closed session');
       }
 
       const salesCount = await this.saleRepository.count({ where: { sessionId: entry.sessionId } });
-      if (salesCount > 0) {
+      if (!isWastage && salesCount > 0) {
         throw new BadRequestException(
           'Cannot delete stock entries when this session has sales. Adjust or remove sales first.',
         );
