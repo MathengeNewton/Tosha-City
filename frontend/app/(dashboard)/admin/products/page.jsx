@@ -153,10 +153,19 @@ export default function ProductsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate price
-    const price = parseFloat(formData.pricePerUnit);
-    if (isNaN(price) || price <= 0) {
+
+    const segment = formData.segment || inferSegmentFromCategory(formData.category);
+    const isKitchenSupply = segment === "KITCHEN_SUPPLY";
+
+    let price = parseFloat(formData.pricePerUnit);
+    if (isKitchenSupply) {
+      if (formData.pricePerUnit === "" || formData.pricePerUnit === undefined) {
+        price = 0;
+      } else if (isNaN(price) || price < 0) {
+        toast.error("Optional cost must be 0 or greater");
+        return;
+      }
+    } else if (isNaN(price) || price <= 0) {
       toast.error("Please enter a valid retail price greater than 0");
       return;
     }
@@ -168,7 +177,6 @@ export default function ProductsPage() {
     // Every product has both: if wholesale left blank, use retail so wholesale sales always have a price
     const wholesalePrice = wholesaleInput !== null && !isNaN(wholesaleInput) ? wholesaleInput : price;
     try {
-      const segment = formData.segment || inferSegmentFromCategory(formData.category);
       const data = {
         name: formData.name.trim(),
         unit: formData.unit.trim(),
@@ -184,10 +192,10 @@ export default function ProductsPage() {
 
       if (editingProduct) {
         await apiClient.products.update(editingProduct.id, data);
-        toast.success("Product updated successfully");
+        toast.success(isKitchenSupply ? "Kitchen item updated" : "Product updated successfully");
       } else {
         await apiClient.products.create(data);
-        toast.success("Product created successfully");
+        toast.success(isKitchenSupply ? "Kitchen item added" : "Product created successfully");
       }
       
       handleCloseModal();
@@ -433,12 +441,22 @@ export default function ProductsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-6 w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
-              {editingProduct ? "Edit product" : "Add product"}
+              {wizardLockedSegment === "KITCHEN_SUPPLY" || formData.segment === "KITCHEN_SUPPLY"
+                ? editingProduct
+                  ? "Edit kitchen item"
+                  : "Add kitchen supply"
+                : editingProduct
+                  ? "Edit product"
+                  : "Add product"}
             </h2>
             <p className="text-xs text-gray-600 mb-4">
-              {editingProduct
-                ? "Update prices, units, or prompts — advanced settings stay available below."
-                : "Choose a type, then name and price. Optional: parent product and till prompts."}
+              {wizardLockedSegment === "KITCHEN_SUPPLY" || formData.segment === "KITCHEN_SUPPLY"
+                ? editingProduct
+                  ? "Name, unit, and optional internal cost. Issued to the kitchen from Stock — not sold on the till."
+                  : "Track salt, oil, sauces, and other inputs. Quantities live under Stock → Kitchen supplies."
+                : editingProduct
+                  ? "Update prices, units, or prompts — advanced settings stay available below."
+                  : "Choose a type, then name and price. Optional: parent product and till prompts."}
             </p>
             <ProductWizard
               formData={formData}

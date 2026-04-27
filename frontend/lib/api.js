@@ -116,6 +116,8 @@ export const apiClient = {
   // Sales
   sales: {
     getAll: (params) => api.get('/sales', { params }),
+    getKitchenSupplyBalances: (params) =>
+      api.get('/sales/kitchen-supply-balances', { params }),
     getById: (id) => api.get(`/sales/${id}`),
     getPayment: (id) => api.get(`/sales/${id}/payment`),
     getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),

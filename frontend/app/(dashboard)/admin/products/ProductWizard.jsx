@@ -58,6 +58,10 @@ export default function ProductWizard({
   };
 
   const kind = getKindOption(kindId);
+  const isKitchenSupply =
+    lockedSegment === "KITCHEN_SUPPLY" ||
+    formData.segment === "KITCHEN_SUPPLY" ||
+    kind?.segment === "KITCHEN_SUPPLY";
 
   const goNextFromKind = () => {
     setFormData((prev) => applyKindToFormData(prev, kindId));
@@ -118,6 +122,12 @@ export default function ProductWizard({
               Change product type
             </button>
           )}
+          {isKitchenSupply && (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              This is for <strong>stock and kitchen issues</strong> only — not a dish or till line. Use name + unit;
+              retail pricing is optional.
+            </p>
+          )}
           <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700">
             <span className="font-semibold">Type:</span> {kind?.title || "—"}
           </div>
@@ -135,7 +145,11 @@ export default function ProductWizard({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Unit *</label>
-            <p className="text-xs text-slate-500 mb-2">Used at checkout (e.g. kg on the scale, or &quot;portion&quot;).</p>
+            <p className="text-xs text-slate-500 mb-2">
+              {isKitchenSupply
+                ? "How you count it when issuing from stock (bottle, kg, packet, piece…)."
+                : 'Used at checkout (e.g. kg on the scale, or "portion").'}
+            </p>
             <div className="flex flex-wrap gap-2 mb-2">
               {UNIT_PRESETS.map((u) => (
                 <button
@@ -161,32 +175,52 @@ export default function ProductWizard({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {isKitchenSupply ? (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Retail price per unit (KES) *</label>
-              <p className="text-xs text-slate-500 mb-1">What the customer pays for one unit.</p>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Internal cost per unit (KES, optional)
+              </label>
+              <p className="text-xs text-slate-500 mb-1">
+                For your records only. Leave blank if you only track quantities — saved as 0. Not used at checkout.
+              </p>
               <input
                 type="number"
+                min="0"
                 step="0.01"
                 value={formData.pricePerUnit}
                 onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base min-h-[44px]"
-                required
+                placeholder="0"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Wholesale price (KES)</label>
-              <p className="text-xs text-slate-500 mb-1">Optional; if blank, retail price is used.</p>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.wholesalePricePerUnit}
-                onChange={(e) => setFormData({ ...formData, wholesalePricePerUnit: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base min-h-[44px]"
-                placeholder="Optional"
-              />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Retail price per unit (KES) *</label>
+                <p className="text-xs text-slate-500 mb-1">What the customer pays for one unit.</p>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.pricePerUnit}
+                  onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base min-h-[44px]"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Wholesale price (KES)</label>
+                <p className="text-xs text-slate-500 mb-1">Optional; if blank, retail price is used.</p>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.wholesalePricePerUnit}
+                  onChange={(e) => setFormData({ ...formData, wholesalePricePerUnit: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base min-h-[44px]"
+                  placeholder="Optional"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {!isCreate && (
             <>
@@ -211,9 +245,10 @@ export default function ProductWizard({
                 </div>
               )}
 
-              {(kind?.suggestSalesPrompt ||
-                formData.saleMode === "PORTION" ||
-                formData.saleMode === "CUP") && (
+              {!isKitchenSupply &&
+                (kind?.suggestSalesPrompt ||
+                  formData.saleMode === "PORTION" ||
+                  formData.saleMode === "CUP") && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Till prompt (optional)</label>
                   <p className="text-xs text-slate-500 mb-1">Shown to cashier when selling.</p>
@@ -236,7 +271,9 @@ export default function ProductWizard({
                   className="h-5 w-5 text-emerald-600 border-slate-300 rounded"
                 />
                 <label htmlFor="isActive" className="ml-2 text-sm text-slate-700">
-                  Active (show on till and lists)
+                  {isKitchenSupply
+                    ? "Active (tracked in stock sessions; not on dish picker)"
+                    : "Active (show on till and lists)"}
                 </label>
               </div>
 
@@ -292,7 +329,7 @@ export default function ProductWizard({
         </div>
       )}
 
-      {step === 3 && isCreate && (
+      {step === 3 && isCreate && !isKitchenSupply && (
         <div className="space-y-4">
           <p className="text-sm font-medium text-slate-800">Optional details</p>
           <p className="text-xs text-slate-600">Skip if not needed — you can edit the product later.</p>
@@ -372,18 +409,22 @@ export default function ProductWizard({
 
         {step === 2 && isCreate && (
           <>
-            <button
-              type="button"
-              onClick={goToOptional}
-              className="flex-1 border-2 border-slate-300 text-slate-800 px-4 py-3 rounded-xl hover:bg-slate-50 min-h-[44px] text-base font-semibold"
-            >
-              More options
-            </button>
+            {!isKitchenSupply && (
+              <button
+                type="button"
+                onClick={goToOptional}
+                className="flex-1 border-2 border-slate-300 text-slate-800 px-4 py-3 rounded-xl hover:bg-slate-50 min-h-[44px] text-base font-semibold"
+              >
+                More options
+              </button>
+            )}
             <button
               type="submit"
-              className="flex-1 bg-slate-900 text-white px-4 py-3 rounded-xl hover:bg-slate-800 min-h-[44px] text-base font-semibold"
+              className={`flex-1 text-white px-4 py-3 rounded-xl min-h-[44px] text-base font-semibold ${
+                isKitchenSupply ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-900 hover:bg-slate-800"
+              }`}
             >
-              Create product
+              {isKitchenSupply ? "Add kitchen item" : "Create product"}
             </button>
           </>
         )}
@@ -391,13 +432,15 @@ export default function ProductWizard({
         {step === 2 && !isCreate && (
           <button
             type="submit"
-            className="flex-1 bg-slate-900 text-white px-4 py-3 rounded-xl hover:bg-slate-800 min-h-[44px] text-base font-semibold"
+            className={`flex-1 text-white px-4 py-3 rounded-xl min-h-[44px] text-base font-semibold ${
+              isKitchenSupply ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-900 hover:bg-slate-800"
+            }`}
           >
-            Save changes
+            {isKitchenSupply ? "Save kitchen item" : "Save changes"}
           </button>
         )}
 
-        {step === 3 && isCreate && (
+        {step === 3 && isCreate && !isKitchenSupply && (
           <button
             type="submit"
             className="flex-1 bg-slate-900 text-white px-4 py-3 rounded-xl hover:bg-slate-800 min-h-[44px] text-base font-semibold"

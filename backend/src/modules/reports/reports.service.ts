@@ -243,6 +243,7 @@ export class ReportsService {
         incoming: number;
         closing: number;
         wastage: number;
+        kitchenIssue: number;
         productionUsage: number;
         salesByPrice: number;
         salesByKgs: number;
@@ -259,6 +260,7 @@ export class ReportsService {
           closing: 0,
           wastage: 0,
           partnerShare: 0,
+          kitchenIssue: 0,
           productionUsage: 0,
           salesByPrice: 0,
           salesByKgs: 0,
@@ -272,6 +274,7 @@ export class ReportsService {
           incoming: 0,
           closing: 0,
           wastage: 0,
+          kitchenIssue: 0,
           productionUsage: 0,
           salesByPrice: 0,
           salesByKgs: 0,
@@ -302,6 +305,10 @@ export class ReportsService {
           stockByProduct[productName].productionUsage += entry.quantity;
           byBranch[branchName].productionUsage += Number(entry.quantity || 0);
           break;
+        case StockEntryType.KITCHEN_ISSUE:
+          stockByProduct[productName].kitchenIssue += entry.quantity;
+          byBranch[branchName].kitchenIssue += Number(entry.quantity || 0);
+          break;
       }
     });
 
@@ -319,6 +326,7 @@ export class ReportsService {
               closing: 0,
               wastage: 0,
               partnerShare: 0,
+              kitchenIssue: 0,
               productionUsage: 0,
               salesByPrice: 0,
               salesByKgs: 0,
@@ -331,6 +339,7 @@ export class ReportsService {
               incoming: 0,
               closing: 0,
               wastage: 0,
+              kitchenIssue: 0,
               productionUsage: 0,
               salesByPrice: 0,
               salesByKgs: 0,

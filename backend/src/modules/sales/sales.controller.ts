@@ -70,6 +70,15 @@ export class SalesController {
     );
   }
 
+  @Get('kitchen-supply-balances')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'On-hand qty for KITCHEN_SUPPLY products in a session (opening+incoming−outflows)' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  getKitchenSupplyBalances(@Query('sessionId') sessionId: string) {
+    return this.salesService.getKitchenSupplyBalances(+sessionId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a sale by ID (branch-scoped for non-admins)' })
   findOne(@Param('id') id: string, @Request() req) {

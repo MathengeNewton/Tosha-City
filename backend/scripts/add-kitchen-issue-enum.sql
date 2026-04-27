@@ -1,0 +1,6 @@
+-- Run once if PostgreSQL already has stock_entry.type enum and TypeORM did not add the value.
+-- Find enum name: SELECT typname FROM pg_type WHERE typtype = 'e' AND typname LIKE '%stock%';
+-- Then (replace TYPE_NAME, e.g. stock_entry_type_enum):
+--   ALTER TYPE TYPE_NAME ADD VALUE 'KITCHEN_ISSUE';
+--
+-- If you use synchronize: true, new installs get the value from the entity; existing DBs may need this ALTER.

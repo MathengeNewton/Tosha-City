@@ -20,6 +20,8 @@ export enum StockEntryType {
   BYPRODUCT_SALE = 'BYPRODUCT_SALE',
   PARTNER_SHARE = 'PARTNER_SHARE',
   PRODUCTION_USAGE = 'PRODUCTION_USAGE',
+  /** Issued from store to kitchen (KITCHEN_SUPPLY products); not a sale */
+  KITCHEN_ISSUE = 'KITCHEN_ISSUE',
 }
 
 @Entity()

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StockEntry, StockEntryType } from './entities/stock-entry.entity';
@@ -9,6 +9,9 @@ import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { Sale } from '../sales/entities/sale.entity';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { ProductsService } from '../products/products.service';
+import { ProductSegment } from '../products/entities/product.entity';
+import { SalesService } from '../sales/sales.service';
 
 @Injectable()
 export class StockEntriesService {
@@ -20,6 +23,9 @@ export class StockEntriesService {
     private stockSessionsService: StockSessionsService,
     private suppliersService: SuppliersService,
     private activityLog: ActivityLogService,
+    private productsService: ProductsService,
+    @Inject(forwardRef(() => SalesService))
+    private salesService: SalesService,
   ) {}
 
   async create(createEntryDto: CreateStockEntryDto, userId: number): Promise<StockEntry> {
@@ -41,15 +47,38 @@ export class StockEntriesService {
     if (
       createEntryDto.type === StockEntryType.CLOSING ||
       createEntryDto.type === StockEntryType.WASTAGE ||
-      createEntryDto.type === StockEntryType.PARTNER_SHARE
+      createEntryDto.type === StockEntryType.PARTNER_SHARE ||
+      createEntryDto.type === StockEntryType.KITCHEN_ISSUE
     ) {
       if (session.status !== SessionStatus.OPEN) {
-        throw new BadRequestException('Cannot add closing/wastage/partner share to a closed session');
+        throw new BadRequestException('Cannot add closing/wastage/partner share/kitchen issue to a closed session');
       }
     }
 
     if (createEntryDto.type === StockEntryType.INCOMING && createEntryDto.supplierId != null) {
       await this.suppliersService.findOne(createEntryDto.supplierId);
+    }
+
+    if (createEntryDto.type === StockEntryType.KITCHEN_ISSUE) {
+      const product = await this.productsService.findOne(createEntryDto.productId);
+      if (product.segment !== ProductSegment.KITCHEN_SUPPLY) {
+        throw new BadRequestException(
+          'Kitchen issues are only for Kitchen inputs products (segment KITCHEN_SUPPLY).',
+        );
+      }
+      const qty = Number(createEntryDto.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw new BadRequestException('Quantity must be greater than 0');
+      }
+      const available = await this.salesService.getAvailableStock(
+        createEntryDto.sessionId,
+        createEntryDto.productId,
+      );
+      if (qty > available + 1e-6) {
+        throw new BadRequestException(
+          `Cannot issue ${qty} ${product.unit}: only ${available} ${product.unit} available in this session`,
+        );
+      }
     }
 
     try {

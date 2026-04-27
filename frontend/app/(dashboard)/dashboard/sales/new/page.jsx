@@ -20,6 +20,8 @@ export default function NewSalePage() {
   const { user, hasRole } = useAuth();
   const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
+  /** After branch picker fetch finishes (admin) or cashier branch resolved — avoids spinner forever when loadData never runs. */
+  const [branchInitDone, setBranchInitDone] = useState(false);
   const [currentSession, setCurrentSession] = useState(null);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -42,10 +44,13 @@ export default function NewSalePage() {
   }, [user?.branchId, isAdmin]);
 
   useEffect(() => {
-    if (isAdmin ? selectedBranchId : user?.branchId) {
+    const branchId = isAdmin ? selectedBranchId : user?.branchId;
+    if (branchId) {
       loadData();
+    } else if (branchInitDone) {
+      setLoading(false);
     }
-  }, [selectedBranchId, user?.branchId, isAdmin]);
+  }, [selectedBranchId, user?.branchId, isAdmin, branchInitDone]);
 
   const initializeBranchContext = async () => {
     try {
@@ -62,6 +67,8 @@ export default function NewSalePage() {
     } catch (error) {
       console.error("Error loading branches:", error);
       toast.error("Failed to load branches");
+    } finally {
+      setBranchInitDone(true);
     }
   };
 

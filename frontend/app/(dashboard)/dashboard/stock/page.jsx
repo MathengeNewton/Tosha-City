@@ -13,6 +13,7 @@ import {
   InformationCircleIcon,
   ShareIcon,
 } from "@heroicons/react/24/outline";
+import { segmentOfProduct } from "../../../../lib/productSegment";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -51,6 +52,8 @@ export default function StockManagementPage() {
   const canCloseSession = isAdmin || hasRole('cashier'); // Cashiers can close sessions
   
   const [loading, setLoading] = useState(true);
+  /** Set when branch list / cashier branch init finishes so we never spin forever without calling loadData. */
+  const [branchInitDone, setBranchInitDone] = useState(false);
   const [currentSession, setCurrentSession] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [allSessions, setAllSessions] = useState([]);
@@ -62,6 +65,7 @@ export default function StockManagementPage() {
   const [sales, setSales] = useState([]);
   const [productionRuns, setProductionRuns] = useState([]);
   const [currentSessionSales, setCurrentSessionSales] = useState([]);
+  const [kitchenSupplyBalances, setKitchenSupplyBalances] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -91,10 +95,13 @@ export default function StockManagementPage() {
   }, [user?.branchId, isAdmin]);
 
   useEffect(() => {
-    if (isAdmin ? selectedBranchId : user?.branchId) {
+    const branchId = isAdmin ? selectedBranchId : user?.branchId;
+    if (branchId) {
       loadData();
+    } else if (branchInitDone) {
+      setLoading(false);
     }
-  }, [selectedBranchId, user?.branchId, isAdmin]);
+  }, [selectedBranchId, user?.branchId, isAdmin, branchInitDone]);
 
   useEffect(() => {
     if (sessionIdParam) {
@@ -107,7 +114,21 @@ export default function StockManagementPage() {
     if (t === "production" && selectedSession?.id) {
       setActiveTab("production");
     }
+    if (t === "kitchen" && selectedSession?.id) {
+      setActiveTab("kitchen");
+    }
   }, [searchParams, selectedSession?.id]);
+
+  // Deep-link: /dashboard/stock?tab=kitchen → open current branch session when none selected
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t !== "kitchen" || sessionIdParam || !currentSession?.id) return;
+    const p = new URLSearchParams();
+    p.set("sessionId", String(currentSession.id));
+    p.set("tab", "kitchen");
+    p.set("view", viewMode || "list");
+    router.replace(`/dashboard/stock?${p.toString()}`);
+  }, [searchParams, sessionIdParam, currentSession?.id, router, viewMode]);
 
   // Reload sessions when filters or branch change (skip initial load)
   useEffect(() => {
@@ -132,6 +153,8 @@ export default function StockManagementPage() {
     } catch (error) {
       console.error("Error loading branches:", error);
       toast.error("Failed to load branches");
+    } finally {
+      setBranchInitDone(true);
     }
   };
 
@@ -237,6 +260,12 @@ export default function StockManagementPage() {
       ]);
       setSales(salesRes.data || []);
       setProductionRuns(productionRes.data || []);
+      try {
+        const balRes = await apiClient.sales.getKitchenSupplyBalances({ sessionId });
+        setKitchenSupplyBalances(balRes.data || []);
+      } catch {
+        setKitchenSupplyBalances([]);
+      }
     } catch (error) {
       console.error("Error loading session:", error);
       toast.error("Failed to load session details");
@@ -282,6 +311,7 @@ export default function StockManagementPage() {
     params.set('view', viewMode);
     router.push(`/dashboard/stock?${params.toString()}`);
     setSelectedSession(null);
+    setKitchenSupplyBalances([]);
   };
 
   const handleCalendarDayClick = (session) => {
@@ -376,6 +406,7 @@ export default function StockManagementPage() {
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
+    const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
 
     const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const productionUsageEntries = stockEntries.filter((e) => e.type === "PRODUCTION_USAGE");
@@ -612,7 +643,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'production', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -626,6 +657,7 @@ export default function StockManagementPage() {
                    tab === 'opening' ? 'Opening Stock' : 
                    tab === 'incoming' ? 'Incoming Stock' :
                    tab === 'production' ? 'Production' :
+                   tab === 'kitchen' ? 'Kitchen supplies' :
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
                    tab === 'stock-share' ? 'Stock Share' :
@@ -702,6 +734,68 @@ export default function StockManagementPage() {
                 onRefresh={() => loadSessionDetails(selectedSession.id)}
                 variant="embedded"
               />
+            )}
+            {activeTab === 'kitchen' && (
+              <div className="space-y-6">
+                <p className="text-sm text-gray-600">
+                  Track Kitchen inputs (soy sauce, oil, etc.): opening and incoming add stock; issuing to the kitchen reduces on-hand. Not sold at the till.
+                </p>
+                {kitchenSupplyBalances.length > 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3">On hand (this session)</h4>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead>
+                          <tr className="text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="py-2 pr-4">Product</th>
+                            <th className="py-2 pr-4">Unit</th>
+                            <th className="py-2">Available</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {kitchenSupplyBalances.map((row) => (
+                            <tr key={row.productId}>
+                              <td className="py-2 pr-4 font-medium text-gray-900">{row.name}</td>
+                              <td className="py-2 pr-4 text-gray-600">{row.unit}</td>
+                              <td className="py-2 font-semibold text-gray-900">
+                                {Number(row.available).toLocaleString("en-KE", {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {canManageEntries && selectedSession.status === 'OPEN' && (
+                  <StockEntryForm
+                    session={selectedSession}
+                    products={products.filter(
+                      (p) => segmentOfProduct(p) === "KITCHEN_SUPPLY" && p.isActive !== false
+                    )}
+                    type="KITCHEN_ISSUE"
+                    onSuccess={() => loadSessionDetails(selectedSession.id)}
+                  />
+                )}
+                <div className={canManageEntries && selectedSession.status === "OPEN" ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                    </p>
+                  )}
+                  <StockEntriesTable
+                    stockEntries={kitchenIssueEntries}
+                    canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)}
+                    onEdit={() => loadSessionDetails(selectedSession.id)}
+                    products={products}
+                    suppliers={[]}
+                    entryType="KITCHEN_ISSUE"
+                  />
+                </div>
+              </div>
             )}
             {activeTab === 'closing' && (
               <div>
@@ -1408,6 +1502,7 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                       entry.type === 'OPENING' ? 'bg-blue-100 text-blue-800' :
                       entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
                       entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
+                      entry.type === 'KITCHEN_ISSUE' ? 'bg-amber-100 text-amber-900' :
                       'bg-red-100 text-red-800'
                     }`}>
                       {entry.type}
@@ -1899,6 +1994,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
+    const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
     const byproductSaleEntries = stockEntries.filter(e => e.type === 'BYPRODUCT_SALE');
     const productionUsageEntries = stockEntries.filter(e => e.type === 'PRODUCTION_USAGE');
     const productionOutputByProduct = {};
@@ -1912,6 +2008,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
     });
 
     const totalPartnerShareQty = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const totalKitchenIssueQty = kitchenIssueEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const totalProductionUsageQty = productionUsageEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
     // Sales statistics
@@ -2051,6 +2148,9 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
       const partnerShare = partnerShareEntries
         .filter(e => e.product?.id === productId)
         .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+      const kitchenIssue = kitchenIssueEntries
+        .filter((e) => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
       const productionUsage = productionUsageEntries
         .filter(e => e.product?.id === productId)
         .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
@@ -2062,9 +2162,10 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
       const productionWastage = productionWastageByProduct[productId] || 0;
       const effectiveAvailable = isProductionItem ? productionOutput : totalAvailable;
       const effectiveWastage = isProductionItem ? productionWastage : wastage;
+      // Aligns with backend getAvailableStock (approx.): outflows include kitchenIssue for non-byproducts.
       const remaining = isByproduct
         ? null
-        : (effectiveAvailable - soldInclByproduct - effectiveWastage - partnerShare - productionUsage);
+        : (effectiveAvailable - soldInclByproduct - effectiveWastage - partnerShare - productionUsage - kitchenIssue);
 
       productBreakdown[productId] = {
         name: productName,
@@ -2076,6 +2177,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
         soldInclByproduct,
         wastage: effectiveWastage,
         partnerShare,
+        kitchenIssue,
         productionUsage,
         remaining,
         isByproduct,
@@ -2093,6 +2195,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
         closing: { entries: closingEntries.length, quantity: totalClosingQty },
         wastage: { entries: wastageEntries.length, quantity: totalWastageQty },
         partnerShare: { entries: partnerShareEntries.length, quantity: totalPartnerShareQty },
+        kitchenIssue: { entries: kitchenIssueEntries.length, quantity: totalKitchenIssueQty },
         productionUsage: { entries: productionUsageEntries.length, quantity: totalProductionUsageQty },
         production: { entries: productionRuns.length, quantity: totalProducedQty, wastage: totalProductionWastage },
       },
@@ -2194,6 +2297,16 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
               {(analytics.stock.productionUsage?.quantity ?? 0).toFixed(2)} kg
             </p>
             <p className="text-xs text-gray-500">{analytics.stock.productionUsage?.entries ?? 0} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Kitchen issued</p>
+            <p className="text-lg font-bold text-amber-800">
+              {(analytics.stock.kitchenIssue?.quantity ?? 0).toLocaleString("en-KE", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+            <p className="text-xs text-gray-500">{analytics.stock.kitchenIssue?.entries ?? 0} entries</p>
           </div>
           <div>
             <p className="text-xs text-gray-600">Production output</p>
@@ -2306,6 +2419,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sold (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wastage (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock shared (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Kitchen issued</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Production use (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (kg)</th>
                 </tr>
@@ -2326,6 +2440,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
                     </td>
                     <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm text-indigo-600">{(product.partnerShare ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-amber-800">{(product.kitchenIssue ?? 0).toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm text-purple-600">{(product.productionUsage ?? 0).toFixed(2)}</td>
                     <td className={`px-4 py-2 text-sm font-semibold ${product.remaining == null ? 'text-gray-500' : product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                       {product.remaining == null ? '—' : product.remaining.toFixed(2)}
@@ -2505,13 +2620,26 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {type === "KITCHEN_ISSUE" && (
+        <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Record stock taken from the store into the kitchen. Quantity cannot exceed on-hand for this session.
+        </p>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Product *
         </label>
         <select
           value={formData.productId}
-          onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
+          onChange={(e) => {
+            const id = e.target.value;
+            const p = products.find((x) => String(x.id) === String(id));
+            setFormData({
+              ...formData,
+              productId: id,
+              unit: type === "KITCHEN_ISSUE" && p?.unit ? p.unit : formData.unit,
+            });
+          }}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
           required
         >
@@ -2652,7 +2780,8 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
             'OPENING': 'Record Opening Stock',
             'INCOMING': 'Record Incoming Stock',
             'CLOSING': 'Record Closing Stock',
-            'WASTAGE': 'Record Wastage'
+            'WASTAGE': 'Record Wastage',
+            'KITCHEN_ISSUE': 'Issue to kitchen',
           };
           return typeLabels[type] || `Record ${type} Stock`;
         })()}

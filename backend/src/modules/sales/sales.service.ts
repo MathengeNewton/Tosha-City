@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Sale } from './entities/sale.entity';
@@ -15,7 +22,7 @@ import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entr
 import { CustomersService } from '../customers/customers.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { UserRole } from '../roles/entities/role.entity';
-import { ProductCategory } from '../products/entities/product.entity';
+import { ProductCategory, ProductSegment } from '../products/entities/product.entity';
 import { ProductionRun } from '../production/entities/production-run.entity';
 import { RestaurantOrder, RestaurantOrderStatus } from '../restaurant-orders/entities/restaurant-order.entity';
 
@@ -43,6 +50,7 @@ export class SalesService {
     private dataSource: DataSource,
     private stockSessionsService: StockSessionsService,
     private productsService: ProductsService,
+    @Inject(forwardRef(() => StockEntriesService))
     private stockEntriesService: StockEntriesService,
     private customersService: CustomersService,
     private activityLog: ActivityLogService,
@@ -573,7 +581,36 @@ export class SalesService {
     const partnerShareEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.PARTNER_SHARE);
     const partnerShareQty = partnerShareEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
 
-    return openingStock + incomingStock - soldStock - wastage - byproductSaleQty - partnerShareQty;
+    const kitchenIssueEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.KITCHEN_ISSUE);
+    const kitchenIssueQty = kitchenIssueEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
+    return (
+      openingStock +
+      incomingStock -
+      soldStock -
+      wastage -
+      byproductSaleQty -
+      partnerShareQty -
+      kitchenIssueQty
+    );
+  }
+
+  /** Per-session available qty for each active KITCHEN_SUPPLY product (same formula as getAvailableStock). */
+  async getKitchenSupplyBalances(sessionId: number): Promise<
+    Array<{ productId: number; name: string; unit: string; available: number }>
+  > {
+    await this.stockSessionsService.findOne(sessionId);
+    const products = await this.productsService.findActive();
+    const kitchen = products.filter((p) => p.segment === ProductSegment.KITCHEN_SUPPLY);
+    const rows = await Promise.all(
+      kitchen.map(async (p) => ({
+        productId: p.id,
+        name: p.name,
+        unit: p.unit,
+        available: await this.getAvailableStock(sessionId, p.id),
+      })),
+    );
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async getProducedAvailableStock(sessionId: number, productId: number): Promise<number> {

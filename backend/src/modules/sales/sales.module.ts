@@ -22,7 +22,7 @@ import { ProductionModule } from '../production/production.module';
     TypeOrmModule.forFeature([Sale, SaleItem, SalePayment, StockEntry, ProductionRun, RestaurantOrder]),
     StockSessionsModule,
     ProductsModule,
-    StockEntriesModule,
+    forwardRef(() => StockEntriesModule),
     CustomersModule,
     ActivityLogModule,
     forwardRef(() => ProductionModule),
