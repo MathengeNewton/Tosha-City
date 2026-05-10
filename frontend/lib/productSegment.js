@@ -15,3 +15,8 @@ export function segmentOfProduct(product) {
 export function isRetailCounterProduct(product) {
   return segmentOfProduct(product) === "RETAIL";
 }
+
+/** Kitchen/recipe inputs — never on the retail till (stock/production only). */
+export function isKitchenSupplyProduct(product) {
+  return segmentOfProduct(product) === "KITCHEN_SUPPLY";
+}

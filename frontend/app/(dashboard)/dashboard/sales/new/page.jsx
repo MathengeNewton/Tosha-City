@@ -5,6 +5,7 @@ import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
+import { isKitchenSupplyProduct } from "../../../../../lib/productSegment";
 
 function getPromptLabel(product) {
   if (!product) return "Quantity";
@@ -99,7 +100,7 @@ export default function NewSalePage() {
 
       // Get products
       const productsRes = await apiClient.products.getActive({ branchId });
-      const productsList = productsRes.data || [];
+      const productsList = (productsRes.data || []).filter((p) => !isKitchenSupplyProduct(p));
       setProducts(productsList);
 
       // Get credit and wholesale customers (for credit sales and wholesale pricing)

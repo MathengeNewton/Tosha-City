@@ -64,6 +64,14 @@ export class SalesService {
     );
   }
 
+  private assertProductSellableAtTill(product: Product): void {
+    if (product.segment === ProductSegment.KITCHEN_SUPPLY) {
+      throw new BadRequestException(
+        `Product "${product.name}" is a kitchen supply item and cannot be sold on the till`,
+      );
+    }
+  }
+
   private assertProductAllowedForBranch(product: Product, branchType: BranchType): void {
     const scope = product.branchScope ?? BranchCatalogScope.ALL;
     if (scope === BranchCatalogScope.ALL) {
@@ -163,6 +171,7 @@ export class SalesService {
 
     for (const itemDto of createSaleDto.items) {
       const product = await this.productsService.findOne(itemDto.productId);
+      this.assertProductSellableAtTill(product);
       this.assertProductAllowedForBranch(product, branchType);
       const unitPrice =
         itemDto.unitPrice ??
