@@ -98,7 +98,7 @@ export default function NewSalePage() {
       setCurrentSession(session);
 
       // Get products
-      const productsRes = await apiClient.products.getActive();
+      const productsRes = await apiClient.products.getActive({ branchId });
       const productsList = productsRes.data || [];
       setProducts(productsList);
 

@@ -24,6 +24,7 @@ function defaultFormForSegment(segment) {
     description: "",
     isActive: true,
     parentProductId: "",
+    branchScope: "ALL",
   };
   if (segment === "MEAT") {
     return { ...base, unit: "kg", category: "RAW_STOCK", saleMode: "WEIGHT", segment: "MEAT" };
@@ -43,6 +44,12 @@ function defaultFormForSegment(segment) {
 const defaultEnd = new Date();
 const defaultStart = new Date();
 defaultStart.setDate(defaultStart.getDate() - 365);
+
+function formatBranchScope(scope) {
+  if (scope === "GENERAL_BUTCHERY") return "General only";
+  if (scope === "PORK_BUTCHERY") return "Pork only";
+  return "All branches";
+}
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -88,6 +95,7 @@ export default function ProductsPage() {
     isActive: true,
     parentProductId: "",
     segment: "MEAT",
+    branchScope: "ALL",
   });
 
   const filteredProducts = useMemo(() => {
@@ -135,6 +143,7 @@ export default function ProductsPage() {
         isActive: product.isActive,
         parentProductId: product.parentProductId ? product.parentProductId.toString() : "",
         segment: product.segment || inferSegmentFromCategory(product.category),
+        branchScope: product.branchScope || "ALL",
       });
     } else {
       setWizardLockedSegment(activeSegment);
@@ -188,6 +197,7 @@ export default function ProductsPage() {
         salesPrompt: formData.salesPrompt?.trim() || undefined,
         isActive: formData.isActive,
         parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
+        branchScope: formData.branchScope || "ALL",
       };
 
       if (editingProduct) {
@@ -231,6 +241,7 @@ export default function ProductsPage() {
         saleMode: product.saleMode || "WEIGHT",
         segment: product.segment || inferSegmentFromCategory(product.category),
         salesPrompt: product.salesPrompt || undefined,
+        branchScope: product.branchScope || "ALL",
         isActive: !product.isActive,
       });
       toast.success(`Product ${product.isActive ? 'deactivated' : 'activated'} successfully`);
@@ -260,6 +271,7 @@ export default function ProductsPage() {
                 unit: p.unit,
                 pricePerUnit: parseFloat(p.defaultPrice || p.pricePerUnit || 0),
                 segment: p.segment || inferSegmentFromCategory(p.category),
+                branchScope: formatBranchScope(p.branchScope),
                 category: p.category || "",
                 saleMode: p.saleMode || "",
                 salesPrompt: p.salesPrompt || "",
@@ -273,6 +285,7 @@ export default function ProductsPage() {
                   { key: "unit", label: "Unit" },
                   { key: "pricePerUnit", label: "Price (KES)" },
                   { key: "segment", label: "Segment" },
+                  { key: "branchScope", label: "Branch scope" },
                   { key: "category", label: "Category" },
                   { key: "saleMode", label: "Sale Mode" },
                   { key: "salesPrompt", label: "Sales Prompt" },
@@ -355,6 +368,7 @@ export default function ProductsPage() {
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Retail (KES)</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Wholesale (KES)</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Segment</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Branches</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Category</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Sale Mode</th>
                 <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -364,7 +378,7 @@ export default function ProductsPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                  <td colSpan="10" className="px-4 sm:px-6 py-4 text-center text-gray-500">
                     No products in this tab. Add one or switch segment.
                   </td>
                 </tr>
@@ -385,6 +399,9 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-sm text-gray-600 hidden lg:table-cell">
                       {(product.segment || inferSegmentFromCategory(product.category))?.replace(/_/g, " ") || "—"}
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-600 hidden lg:table-cell">
+                      {formatBranchScope(product.branchScope)}
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
                       {product.category?.replace(/_/g, " ") || "-"}

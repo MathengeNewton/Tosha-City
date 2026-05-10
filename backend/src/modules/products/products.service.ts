@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { BranchCatalogScope } from '../../common/enums/branch-catalog-scope.enum';
+import { Branch, BranchType } from '../branches/entities/branch.entity';
 import { Product, ProductCategory, ProductSaleMode, ProductSegment } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -10,6 +12,8 @@ export class ProductsService implements OnModuleInit {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(Branch)
+    private branchRepository: Repository<Branch>,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -84,6 +88,7 @@ export class ProductsService implements OnModuleInit {
       salesPrompt: createProductDto.salesPrompt?.trim() || null,
       isActive: createProductDto.isActive !== undefined ? createProductDto.isActive : true,
       parentProductId: createProductDto.parentProductId || null,
+      branchScope: createProductDto.branchScope ?? BranchCatalogScope.ALL,
     };
 
     const product = this.productRepository.create(productData);
@@ -100,6 +105,29 @@ export class ProductsService implements OnModuleInit {
   async findActive(): Promise<Product[]> {
     return await this.productRepository.find({
       where: { isActive: true },
+      relations: ['parentProduct'],
+      order: { name: 'ASC' },
+    });
+  }
+
+  /** When branchId is null, returns all active products (e.g. admin with no branch). */
+  async findActiveForBranch(branchId: number | null): Promise<Product[]> {
+    if (branchId == null) {
+      return this.findActive();
+    }
+    const branch = await this.branchRepository.findOne({ where: { id: branchId } });
+    if (!branch) {
+      throw new NotFoundException(`Branch with ID ${branchId} not found`);
+    }
+    const catalogScopeForBranch =
+      branch.type === BranchType.GENERAL_BUTCHERY
+        ? BranchCatalogScope.GENERAL_BUTCHERY
+        : BranchCatalogScope.PORK_BUTCHERY;
+    return await this.productRepository.find({
+      where: [
+        { isActive: true, branchScope: BranchCatalogScope.ALL },
+        { isActive: true, branchScope: catalogScopeForBranch },
+      ],
       relations: ['parentProduct'],
       order: { name: 'ASC' },
     });

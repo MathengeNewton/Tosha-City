@@ -11,6 +11,12 @@ import {
 
 const UNIT_PRESETS = ["kg", "g", "piece", "portion", "cup", "packet", "bottle"];
 
+const BRANCH_SCOPE_OPTIONS = [
+  { value: "ALL", label: "All branches", hint: "Shows on every till." },
+  { value: "GENERAL_BUTCHERY", label: "General butchery only", hint: "Main / beef-heavy counters." },
+  { value: "PORK_BUTCHERY", label: "Pork butchery only", hint: "Pork branch tills only." },
+];
+
 const SEGMENT_INTRO = {
   MEAT: "Meat counter — raw weight or piece.",
   PREPARED: "Prepared food — portions, cups, or cooked weight.",
@@ -131,6 +137,38 @@ export default function ProductWizard({
           <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700">
             <span className="font-semibold">Type:</span> {kind?.title || "—"}
           </div>
+
+          <fieldset className="rounded-xl border border-slate-200 bg-white px-3 py-3 space-y-2">
+            <legend className="text-sm font-medium text-slate-800 px-1">Branch availability</legend>
+            <p className="text-xs text-slate-600 mb-2">
+              Which tills can sell this product? Cashiers only see SKUs allowed for their branch type.
+            </p>
+            <div className="space-y-2">
+              {BRANCH_SCOPE_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex cursor-pointer gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                    formData.branchScope === opt.value
+                      ? "border-emerald-600 bg-emerald-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="branchScope"
+                    value={opt.value}
+                    checked={formData.branchScope === opt.value}
+                    onChange={() => setFormData({ ...formData, branchScope: opt.value })}
+                    className="mt-1 h-4 w-4 text-emerald-600"
+                  />
+                  <span>
+                    <span className="font-semibold text-slate-900 block">{opt.label}</span>
+                    <span className="text-xs text-slate-600">{opt.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Product name *</label>

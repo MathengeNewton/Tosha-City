@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
+import { BranchCatalogScope } from '../../../common/enums/branch-catalog-scope.enum';
 import { StockEntry } from '../../stock-entries/entities/stock-entry.entity';
 import { SaleItem } from '../../sales/entities/sale-item.entity';
 
@@ -83,6 +84,19 @@ export class Product {
     default: ProductSegment.RETAIL,
   })
   segment: ProductSegment;
+
+  @ApiProperty({
+    description: 'Which branch types may sell this product at the till',
+    enum: BranchCatalogScope,
+    example: BranchCatalogScope.ALL,
+  })
+  @Column({
+    type: 'enum',
+    enum: BranchCatalogScope,
+    enumName: 'branch_catalog_scope_enum',
+    default: BranchCatalogScope.ALL,
+  })
+  branchScope: BranchCatalogScope;
 
   @ApiProperty({ description: 'Optional sales prompt label', example: 'Number of cups', required: false })
   @Column({ type: 'varchar', nullable: true })

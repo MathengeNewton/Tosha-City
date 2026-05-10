@@ -11,7 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { RecipeBranchScope } from '../entities/recipe.entity';
+import { BranchCatalogScope } from '../../../common/enums/branch-catalog-scope.enum';
 
 export class CreateRecipeIngredientDto {
   @ApiProperty({ required: false, example: 1 })
@@ -46,9 +46,9 @@ export class CreateRecipeDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ enum: RecipeBranchScope, example: RecipeBranchScope.GENERAL_BUTCHERY })
-  @IsEnum(RecipeBranchScope)
-  branchScope: RecipeBranchScope;
+  @ApiProperty({ enum: BranchCatalogScope, example: BranchCatalogScope.GENERAL_BUTCHERY })
+  @IsEnum(BranchCatalogScope)
+  branchScope: BranchCatalogScope;
 
   @ApiProperty({ example: 1 })
   @IsNumber()

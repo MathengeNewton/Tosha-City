@@ -231,7 +231,7 @@ export default function StockManagementPage() {
       }
 
       // Get products
-      const productsRes = await apiClient.products.getActive();
+      const productsRes = await apiClient.products.getActive({ branchId });
       setProducts(productsRes.data || []);
 
       // Get suppliers

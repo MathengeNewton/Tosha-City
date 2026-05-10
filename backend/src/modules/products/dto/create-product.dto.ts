@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsNumber, IsOptional, IsBoolean, Min, IsEnum } from 'class-validator';
+import { BranchCatalogScope } from '../../../common/enums/branch-catalog-scope.enum';
 import { ProductCategory, ProductSaleMode, ProductSegment } from '../entities/product.entity';
 
 export class CreateProductDto {
@@ -57,5 +58,15 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   parentProductId?: number;
+
+  @ApiProperty({
+    description: 'Branch types that may sell this product',
+    enum: BranchCatalogScope,
+    required: false,
+    default: BranchCatalogScope.ALL,
+  })
+  @IsOptional()
+  @IsEnum(BranchCatalogScope)
+  branchScope?: BranchCatalogScope;
 }
 

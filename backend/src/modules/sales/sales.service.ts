@@ -22,7 +22,9 @@ import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entr
 import { CustomersService } from '../customers/customers.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { UserRole } from '../roles/entities/role.entity';
-import { ProductCategory, ProductSegment } from '../products/entities/product.entity';
+import { BranchCatalogScope } from '../../common/enums/branch-catalog-scope.enum';
+import { BranchType } from '../branches/entities/branch.entity';
+import { Product, ProductCategory, ProductSegment } from '../products/entities/product.entity';
 import { ProductionRun } from '../production/entities/production-run.entity';
 import { RestaurantOrder, RestaurantOrderStatus } from '../restaurant-orders/entities/restaurant-order.entity';
 
@@ -60,6 +62,20 @@ export class SalesService {
     return (user?.roles || []).some((role) =>
       typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
     );
+  }
+
+  private assertProductAllowedForBranch(product: Product, branchType: BranchType): void {
+    const scope = product.branchScope ?? BranchCatalogScope.ALL;
+    if (scope === BranchCatalogScope.ALL) {
+      return;
+    }
+    if (scope === BranchCatalogScope.GENERAL_BUTCHERY && branchType === BranchType.GENERAL_BUTCHERY) {
+      return;
+    }
+    if (scope === BranchCatalogScope.PORK_BUTCHERY && branchType === BranchType.PORK_BUTCHERY) {
+      return;
+    }
+    throw new BadRequestException(`Product "${product.name}" is not available at this branch type`);
   }
 
   private assertSaleBranchAccess(sale: Sale, user?: RequestUser): void {
@@ -138,6 +154,8 @@ export class SalesService {
 
     const isWholesaleSale = customer?.type === 'WHOLESALE';
 
+    const branchType = session.branch.type;
+
     // Calculate totals and validate stock
     let totalAmount = 0;
     const itemsToCreate: Partial<SaleItem>[] = [];
@@ -145,6 +163,7 @@ export class SalesService {
 
     for (const itemDto of createSaleDto.items) {
       const product = await this.productsService.findOne(itemDto.productId);
+      this.assertProductAllowedForBranch(product, branchType);
       const unitPrice =
         itemDto.unitPrice ??
         (isWholesaleSale ? Number(product.wholesalePrice ?? product.defaultPrice) : Number(product.defaultPrice));

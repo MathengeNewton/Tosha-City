@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -6,6 +7,8 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
+  Request,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -43,9 +46,22 @@ export class ProductsController {
   }
 
   @Get('active')
-  @ApiOperation({ summary: 'Get all active products' })
-  findActive() {
-    return this.productsService.findActive();
+  @ApiOperation({
+    summary:
+      'Get active products (scoped by branch when branchId query or JWT user branch is set; admins without branch get full list)',
+  })
+  findActive(@Request() req: { user?: { branchId?: number | null } }, @Query('branchId') branchIdParam?: string) {
+    let branchId: number | null = null;
+    if (branchIdParam !== undefined && branchIdParam !== '') {
+      const parsed = parseInt(branchIdParam, 10);
+      if (Number.isNaN(parsed)) {
+        throw new BadRequestException('Invalid branchId');
+      }
+      branchId = parsed;
+    } else if (req.user?.branchId != null) {
+      branchId = req.user.branchId;
+    }
+    return this.productsService.findActiveForBranch(branchId);
   }
 
   @Get(':id')

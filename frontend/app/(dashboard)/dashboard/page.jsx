@@ -11,7 +11,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 /** Cashier / branch staff home. Admins are redirected to /admin/dashboard (single admin home). */
 export default function CashierDashboard() {
   const router = useRouter();
-  const { hasRole, loading: authLoading } = useAuth();
+  const { user, hasRole, loading: authLoading } = useAuth();
   const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
@@ -66,7 +66,9 @@ export default function CashierDashboard() {
         setCurrentSessionSales([]);
       }
 
-      const productsRes = await apiClient.products.getActive();
+      const productsRes = await apiClient.products.getActive(
+        user?.branchId ? { branchId: user.branchId } : {}
+      );
       const activeProducts = productsRes.data || [];
       setStats((prev) => ({ ...prev, activeProducts: activeProducts.length }));
     } catch (error) {

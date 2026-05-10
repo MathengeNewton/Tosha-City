@@ -9,7 +9,7 @@ import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { SalesService } from '../sales/sales.service';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { BranchType } from '../branches/entities/branch.entity';
-import { RecipeBranchScope } from '../recipes/entities/recipe.entity';
+import { BranchCatalogScope } from '../../common/enums/branch-catalog-scope.enum';
 import { SaleItem } from '../sales/entities/sale-item.entity';
 import { UserRole } from '../roles/entities/role.entity';
 
@@ -57,14 +57,14 @@ export class ProductionService {
     }
   }
 
-  private validateRecipeForBranch(recipeBranchScope: RecipeBranchScope, branchType: BranchType) {
-    if (recipeBranchScope === RecipeBranchScope.ALL) {
+  private validateRecipeForBranch(recipeBranchScope: BranchCatalogScope, branchType: BranchType) {
+    if (recipeBranchScope === BranchCatalogScope.ALL) {
       return;
     }
-    if (recipeBranchScope === RecipeBranchScope.GENERAL_BUTCHERY && branchType === BranchType.GENERAL_BUTCHERY) {
+    if (recipeBranchScope === BranchCatalogScope.GENERAL_BUTCHERY && branchType === BranchType.GENERAL_BUTCHERY) {
       return;
     }
-    if (recipeBranchScope === RecipeBranchScope.PORK_BUTCHERY && branchType === BranchType.PORK_BUTCHERY) {
+    if (recipeBranchScope === BranchCatalogScope.PORK_BUTCHERY && branchType === BranchType.PORK_BUTCHERY) {
       return;
     }
     throw new BadRequestException('This recipe does not apply to the selected branch');

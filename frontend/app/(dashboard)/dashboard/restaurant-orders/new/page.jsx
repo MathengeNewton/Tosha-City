@@ -25,8 +25,15 @@ export default function NewRestaurantOrderPage() {
   const effectiveBranchId = isAdmin ? selectedBranchId : user?.branchId ? String(user.branchId) : "";
 
   useEffect(() => {
-    apiClient.products.getActive().then((res) => setProducts(res.data || [])).catch(() => {});
-  }, []);
+    if (!effectiveBranchId) {
+      setProducts([]);
+      return;
+    }
+    apiClient.products
+      .getActive({ branchId: effectiveBranchId })
+      .then((res) => setProducts(res.data || []))
+      .catch(() => {});
+  }, [effectiveBranchId]);
 
   useEffect(() => {
     (async () => {

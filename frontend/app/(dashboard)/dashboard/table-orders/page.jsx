@@ -106,8 +106,15 @@ export default function TableOrdersPage() {
   }, [session?.id, listTab]);
 
   useEffect(() => {
-    apiClient.products.getActive().then((res) => setProducts(res.data || [])).catch(() => {});
-  }, []);
+    if (!effectiveBranchId) {
+      setProducts([]);
+      return;
+    }
+    apiClient.products
+      .getActive({ branchId: effectiveBranchId })
+      .then((res) => setProducts(res.data || []))
+      .catch(() => {});
+  }, [effectiveBranchId]);
 
   useEffect(() => {
     (async () => {
