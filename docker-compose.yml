@@ -8,6 +8,7 @@ services:
     image: postgres:15
     restart: always
     environment:
+      TZ: Africa/Nairobi
       POSTGRES_USER: ${DATABASE_USER:-toshacity}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-toshacity_pass}
       POSTGRES_DB: ${DATABASE_NAME:-toshacity_butchery}
@@ -31,6 +32,8 @@ services:
         condition: service_healthy
     restart: always
     environment:
+      TZ: Africa/Nairobi
+      APP_TIMEZONE: Africa/Nairobi
       DATABASE_HOST: db
       DATABASE_PORT: 5432
       DATABASE_USER: ${DATABASE_USER:-toshacity}

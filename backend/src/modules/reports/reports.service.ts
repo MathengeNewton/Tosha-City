@@ -30,7 +30,7 @@ export class ReportsService {
       .createQueryBuilder('sale')
       .leftJoinAndSelect('sale.items', 'items')
       .leftJoinAndSelect('items.product', 'product')
-      .leftJoinAndSelect('sale.payment', 'payment');
+      .leftJoinAndSelect('sale.payments', 'payments');
 
     if (filters.startDate && filters.endDate) {
       query.where('DATE(sale.soldAt) BETWEEN :startDate AND :endDate', {

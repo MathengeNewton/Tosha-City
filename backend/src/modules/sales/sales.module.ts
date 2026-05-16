@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
@@ -13,19 +13,20 @@ import { ProductsModule } from '../products/products.module';
 import { StockEntriesModule } from '../stock-entries/stock-entries.module';
 import { CustomersModule } from '../customers/customers.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { ProductionModule } from '../production/production.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Sale, SaleItem, SalePayment, StockEntry]),
     StockSessionsModule,
     ProductsModule,
-    StockEntriesModule,
+    forwardRef(() => StockEntriesModule),
     CustomersModule,
     ActivityLogModule,
+    forwardRef(() => ProductionModule),
   ],
   controllers: [SalesController, PaymentsController],
   providers: [SalesService, PaymentsService],
   exports: [SalesService, PaymentsService],
 })
 export class SalesModule {}
-

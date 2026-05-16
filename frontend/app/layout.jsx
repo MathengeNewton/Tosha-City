@@ -13,9 +13,12 @@ export const metadata = {
   description:
     "ToshaCity Butchery Management System — Manage stock, sales, and daily operations for your butchery business.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
     shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
+    apple: "/icon.svg",
   },
   openGraph: {
     title: "ToshaCity Butchery | Management System",

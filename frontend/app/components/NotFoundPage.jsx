@@ -7,8 +7,6 @@ import {
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import DashboardFooter from "../(dashboard)/DashboardFooter";
-import Image from "next/image";
-
 const PageNotFound = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-blue-50 px-6 py-16">
@@ -33,18 +31,14 @@ const PageNotFound = () => {
         <div className="mt-10 bg-white rounded-2xl p-4 shadow-xl border border-gray-100">
           <div className="mb-6">
             <div className="flex items-center justify-center">
-              <Image
-                width={600}
-                height={500}
-                className="h-12 lg:h-24 w-auto"
-                src="/pcea-seeklogo.svg"
-                alt="PCEA Logo"
-              />
+              <div className="h-14 w-14 rounded-xl bg-[#0D47A1] flex items-center justify-center text-2xl font-bold text-white">
+                T
+              </div>
             </div>
             <h2 className="mt-4 text-lg font-bold text-gray-900">
-              Presbyterian Church of East Africa
+              ToshaCity Butchery
             </h2>
-            <p className="text-gray-600 text-sm mt-1">Member & Admin Portal</p>
+            <p className="text-gray-600 text-sm mt-1">Management System</p>
           </div>
 
           {/* Buttons */}
@@ -70,10 +64,10 @@ const PageNotFound = () => {
           <div className="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-500">
             Need help?{" "}
             <a
-              href="mailto:admin@pcea.or.ke"
+              href="mailto:admin@toshacity.co.ke"
               className="text-[#0D47A1] font-medium hover:underline"
             >
-              admin@pcea.or.ke
+              admin@toshacity.co.ke
             </a>
             <DashboardFooter />
           </div>

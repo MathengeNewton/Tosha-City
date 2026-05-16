@@ -7,13 +7,11 @@ import { Sale, PaymentStatus } from '../sales/entities/sale.entity';
 import { PaymentMethod } from '../sales/entities/payment.enums';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { ActivityLogService } from '../activity-log/activity-log.service';
-import { Branch } from '../branches/entities/branch.entity';
-import { UserRole } from '../roles/entities/role.entity';
+import { normalizeToSessionDate, ymdInTimeZone } from '../../common/time/app-time';
 
 type RequestUser = {
   userId: number;
   roles?: Array<{ name?: string } | string>;
-  branchId?: number | null;
 };
 
 @Injectable()
@@ -25,63 +23,25 @@ export class StockSessionsService {
     private saleRepository: Repository<Sale>,
     @InjectRepository(StockEntry)
     private stockEntryRepository: Repository<StockEntry>,
-    @InjectRepository(Branch)
-    private branchRepository: Repository<Branch>,
     private activityLog: ActivityLogService,
   ) {}
 
-  private isAdmin(user?: RequestUser): boolean {
-    return (user?.roles || []).some((role) =>
-      typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
-    );
-  }
-
-  private async resolveBranchId(user: RequestUser, requestedBranchId?: number): Promise<number> {
-    if (this.isAdmin(user)) {
-      const branchId = requestedBranchId ?? user.branchId ?? null;
-      if (!branchId) {
-        throw new BadRequestException('Branch is required for this operation');
-      }
-      await this.ensureBranchExists(branchId);
-      return branchId;
-    }
-
-    if (!user.branchId) {
-      throw new BadRequestException('Your account is not assigned to a branch');
-    }
-
-    if (requestedBranchId && requestedBranchId !== user.branchId) {
-      throw new BadRequestException('You can only access records for your assigned branch');
-    }
-
-    await this.ensureBranchExists(user.branchId);
-    return user.branchId;
-  }
-
-  private async ensureBranchExists(branchId: number): Promise<void> {
-    const branch = await this.branchRepository.findOne({ where: { id: branchId } });
-    if (!branch) {
-      throw new BadRequestException('Branch not found');
-    }
-  }
-
   async openSession(openSessionDto: OpenSessionDto, user: RequestUser): Promise<StockSession> {
     try {
-      const date = openSessionDto.date ? new Date(openSessionDto.date) : new Date();
-      date.setHours(0, 0, 0, 0);
-      const branchId = await this.resolveBranchId(user, openSessionDto.branchId);
+      const date = normalizeToSessionDate(openSessionDto.date);
 
       const existingOpenSession = await this.sessionRepository.findOne({
-        where: { date, status: SessionStatus.OPEN, branchId },
+        where: { date, status: SessionStatus.OPEN },
       });
 
       if (existingOpenSession) {
-        throw new BadRequestException('An open session already exists for this date. Please close it first or use a different date.');
+        throw new BadRequestException(
+          'An open session already exists for this date. Please close it first or use a different date.',
+        );
       }
 
       const session = this.sessionRepository.create({
         date,
-        branchId,
         openedById: user.userId,
         status: SessionStatus.OPEN,
       });
@@ -92,7 +52,7 @@ export class StockSessionsService {
         action: 'SESSION_OPENED',
         entityType: 'stock_session',
         entityId: saved.id,
-        details: { date: date.toISOString().slice(0, 10), branchId },
+        details: { date: ymdInTimeZone(date) },
         success: true,
       });
       return saved;
@@ -102,7 +62,7 @@ export class StockSessionsService {
         action: 'SESSION_OPENED',
         entityType: 'stock_session',
         entityId: null,
-        details: openSessionDto ? { date: openSessionDto.date, branchId: openSessionDto.branchId } : null,
+        details: openSessionDto ? { date: openSessionDto.date } : null,
         success: false,
         errorMessage: e?.message ?? String(e),
       });
@@ -117,10 +77,9 @@ export class StockSessionsService {
         throw new BadRequestException('Only open sessions can be updated');
       }
       if (updateDto.date) {
-        const newDate = new Date(updateDto.date);
-        newDate.setHours(0, 0, 0, 0);
+        const newDate = normalizeToSessionDate(updateDto.date);
         const existingSameDate = await this.sessionRepository.findOne({
-          where: { date: newDate, status: SessionStatus.OPEN, branchId: session.branchId },
+          where: { date: newDate, status: SessionStatus.OPEN },
         });
         if (existingSameDate && existingSameDate.id !== id) {
           throw new BadRequestException('An open session already exists for this date');
@@ -185,10 +144,7 @@ export class StockSessionsService {
 
   async closeSession(id: number, user: RequestUser): Promise<StockSession> {
     try {
-      const scopedBranchId = this.isAdmin(user)
-        ? undefined
-        : await this.resolveBranchId(user, undefined);
-      const session = await this.findOne(id, scopedBranchId);
+      const session = await this.findOne(id);
 
       if (session.status === SessionStatus.CLOSED) {
         throw new BadRequestException('Session is already closed');
@@ -202,7 +158,7 @@ export class StockSessionsService {
       });
 
       const unpaidCashMpesaSales = unpaidNonCreditSales.filter(
-        sale => sale.paymentMethod !== PaymentMethod.CREDIT,
+        (sale) => sale.paymentMethod !== PaymentMethod.CREDIT,
       );
 
       if (unpaidCashMpesaSales.length > 0) {
@@ -237,25 +193,24 @@ export class StockSessionsService {
     }
   }
 
-  async findAll(branchId?: number): Promise<StockSession[]> {
+  async findAll(): Promise<StockSession[]> {
     return await this.sessionRepository.find({
-      where: branchId ? { branchId } : {},
       relations: ['openedBy'],
       order: { date: 'DESC' },
     });
   }
 
-  async findCurrent(branchId?: number): Promise<StockSession | null> {
+  async findCurrent(): Promise<StockSession | null> {
     return await this.sessionRepository.findOne({
-      where: branchId ? { status: SessionStatus.OPEN, branchId } : { status: SessionStatus.OPEN },
+      where: { status: SessionStatus.OPEN },
       relations: ['openedBy'],
       order: { openedAt: 'DESC' },
     });
   }
 
-  async findOne(id: number, branchId?: number): Promise<StockSession> {
+  async findOne(id: number): Promise<StockSession> {
     const session = await this.sessionRepository.findOne({
-      where: branchId ? { id, branchId } : { id },
+      where: { id },
       relations: ['openedBy', 'stockEntries', 'sales'],
     });
 
@@ -266,12 +221,11 @@ export class StockSessionsService {
     return session;
   }
 
-  async findByDate(date: Date, branchId?: number): Promise<StockSession | null> {
-    const sessionDate = new Date(date);
-    sessionDate.setHours(0, 0, 0, 0);
+  async findByDate(date: Date): Promise<StockSession | null> {
+    const sessionDate = normalizeToSessionDate(date);
 
     return await this.sessionRepository.findOne({
-      where: branchId ? { date: sessionDate, branchId } : { date: sessionDate },
+      where: { date: sessionDate },
       relations: ['openedBy', 'stockEntries', 'sales'],
     });
   }
@@ -280,24 +234,19 @@ export class StockSessionsService {
     dateFrom?: string,
     dateTo?: string,
     status?: SessionStatus,
-    branchId?: number,
   ): Promise<any[]> {
     const queryBuilder = this.sessionRepository
       .createQueryBuilder('session')
       .leftJoinAndSelect('session.openedBy', 'openedBy')
-      .leftJoinAndSelect('session.branch', 'branch')
       .orderBy('session.date', 'DESC');
 
-    // Apply filters
     if (dateFrom) {
-      const fromDate = new Date(dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
+      const fromDate = normalizeToSessionDate(dateFrom);
       queryBuilder.andWhere('session.date >= :dateFrom', { dateFrom: fromDate });
     }
 
     if (dateTo) {
-      const toDate = new Date(dateTo);
-      toDate.setHours(23, 59, 59, 999);
+      const toDate = normalizeToSessionDate(dateTo);
       queryBuilder.andWhere('session.date <= :dateTo', { dateTo: toDate });
     }
 
@@ -305,44 +254,24 @@ export class StockSessionsService {
       queryBuilder.andWhere('session.status = :status', { status });
     }
 
-    if (branchId) {
-      queryBuilder.andWhere('session.branchId = :branchId', { branchId });
-    }
-
     const sessions = await queryBuilder.getMany();
 
-    // Get statistics for each session
     const sessionsWithStats = await Promise.all(
       sessions.map(async (session) => {
-        // Count opening stock entries
         const openingCount = await this.stockEntryRepository.count({
-          where: {
-            sessionId: session.id,
-            type: StockEntryType.OPENING,
-          },
+          where: { sessionId: session.id, type: StockEntryType.OPENING },
         });
 
-        // Count incoming stock entries
         const incomingCount = await this.stockEntryRepository.count({
-          where: {
-            sessionId: session.id,
-            type: StockEntryType.INCOMING,
-          },
+          where: { sessionId: session.id, type: StockEntryType.INCOMING },
         });
 
-        // Count sales
         const salesCount = await this.saleRepository.count({
-          where: {
-            sessionId: session.id,
-          },
+          where: { sessionId: session.id },
         });
 
-        // Calculate total revenue (sum of paid sales)
         const paidSales = await this.saleRepository.find({
-          where: {
-            sessionId: session.id,
-            paymentStatus: PaymentStatus.PAID,
-          },
+          where: { sessionId: session.id, paymentStatus: PaymentStatus.PAID },
         });
 
         const totalRevenue = paidSales.reduce(
@@ -365,4 +294,3 @@ export class StockSessionsService {
     return sessionsWithStats;
   }
 }
-

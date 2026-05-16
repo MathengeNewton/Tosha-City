@@ -4,7 +4,6 @@ import {
   Column,
   ManyToOne,
   OneToMany,
-  OneToOne,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -64,7 +63,7 @@ export class Sale {
   customer: Customer | null;
 
   @ApiProperty({ description: 'Customer ID (required for credit sales)', required: false, example: 1 })
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   customerId: number | null;
 
   @ApiProperty({ description: 'User who made the sale' })
@@ -92,7 +91,7 @@ export class Sale {
   @OneToMany(() => SaleItem, (item) => item.sale, { eager: true })
   items: SaleItem[];
 
-  @OneToOne(() => SalePayment, (payment) => payment.sale, { nullable: true })
-  payment: SalePayment | null;
+  @OneToMany(() => SalePayment, (payment) => payment.sale)
+  payments: SalePayment[];
 }
 

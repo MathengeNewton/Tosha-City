@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -28,11 +29,10 @@ export class ProductsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @Roles(UserRole.ADMIN)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  @ApiOperation({ summary: 'Create a new product (Admin/Cashier)' })
+  @ApiOperation({ summary: 'Create a new product (Admin only)' })
   create(@Body() createProductDto: CreateProductDto) {
-    console.log('ProductsController.create - Received DTO:', JSON.stringify(createProductDto, null, 2));
     return this.productsService.create(createProductDto);
   }
 
@@ -70,4 +70,3 @@ export class ProductsController {
     return this.productsService.remove(+id);
   }
 }
-

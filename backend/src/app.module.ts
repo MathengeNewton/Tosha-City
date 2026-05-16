@@ -19,14 +19,20 @@ import { Customer } from './modules/customers/entities/customer.entity';
 import { ActivityLog } from './modules/activity-log/entities/activity-log.entity';
 import { Partner } from './modules/partners/entities/partner.entity';
 import { StockShare } from './modules/stock-share/entities/stock-share.entity';
-import { SeedService } from './core/seed/seed.service';
+import { Recipe } from './modules/recipes/entities/recipe.entity';
+import { RecipeIngredient } from './modules/recipes/entities/recipe-ingredient.entity';
+import { ProductionRun } from './modules/production/entities/production-run.entity';
+import { ProductionRunIngredient } from './modules/production/entities/production-run-ingredient.entity';
+import { SeedModule } from './core/seed/seed.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { ProductsModule } from './modules/products/products.module';
+import { RecipesModule } from './modules/recipes/recipes.module';
 import { StockSessionsModule } from './modules/stock-sessions/stock-sessions.module';
 import { StockEntriesModule } from './modules/stock-entries/stock-entries.module';
 import { SalesModule } from './modules/sales/sales.module';
+import { ProductionModule } from './modules/production/production.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -63,15 +69,15 @@ import AppConfig from './core/config/app.config';
       ActivityLog,
       Partner,
       StockShare,
+      Recipe,
+      RecipeIngredient,
+      ProductionRun,
+      ProductionRunIngredient,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const config = configService.get('app');
-        console.log('JWT Config:', {
-          hasSecret: !!config?.jwt?.secret,
-          expiresIn: config?.jwt?.expiresIn,
-        });
         return {
           secret: config?.jwt?.secret || 'fallback_secret_key',
           signOptions: {
@@ -85,9 +91,11 @@ import AppConfig from './core/config/app.config';
     UsersModule,
     RolesModule,
     ProductsModule,
+    RecipesModule,
     StockSessionsModule,
     StockEntriesModule,
     SalesModule,
+    ProductionModule,
     UploadsModule,
     ReportsModule,
     SuppliersModule,
@@ -95,9 +103,10 @@ import AppConfig from './core/config/app.config';
     ActivityLogModule,
     PartnersModule,
     StockShareModule,
+    SeedModule,
   ],
   controllers: [AppController],
-  providers: [AppService, SeedService],
+  providers: [AppService],
 })
 export class AppModule {
   constructor(private configService: ConfigService) {

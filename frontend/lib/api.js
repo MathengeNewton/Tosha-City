@@ -102,6 +102,7 @@ export const apiClient = {
   // Sales
   sales: {
     getAll: (params) => api.get('/sales', { params }),
+    getProductAvailability: (params) => api.get('/sales/product-availability', { params }),
     getById: (id) => api.get(`/sales/${id}`),
     getPayment: (id) => api.get(`/sales/${id}/payment`),
     getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),
@@ -116,6 +117,7 @@ export const apiClient = {
     getById: (id) => api.get(`/payments/${id}`),
     getBySaleId: (saleId) => api.get(`/payments/sale/${saleId}`),
     create: (data) => api.post('/payments', data),
+    createSplit: (data) => api.post('/payments/split', data),
   },
 
   // Users
@@ -209,6 +211,22 @@ export const apiClient = {
     getById: (id) => api.get(`/stock-share/${id}`),
     create: (data) => api.post('/stock-share', data),
     markPaid: (id) => api.post(`/stock-share/${id}/mark-paid`),
+  },
+
+  recipes: {
+    getAll: (params) => api.get('/recipes', { params }),
+    getById: (id) => api.get(`/recipes/${id}`),
+    create: (data) => api.post('/recipes', data),
+    update: (id, data) => api.patch(`/recipes/${id}`, data),
+    delete: (id) => api.delete(`/recipes/${id}`),
+  },
+
+  production: {
+    create: (data) => api.post('/production', data),
+    getAll: (params) => api.get('/production', { params }),
+    getById: (id) => api.get(`/production/${id}`),
+    getAvailability: (params) => api.get('/production/availability', { params }),
+    getIngredientStock: (params) => api.get('/production/ingredient-stock', { params }),
   },
 };
 

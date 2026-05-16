@@ -11,6 +11,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateSplitPaymentDto } from './dto/create-split-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -27,9 +28,17 @@ export class PaymentsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  @ApiOperation({ summary: 'Record payment for a sale (Cashier/Admin)' })
+  @ApiOperation({ summary: 'Record payment for a sale (single line; Cashier/Admin)' })
   create(@Body() createPaymentDto: CreatePaymentDto, @Request() req) {
     return this.paymentsService.createPayment(createPaymentDto, req.user.userId);
+  }
+
+  @Post('split')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Record split payment (multiple cash/M-Pesa lines)' })
+  createSplit(@Body() dto: CreateSplitPaymentDto, @Request() req) {
+    return this.paymentsService.createSplitPayment(dto, req.user.userId);
   }
 
   @Get()
@@ -50,9 +59,9 @@ export class PaymentsController {
   }
 
   @Get('sale/:saleId')
-  @ApiOperation({ summary: 'Get payment for a specific sale' })
+  @ApiOperation({ summary: 'Get all payment lines for a sale' })
   findBySaleId(@Param('saleId') saleId: string) {
-    return this.paymentsService.findPaymentBySaleId(+saleId);
+    return this.paymentsService.findPaymentsBySaleId(+saleId);
   }
 
   @Get(':id')
@@ -61,4 +70,3 @@ export class PaymentsController {
     return this.paymentsService.findOne(+id);
   }
 }
-

@@ -6,10 +6,24 @@ import { toast } from "react-toastify";
 import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
+import ProductionTab from "../components/ProductionTab";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
+import {
+  ClipboardDocumentListIcon,
+  InformationCircleIcon,
+  ShareIcon,
+} from "@heroicons/react/24/outline";
+import { segmentOfProduct } from "../../../../lib/productSegment";
+import {
+  defaultDateRangeYmd,
+  formatDate,
+  formatDateTime,
+  todayYmd,
+  ymdFromApiDate,
+  ymdInAppTz,
+} from "../../../../lib/time";
 
-const defaultEnd = new Date();
-const defaultStart = new Date();
-defaultStart.setDate(defaultStart.getDate() - 30);
+const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(30);
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "recordedAt") {
   if (!dateFrom && !dateTo) return items;
@@ -35,9 +49,12 @@ export default function StockManagementPage() {
   const searchParams = useSearchParams();
   const sessionIdParam = searchParams.get('sessionId');
   const viewParam = searchParams.get('view');
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
   const isAdmin = hasRole('admin');
-  const canManageEntries = isAdmin || hasRole('cashier'); // Cashiers can add/edit stock entries
+  /** Day-to-day capture (opening/incoming/etc.) — cashier + admin */
+  const canManageEntries = isAdmin || hasRole('cashier');
+  /** Corrections: update/delete existing entries — admin only */
+  const canEditStockEntries = isAdmin;
   const canCloseSession = isAdmin || hasRole('cashier'); // Cashiers can close sessions
   
   const [loading, setLoading] = useState(true);
@@ -48,7 +65,9 @@ export default function StockManagementPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
   const [sales, setSales] = useState([]);
+  const [productionRuns, setProductionRuns] = useState([]);
   const [currentSessionSales, setCurrentSessionSales] = useState([]);
+  const [kitchenSupplyBalances, setKitchenSupplyBalances] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -57,8 +76,8 @@ export default function StockManagementPage() {
     return viewParam || 'list';
   });
   const [filters, setFilters] = useState({
-    dateFrom: defaultStart.toISOString().split("T")[0],
-    dateTo: defaultEnd.toISOString().split("T")[0],
+    dateFrom: defaultDateFrom,
+    dateTo: defaultDateTo,
     status: '',
     search: '',
   });
@@ -82,6 +101,27 @@ export default function StockManagementPage() {
       loadSessionDetails(parseInt(sessionIdParam));
     }
   }, [sessionIdParam]);
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "production" && selectedSession?.id) {
+      setActiveTab("production");
+    }
+    if (t === "kitchen" && selectedSession?.id) {
+      setActiveTab("kitchen");
+    }
+  }, [searchParams, selectedSession?.id]);
+
+  // Deep-link: /dashboard/stock?tab=kitchen → open current session when none selected
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t !== "kitchen" || sessionIdParam || !currentSession?.id) return;
+    const p = new URLSearchParams();
+    p.set("sessionId", String(currentSession.id));
+    p.set("tab", "kitchen");
+    p.set("view", viewMode || "list");
+    router.replace(`/dashboard/stock?${p.toString()}`);
+  }, [searchParams, sessionIdParam, currentSession?.id, router, viewMode]);
 
   // Reload sessions when filters change (skip initial load)
   useEffect(() => {
@@ -122,7 +162,7 @@ export default function StockManagementPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Get all sessions for list/calendar views first (this also helps us get stats)
       await loadSessions();
 
@@ -133,8 +173,8 @@ export default function StockManagementPage() {
       if (session) {
         // Fetch stats for current session by getting all sessions for that date
         const allSessionsRes = await apiClient.stockSessions.getAll({
-          dateFrom: new Date(session.date).toISOString().split("T")[0],
-          dateTo: new Date(session.date).toISOString().split("T")[0],
+          dateFrom: ymdFromApiDate(session.date),
+          dateTo: ymdFromApiDate(session.date),
         });
         const sessionsWithStats = allSessionsRes.data || [];
         const sessionWithStats = sessionsWithStats.find(s => s.id === session.id);
@@ -177,8 +217,18 @@ export default function StockManagementPage() {
       setStockEntries(entriesRes.data || []);
       
       // Load sales for this session
-      const salesRes = await apiClient.sales.getAll({ sessionId });
+      const [salesRes, productionRes] = await Promise.all([
+        apiClient.sales.getAll({ sessionId }),
+        apiClient.production.getAll({ sessionId }),
+      ]);
       setSales(salesRes.data || []);
+      setProductionRuns(productionRes.data || []);
+      try {
+        const balRes = await apiClient.sales.getKitchenSupplyBalances({ sessionId });
+        setKitchenSupplyBalances(balRes.data || []);
+      } catch {
+        setKitchenSupplyBalances([]);
+      }
     } catch (error) {
       console.error("Error loading session:", error);
       toast.error("Failed to load session details");
@@ -222,6 +272,7 @@ export default function StockManagementPage() {
     params.set('view', viewMode);
     router.push(`/dashboard/stock?${params.toString()}`);
     setSelectedSession(null);
+    setKitchenSupplyBalances([]);
   };
 
   const handleCalendarDayClick = (session) => {
@@ -288,9 +339,9 @@ export default function StockManagementPage() {
   const weekDays = getWeekDays();
 
   const getSessionForDay = (day) => {
-    const dayStr = day.toISOString().split('T')[0];
+    const dayStr = ymdInAppTz(day);
     return weekSessions.find(s => {
-      const sessionDate = new Date(s.date).toISOString().split('T')[0];
+      const sessionDate = ymdFromApiDate(s.date);
       return sessionDate === dayStr;
     });
   };
@@ -303,9 +354,9 @@ export default function StockManagementPage() {
 
   if (loading) {
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading…" />
+      </PageShell>
     );
   }
 
@@ -316,11 +367,18 @@ export default function StockManagementPage() {
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
+    const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
 
     const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const productionUsageEntries = stockEntries.filter((e) => e.type === "PRODUCTION_USAGE");
+    const totalProductionUsageQty = productionUsageEntries.reduce(
+      (sum, e) => sum + parseFloat(e.quantity || 0),
+      0
+    );
     const partnerShareKg = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const soldKg = sales.reduce((total, s) => total + (s.items || []).reduce((sum, it) => sum + parseFloat(it.quantity || 0), 0), 0);
     const availableKg = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const productionOutputQty = productionRuns.reduce((sum, run) => sum + parseFloat(run.actualOutputQuantity || 0), 0);
 
     const handleCloseSession = async () => {
       if (!confirm("Are you sure you want to close this session? Make sure all sales are paid and closing stock is recorded.")) {
@@ -338,7 +396,7 @@ export default function StockManagementPage() {
     };
 
     const handleDeleteSession = async () => {
-      if (!confirm(`Delete this session (${new Date(selectedSession.date).toLocaleDateString()})? Only allowed if it has no stock entries or sales.`)) return;
+      if (!confirm(`Delete this session (${formatDate(selectedSession.date)})? Only allowed if it has no stock entries or sales.`)) return;
       try {
         await apiClient.stockSessions.delete(selectedSession.id);
         toast.success('Session deleted');
@@ -350,9 +408,9 @@ export default function StockManagementPage() {
     };
 
     const handleExportSession = () => {
-      const sessionDate = new Date(selectedSession.date).toISOString().split("T")[0];
+      const sessionDate = ymdFromApiDate(selectedSession.date);
       const summaryRows = [
-        { field: "Date", value: new Date(selectedSession.date).toLocaleDateString() },
+        { field: "Date", value: formatDate(selectedSession.date) },
         { field: "Opened by", value: selectedSession.openedBy?.username || selectedSession.openedBy?.email || "N/A" },
         { field: "Status", value: selectedSession.status },
         { field: "Incoming stock (kg)", value: incomingKg.toFixed(2) },
@@ -365,12 +423,12 @@ export default function StockManagementPage() {
         type: e.type,
         quantity: parseFloat(e.quantity || 0),
         unit: e.unit || "kg",
-        recordedAt: e.recordedAt ? new Date(e.recordedAt).toLocaleString() : "",
+        recordedAt: e.recordedAt ? formatDateTime(e.recordedAt) : "",
         notes: e.notes || "",
       }));
       const salesRows = sales.map((s) => ({
         saleNumber: s.saleNumber,
-        soldAt: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
+        soldAt: s.soldAt ? formatDateTime(s.soldAt) : "",
         totalAmount: parseFloat(s.totalAmount || 0),
         paymentMethod: s.paymentMethod || "",
         paymentStatus: s.paymentStatus || "",
@@ -417,7 +475,7 @@ export default function StockManagementPage() {
     };
 
     return (
-      <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
+      <PageShell className="space-y-8">
         <div className="mb-8 flex justify-between items-center">
           <div>
             <button
@@ -430,7 +488,7 @@ export default function StockManagementPage() {
               Session Details
             </h1>
             <p className="text-gray-600 mt-1">
-              {new Date(selectedSession.date).toLocaleDateString()}
+              {formatDate(selectedSession.date)}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -456,6 +514,43 @@ export default function StockManagementPage() {
                 Close Session
               </button>
             )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 sm:p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Today&apos;s stock flow</h3>
+          <p className="text-xs text-emerald-900/85 mt-1 mb-4 max-w-3xl">
+            Follow the day: deliveries and opening → kitchen uses ingredients (production) → sales remove stock.
+            Tap a step to jump to that tab.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab("incoming")}
+              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
+            >
+              <span className="text-xs font-semibold text-emerald-800 uppercase">Incoming</span>
+              <span className="block text-lg font-bold text-gray-900 mt-1">{incomingKg.toFixed(2)}</span>
+              <span className="text-xs text-gray-600">Total qty logged (same units as entries)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("production")}
+              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
+            >
+              <span className="text-xs font-semibold text-emerald-800 uppercase">Production use</span>
+              <span className="block text-lg font-bold text-gray-900 mt-1">{totalProductionUsageQty.toFixed(2)}</span>
+              <span className="text-xs text-gray-600">{productionUsageEntries.length} ingredient pulls</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sales")}
+              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
+            >
+              <span className="text-xs font-semibold text-emerald-800 uppercase">Sales</span>
+              <span className="block text-lg font-bold text-gray-900 mt-1">{sales.length}</span>
+              <span className="text-xs text-gray-600">Tickets · qty sum {soldKg.toFixed(2)} (all line units)</span>
+            </button>
           </div>
         </div>
 
@@ -497,6 +592,11 @@ export default function StockManagementPage() {
               <p className="text-2xl font-bold text-gray-900">{partnerShareKg.toFixed(2)} kg</p>
               <p className="text-xs text-gray-500">{partnerShareEntries.length} entries</p>
             </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Production output</p>
+              <p className="text-2xl font-bold text-gray-900">{productionOutputQty.toFixed(2)}</p>
+              <p className="text-xs text-gray-500">{productionRuns.length} runs</p>
+            </div>
           </div>
         </div>
 
@@ -504,7 +604,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'closing', 'wastages', 'stock-share', 'sales', 'production'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -517,11 +617,12 @@ export default function StockManagementPage() {
                   {tab === 'overview' ? 'Overview' :
                    tab === 'opening' ? 'Opening Stock' : 
                    tab === 'incoming' ? 'Incoming Stock' :
+                   tab === 'production' ? 'Production' :
+                   tab === 'kitchen' ? 'Kitchen supplies' :
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
                    tab === 'stock-share' ? 'Stock Share' :
-                   tab === 'sales' ? 'Sales' :
-                   'Production'}
+                   'Sales'}
                 </button>
               ))}
             </nav>
@@ -534,12 +635,12 @@ export default function StockManagementPage() {
                 stockEntries={stockEntries}
                 sales={sales}
                 products={products}
+                productionRuns={productionRuns}
               />
             )}
             {activeTab === 'stock-share' && (
               <StockShareTab
                 session={selectedSession}
-                partnerShareEntries={partnerShareEntries}
                 products={products}
                 canManage={canManageEntries}
                 onRefresh={() => loadSessionDetails(selectedSession.id)}
@@ -561,7 +662,7 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={openingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
             )}
@@ -582,7 +683,78 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
+                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
+                </div>
+              </div>
+            )}
+            {activeTab === 'production' && (
+              <ProductionTab
+                session={selectedSession}
+                canManage={canManageEntries}
+                productionRuns={productionRuns}
+                onRefresh={() => loadSessionDetails(selectedSession.id)}
+                variant="embedded"
+              />
+            )}
+            {activeTab === 'kitchen' && (
+              <div className="space-y-6">
+                <p className="text-sm text-gray-600">
+                  Track Kitchen inputs (soy sauce, oil, etc.): opening and incoming add stock; issuing to the kitchen reduces on-hand. Not sold at the till.
+                </p>
+                {kitchenSupplyBalances.length > 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3">On hand (this session)</h4>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead>
+                          <tr className="text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="py-2 pr-4">Product</th>
+                            <th className="py-2 pr-4">Unit</th>
+                            <th className="py-2">Available</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {kitchenSupplyBalances.map((row) => (
+                            <tr key={row.productId}>
+                              <td className="py-2 pr-4 font-medium text-gray-900">{row.name}</td>
+                              <td className="py-2 pr-4 text-gray-600">{row.unit}</td>
+                              <td className="py-2 font-semibold text-gray-900">
+                                {Number(row.available).toLocaleString("en-KE", {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {canManageEntries && selectedSession.status === 'OPEN' && (
+                  <StockEntryForm
+                    session={selectedSession}
+                    products={products.filter(
+                      (p) => segmentOfProduct(p) === "KITCHEN_SUPPLY" && p.isActive !== false
+                    )}
+                    type="KITCHEN_ISSUE"
+                    onSuccess={() => loadSessionDetails(selectedSession.id)}
+                  />
+                )}
+                <div className={canManageEntries && selectedSession.status === "OPEN" ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
+                    </p>
+                  )}
+                  <StockEntriesTable
+                    stockEntries={kitchenIssueEntries}
+                    canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)}
+                    onEdit={() => loadSessionDetails(selectedSession.id)}
+                    products={products}
+                    suppliers={[]}
+                    entryType="KITCHEN_ISSUE"
+                  />
                 </div>
               </div>
             )}
@@ -602,13 +774,13 @@ export default function StockManagementPage() {
                       Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable stockEntries={closingEntries} canEdit={canManageEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
             )}
             {activeTab === 'wastages' && (
               <div>
-                {canManageEntries && (selectedSession.status === 'OPEN' || selectedSession.status === 'CLOSED') && (
+                {canManageEntries && selectedSession.status === 'OPEN' && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -616,75 +788,51 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div
-                  className={
-                    canManageEntries && (selectedSession.status === 'OPEN' || selectedSession.status === 'CLOSED')
-                      ? 'mt-6'
-                      : ''
-                  }
-                >
-                  {selectedSession?.status === 'CLOSED' && canManageEntries && (
-                    <p className="text-sm mb-4 text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                      Session is <strong>closed</strong> — you can still add wastage or edit/delete wastage rows (e.g. late spoilage or corrections).
+                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  {selectedSession?.sales?.length > 0 && canManageEntries && (
+                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
                     </p>
                   )}
-                  <StockEntriesTable
-                    stockEntries={wastageEntries}
-                    canEdit={canManageEntries}
-                    onEdit={() => loadSessionDetails(selectedSession.id)}
-                    products={products}
-                    suppliers={[]}
-                    entryType="WASTAGE"
-                  />
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
             )}
             {activeTab === 'sales' && (
               <SalesTable sales={sales} />
             )}
-            {activeTab === 'production' && (
-              <div className="text-center py-12">
-                <div className="max-w-md mx-auto">
-                  <div className="text-6xl mb-4">🚧</div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Coming Soon</h3>
-                  <p className="text-gray-600">Production tracking feature is under development.</p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-            Stock Management
-          </h1>
-          <p className="text-gray-600 mt-1">Manage stock sessions and entries</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {/* View Toggle */}
-          <div className="flex bg-gray-100 rounded-lg p-1">
+    <PageShell className="space-y-8">
+      <PageHeader
+        title="Stock Management"
+        subtitle="Manage stock sessions and entries"
+      >
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
             <button
+              type="button"
               onClick={() => setViewMode('list')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
                 viewMode === 'list'
-                  ? 'bg-white text-blue-900 shadow-sm'
+                  ? 'bg-[#0D47A1]/10 text-[#0D47A1] shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               List
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('calendar')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
                 viewMode === 'calendar'
-                  ? 'bg-white text-blue-900 shadow-sm'
+                  ? 'bg-[#0D47A1]/10 text-[#0D47A1] shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -693,6 +841,7 @@ export default function StockManagementPage() {
           </div>
           {!currentSession ? (
             <button
+              type="button"
               onClick={handleOpenSession}
               className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
             >
@@ -700,6 +849,7 @@ export default function StockManagementPage() {
             </button>
           ) : currentSession.status === 'OPEN' ? (
             <button
+              type="button"
               onClick={handleCloseSession}
               className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors text-sm min-h-[44px]"
             >
@@ -707,7 +857,7 @@ export default function StockManagementPage() {
             </button>
           ) : null}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Current Open Session Banner */}
       {currentSession && currentSession.status === 'OPEN' && (
@@ -762,14 +912,14 @@ export default function StockManagementPage() {
       )}
 
 
-    </div>
+    </PageShell>
   );
 }
 
 // List View Component
 function ListView({ sessions, filters, setFilters, listPage, setListPage, listPageSize, setListPageSize, totalPages, totalSessions, onViewSession, onRefresh, allSessions, isAdmin }) {
   const handleDeleteSession = async (session) => {
-    if (!confirm(`Delete session for ${new Date(session.date).toLocaleDateString()}? This is only allowed if it has no stock entries or sales.`)) return;
+    if (!confirm(`Delete session for ${formatDate(session.date)}? This is only allowed if it has no stock entries or sales.`)) return;
     try {
       await apiClient.stockSessions.delete(session.id);
       toast.success('Session deleted');
@@ -790,8 +940,8 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
 
   const handleClearFilters = () => {
     setFilters({
-      dateFrom: defaultStart.toISOString().split("T")[0],
-      dateTo: defaultEnd.toISOString().split("T")[0],
+      dateFrom: defaultDateFrom,
+      dateTo: defaultDateTo,
       status: '',
       search: '',
     });
@@ -799,7 +949,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
 
   const handleExport = () => {
     const rows = allSessions.map((s) => ({
-      date: new Date(s.date).toLocaleDateString(),
+      date: formatDate(s.date),
       openedBy: s.openedBy?.username || s.openedBy?.email || 'N/A',
       status: s.status,
       openingStock: s.stats?.openingStockCount || 0,
@@ -809,7 +959,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
     }));
     const from = (filters.dateFrom || '').replace(/-/g, '');
     const to = (filters.dateTo || '').replace(/-/g, '');
-    const filename = from && to ? `stock-sessions-${from}-to-${to}` : `stock-sessions-export-${new Date().toISOString().split('T')[0]}`;
+    const filename = from && to ? `stock-sessions-${from}-to-${to}` : `stock-sessions-export-${todayYmd()}`;
     exportToExcel(
       rows,
       [
@@ -827,8 +977,8 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
   };
 
   const hasActiveFilters = filters.status || filters.search || 
-    filters.dateFrom !== defaultStart.toISOString().split("T")[0] ||
-    filters.dateTo !== defaultEnd.toISOString().split("T")[0];
+    filters.dateFrom !== defaultDateFrom ||
+    filters.dateTo !== defaultDateTo;
 
   return (
     <div className="space-y-6">
@@ -944,7 +1094,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
               sessions.map((session) => (
                 <tr key={session.id} className="hover:bg-gray-50">
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(session.date).toLocaleDateString()}
+                    {formatDate(session.date)}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {session.openedBy?.username || session.openedBy?.email || 'N/A'}
@@ -1136,7 +1286,7 @@ function SessionPopup({ session, onClose, onViewMore }) {
             <div>
               <p className="text-sm text-gray-600">Date</p>
               <p className="text-base font-semibold text-gray-900">
-                {new Date(session.date).toLocaleDateString()}
+                {formatDate(session.date)}
               </p>
             </div>
             
@@ -1238,8 +1388,8 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
         unit: editForm.unit || 'kg',
         notes: editForm.notes || undefined,
       };
-      if (entryType === 'INCOMING' && editForm.supplierId) {
-        payload.supplierId = parseInt(editForm.supplierId, 10);
+      if (entryType === 'INCOMING') {
+        payload.supplierId = editForm.supplierId ? parseInt(editForm.supplierId, 10) : null;
       }
       await apiClient.stockEntries.update(entryToEdit.id, payload);
       toast.success('Entry updated');
@@ -1296,6 +1446,7 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                       entry.type === 'OPENING' ? 'bg-blue-100 text-blue-800' :
                       entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
                       entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
+                      entry.type === 'KITCHEN_ISSUE' ? 'bg-amber-100 text-amber-900' :
                       'bg-red-100 text-red-800'
                     }`}>
                       {entry.type}
@@ -1305,7 +1456,7 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                     {entry.quantity} {entry.unit}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(entry.recordedAt).toLocaleString()}
+                    {formatDateTime(entry.recordedAt)}
                   </td>
                   {canEdit && (
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
@@ -1352,15 +1503,16 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                   ))}
                 </select>
               </div>
-              {entryType === 'INCOMING' && suppliers.length > 0 && (
+              {entryType === 'INCOMING' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier (optional)</label>
+                  <p className="text-xs text-gray-500 mb-1">Leave blank for own-sourced meat or informal supply.</p>
                   <select
                     value={editForm.supplierId}
                     onChange={(e) => setEditForm({ ...editForm, supplierId: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Select supplier</option>
+                    <option value="">None</option>
                     {suppliers.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -1423,13 +1575,16 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
   );
 }
 
+const stockShareInputClass =
+  "w-full min-h-[44px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#0D47A1] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/25";
+
 // Stock Share tab: record and list shares for this session (from incoming stock)
-function StockShareTab({ session, partnerShareEntries, products, canManage, onRefresh }) {
+function StockShareTab({ session, products, canManage, onRefresh }) {
   const [shares, setShares] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ partnerId: '', productId: '', quantity: '', unit: 'kg', notes: '' });
+  const [form, setForm] = useState({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -1447,40 +1602,42 @@ function StockShareTab({ session, partnerShareEntries, products, canManage, onRe
           setPartners(partnersRes.data || []);
         }
       } catch (e) {
-        if (!cancelled) toast.error('Failed to load stock share data');
+        if (!cancelled) toast.error("Failed to load stock share data");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [session?.id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const qty = parseFloat(form.quantity);
     if (!form.partnerId || !form.productId || isNaN(qty) || qty <= 0) {
-      toast.error('Select partner, product, and enter a valid quantity.');
+      toast.error("Select partner, product, and enter a valid quantity.");
       return;
     }
-    const product = products.find(p => p.id === parseInt(form.productId));
+    const product = products.find((p) => p.id === parseInt(form.productId, 10));
     setSubmitting(true);
     try {
       await apiClient.stockShare.create({
-        partnerId: parseInt(form.partnerId),
-        productId: parseInt(form.productId),
+        partnerId: parseInt(form.partnerId, 10),
+        productId: parseInt(form.productId, 10),
         sessionId: session.id,
         quantity: qty,
-        unit: form.unit || product?.unit || 'kg',
+        unit: form.unit || product?.unit || "kg",
         notes: form.notes || undefined,
       });
-      toast.success('Stock share recorded');
+      toast.success("Stock share recorded");
       setShowForm(false);
-      setForm({ partnerId: '', productId: '', quantity: '', unit: 'kg', notes: '' });
+      setForm({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
       onRefresh?.();
       const res = await apiClient.stockShare.getAll({ sessionId: session.id });
       setShares(res.data || []);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to record share');
+      toast.error(err.response?.data?.message || "Failed to record share");
     } finally {
       setSubmitting(false);
     }
@@ -1489,145 +1646,280 @@ function StockShareTab({ session, partnerShareEntries, products, canManage, onRe
   const handleMarkPaid = async (id) => {
     try {
       await apiClient.stockShare.markPaid(id);
-      toast.success('Marked as paid');
+      toast.success("Marked as paid");
       onRefresh?.();
       const res = await apiClient.stockShare.getAll({ sessionId: session.id });
       setShares(res.data || []);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update');
+      toast.error(err.response?.data?.message || "Failed to update");
     }
   };
 
   if (!session) return null;
-  const isOpen = session.status === 'OPEN';
+  const isOpen = session.status === "OPEN";
 
   return (
     <div className="space-y-6">
-      <p className="text-gray-600 text-sm">
-        Share part of today’s incoming stock with partners. Recorded shares are deducted from available session stock.
+      <p className="text-sm text-gray-600">
+        Share part of today&apos;s incoming stock with partners. Recorded shares are{" "}
+        <strong className="text-gray-800">deducted</strong> from available session stock.
       </p>
-      {canManage && isOpen && (
-        <div>
-          {!showForm ? (
+
+      <details className="group rounded-xl border border-gray-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 marker:hidden [&::-webkit-details-marker]:hidden">
+          <InformationCircleIcon className="h-5 w-5 shrink-0 text-[#0D47A1]" aria-hidden />
+          <span className="min-w-0 flex-1">How stock share works</span>
+          <span className="shrink-0 text-xs font-normal text-gray-500 group-open:hidden">Show</span>
+          <span className="hidden shrink-0 text-xs font-normal text-gray-500 group-open:inline">Hide</span>
+        </summary>
+        <div className="border-t border-gray-100 px-4 pb-4 pt-0 text-sm text-gray-700">
+          <ul className="mt-3 list-none space-y-2">
+            <li className="flex gap-2">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-800">
+                −
+              </span>
+              <span>
+                The quantity you record is removed from <strong className="text-gray-900">this session&apos;s</strong>{" "}
+                available stock for that product.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0D47A1]/10 text-xs font-bold text-[#0D47A1]">
+                i
+              </span>
+              <span>
+                Add partners under <strong className="text-gray-900">Admin → Partners</strong> if the dropdown is
+                empty.
+              </span>
+            </li>
+          </ul>
+        </div>
+      </details>
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-1 border-b border-gray-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0D47A1]/10">
+              <ShareIcon className="h-6 w-6 text-[#0D47A1]" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Record stock share</h2>
+              <p className="text-sm text-gray-600">Log meat or product given to a partner from this session.</p>
+            </div>
+          </div>
+          {canManage && isOpen && !showForm && (
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] text-sm"
+              className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1e88b5] sm:mt-0 sm:w-auto"
             >
-              Record stock share
+              <ClipboardDocumentListIcon className="h-5 w-5" aria-hidden />
+              Start recording
             </button>
-          ) : (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-w-md space-y-3">
-              <h4 className="font-medium text-gray-900">Record stock share</h4>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Partner *</label>
-                  <select
-                    value={form.partnerId}
-                    onChange={(e) => setForm({ ...form, partnerId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  >
-                    <option value="">Select partner</option>
-                    {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Product *</label>
-                  <select
-                    value={form.productId}
-                    onChange={(e) => {
-                      const p = products.find(x => x.id === parseInt(e.target.value));
-                      setForm({ ...form, productId: e.target.value, unit: p?.unit || 'kg' });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  >
-                    <option value="">Select product</option>
-                    {products.filter(p => p.isActive !== false).map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">Quantity *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={form.quantity}
-                      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">Unit</label>
-                    <input
-                      type="text"
-                      value={form.unit}
-                      onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Notes</label>
-                  <input
-                    type="text"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={submitting} className="px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-[#1e88b5] disabled:opacity-50">
-                    {submitting ? 'Saving...' : 'Record share'}
-                  </button>
-                </div>
-              </form>
-            </div>
           )}
         </div>
-      )}
-      <div>
-        <h4 className="font-medium text-gray-900 mb-2">Shares for this session</h4>
+
+        <div className="pt-4">
+          {!isOpen && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              This session is <strong>not open</strong>. Stock share can only be recorded while the session status is{" "}
+              <strong>Open</strong>.
+            </div>
+          )}
+
+          {isOpen && !canManage && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+              You don&apos;t have permission to record stock share.
+            </div>
+          )}
+
+          {canManage && isOpen && showForm && (
+            <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-4">
+              {partners.length === 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  No active partners found. Add partners under Admin → Partners first.
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Partner <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={form.partnerId}
+                  onChange={(e) => setForm({ ...form, partnerId: e.target.value })}
+                  className={stockShareInputClass}
+                  required
+                >
+                  <option value="">Select partner</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Product <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={form.productId}
+                  onChange={(e) => {
+                    const p = products.find((x) => x.id === parseInt(e.target.value, 10));
+                    setForm({ ...form, productId: e.target.value, unit: p?.unit || "kg" });
+                  }}
+                  className={stockShareInputClass}
+                  required
+                >
+                  <option value="">Select product</option>
+                  {products
+                    .filter((p) => p.isActive !== false)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.unit})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Quantity <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={form.quantity}
+                    onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                    className={stockShareInputClass}
+                    placeholder="e.g. 5.5"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Unit</label>
+                  <input
+                    type="text"
+                    value={form.unit}
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                    className={stockShareInputClass}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className={`${stockShareInputClass} min-h-[100px] resize-y`}
+                  rows={3}
+                  placeholder="Optional — e.g. agreed with partner by phone"
+                />
+              </div>
+              <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setForm({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
+                  }}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || partners.length === 0}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-md bg-blue-900 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1e88b5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? "Saving…" : "Record share"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {canManage && isOpen && !showForm && (
+            <p className="text-center text-sm text-gray-500 sm:text-left">
+              Tap <strong className="text-gray-700">Start recording</strong> when you are ready to log a share.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <h2 className="text-base font-semibold text-gray-900">Shares for this session</h2>
+          <p className="text-xs text-gray-500">Each row is one recorded share.</p>
+        </div>
         {loading ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="px-4 py-8 text-center text-sm text-gray-500">Loading…</p>
+        ) : shares.length === 0 ? (
+          <div className="mx-4 my-6 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-4 py-8 text-center">
+            <ClipboardDocumentListIcon className="mx-auto h-10 w-10 text-gray-300" aria-hidden />
+            <p className="mt-2 text-sm font-medium text-gray-800">No stock shares yet</p>
+            <p className="mt-1 text-sm text-gray-600">
+              {canManage && isOpen
+                ? "When you record a share, it will appear here."
+                : "Shares for this session will show up here once recorded."}
+            </p>
+          </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
-                  {canManage && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Partner
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Product
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Qty
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Paid
+                  </th>
+                  {canManage && (
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {shares.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No stock shares recorded for this session yet.</td></tr>
-                ) : (
-                  shares.map(s => (
-                    <tr key={s.id}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.partner?.name || '–'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{s.product?.name || '–'}</td>
-                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(s.quantity).toFixed(2)} {s.unit}</td>
-                      <td className="px-4 py-3"><span className={s.paid ? 'text-green-600' : 'text-amber-600'}>{s.paid ? 'Yes' : 'No'}</span></td>
-                      {canManage && (
-                        <td className="px-4 py-3">
-                          {!s.paid && <button type="button" onClick={() => handleMarkPaid(s.id)} className="text-blue-600 hover:underline text-sm">Mark paid</button>}
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {shares.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-50/80">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.partner?.name || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{s.product?.name || "—"}</td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-900">
+                      {parseFloat(s.quantity).toFixed(2)} {s.unit}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          s.paid ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {s.paid ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    {canManage && (
+                      <td className="px-4 py-3 text-sm">
+                        {!s.paid && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkPaid(s.id)}
+                            className="font-medium text-blue-900 hover:text-[#1e88b5] hover:underline"
+                          >
+                            Mark paid
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1638,7 +1930,7 @@ function StockShareTab({ session, partnerShareEntries, products, canManage, onRe
 }
 
 // Session Overview Analytics Component
-function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] }) {
+function SessionOverviewAnalytics({ session, stockEntries, sales, products = [], productionRuns = [] }) {
   // Calculate comprehensive analytics
   const analytics = useMemo(() => {
     const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
@@ -1646,9 +1938,22 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
     const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
+    const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
     const byproductSaleEntries = stockEntries.filter(e => e.type === 'BYPRODUCT_SALE');
+    const productionUsageEntries = stockEntries.filter(e => e.type === 'PRODUCTION_USAGE');
+    const productionOutputByProduct = {};
+    const productionWastageByProduct = {};
+
+    productionRuns.forEach((run) => {
+      const pid = run.finishedProduct?.id ?? run.finishedProductId;
+      if (!pid) return;
+      productionOutputByProduct[pid] = (productionOutputByProduct[pid] || 0) + parseFloat(run.actualOutputQuantity || 0);
+      productionWastageByProduct[pid] = (productionWastageByProduct[pid] || 0) + parseFloat(run.wastedQuantity || 0);
+    });
 
     const totalPartnerShareQty = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const totalKitchenIssueQty = kitchenIssueEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+    const totalProductionUsageQty = productionUsageEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
     // Sales statistics
     const totalSales = sales.length;
@@ -1787,25 +2092,45 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
       const partnerShare = partnerShareEntries
         .filter(e => e.product?.id === productId)
         .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+      const kitchenIssue = kitchenIssueEntries
+        .filter((e) => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
+      const productionUsage = productionUsageEntries
+        .filter(e => e.product?.id === productId)
+        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
 
       const productMeta = products.find(p => p.id === productId);
       const isByproduct = productMeta?.parentProductId != null;
-      const remaining = isByproduct ? null : (totalAvailable - soldInclByproduct - wastage - partnerShare);
+      const isProductionItem = productMeta?.category === 'PRODUCTION_ITEM';
+      const productionOutput = productionOutputByProduct[productId] || 0;
+      const productionWastage = productionWastageByProduct[productId] || 0;
+      const effectiveAvailable = isProductionItem ? productionOutput : totalAvailable;
+      const effectiveWastage = isProductionItem ? productionWastage : wastage;
+      // Aligns with backend getAvailableStock (approx.): outflows include kitchenIssue for non-byproducts.
+      const remaining = isByproduct
+        ? null
+        : (effectiveAvailable - soldInclByproduct - effectiveWastage - partnerShare - productionUsage - kitchenIssue);
 
       productBreakdown[productId] = {
         name: productName,
-        opening,
-        incoming,
-        totalAvailable,
+        opening: isProductionItem ? 0 : opening,
+        incoming: isProductionItem ? 0 : incoming,
+        totalAvailable: effectiveAvailable,
         sold,
         byproductSold,
         soldInclByproduct,
-        wastage,
+        wastage: effectiveWastage,
         partnerShare,
+        kitchenIssue,
+        productionUsage,
         remaining,
         isByproduct,
+        isProductionItem,
       };
     });
+
+    const totalProducedQty = productionRuns.reduce((sum, run) => sum + parseFloat(run.actualOutputQuantity || 0), 0);
+    const totalProductionWastage = productionRuns.reduce((sum, run) => sum + parseFloat(run.wastedQuantity || 0), 0);
 
     return {
       stock: {
@@ -1814,6 +2139,9 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
         closing: { entries: closingEntries.length, quantity: totalClosingQty },
         wastage: { entries: wastageEntries.length, quantity: totalWastageQty },
         partnerShare: { entries: partnerShareEntries.length, quantity: totalPartnerShareQty },
+        kitchenIssue: { entries: kitchenIssueEntries.length, quantity: totalKitchenIssueQty },
+        productionUsage: { entries: productionUsageEntries.length, quantity: totalProductionUsageQty },
+        production: { entries: productionRuns.length, quantity: totalProducedQty, wastage: totalProductionWastage },
       },
       sales: {
         total: totalSales,
@@ -1828,7 +2156,7 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
       paymentMethods,
       productBreakdown: Object.values(productBreakdown),
     };
-  }, [stockEntries, sales, products]);
+  }, [stockEntries, sales, products, productionRuns]);
 
   return (
     <div className="space-y-6">
@@ -1906,6 +2234,32 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
               {(analytics.stock.partnerShare?.quantity ?? 0).toFixed(2)} kg
             </p>
             <p className="text-xs text-gray-500">{analytics.stock.partnerShare?.entries ?? 0} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Production use</p>
+            <p className="text-lg font-bold text-purple-600">
+              {(analytics.stock.productionUsage?.quantity ?? 0).toFixed(2)} kg
+            </p>
+            <p className="text-xs text-gray-500">{analytics.stock.productionUsage?.entries ?? 0} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Kitchen issued</p>
+            <p className="text-lg font-bold text-amber-800">
+              {(analytics.stock.kitchenIssue?.quantity ?? 0).toLocaleString("en-KE", {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+            <p className="text-xs text-gray-500">{analytics.stock.kitchenIssue?.entries ?? 0} entries</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600">Production output</p>
+            <p className="text-lg font-bold text-purple-600">
+              {(analytics.stock.production?.quantity ?? 0).toFixed(2)}
+            </p>
+            <p className="text-xs text-gray-500">
+              {analytics.stock.production?.entries ?? 0} runs
+            </p>
           </div>
         </div>
       </div>
@@ -2009,6 +2363,8 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sold (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wastage (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock shared (kg)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Kitchen issued</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Production use (kg)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (kg)</th>
                 </tr>
               </thead>
@@ -2028,6 +2384,8 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [] 
                     </td>
                     <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
                     <td className="px-4 py-2 text-sm text-indigo-600">{(product.partnerShare ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-amber-800">{(product.kitchenIssue ?? 0).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-sm text-purple-600">{(product.productionUsage ?? 0).toFixed(2)}</td>
                     <td className={`px-4 py-2 text-sm font-semibold ${product.remaining == null ? 'text-gray-500' : product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                       {product.remaining == null ? '—' : product.remaining.toFixed(2)}
                     </td>
@@ -2090,7 +2448,7 @@ function SalesTable({ sales }) {
                   {sale.saleNumber}
                 </td>
                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(sale.soldAt).toLocaleString()}
+                  {formatDateTime(sale.soldAt)}
                 </td>
                 <td className="px-4 sm:px-6 py-4 text-sm w-[180px] max-w-[220px]">
                   <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto overflow-x-hidden border border-gray-100 rounded-md p-1.5 bg-gray-50/50">
@@ -2206,13 +2564,26 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {type === "KITCHEN_ISSUE" && (
+        <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Record stock taken from the store into the kitchen. Quantity cannot exceed on-hand for this session.
+        </p>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Product *
         </label>
         <select
           value={formData.productId}
-          onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
+          onChange={(e) => {
+            const id = e.target.value;
+            const p = products.find((x) => String(x.id) === String(id));
+            setFormData({
+              ...formData,
+              productId: id,
+              unit: type === "KITCHEN_ISSUE" && p?.unit ? p.unit : formData.unit,
+            });
+          }}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
           required
         >
@@ -2223,20 +2594,37 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
             </option>
           ))}
         </select>
+        {formData.productId &&
+          (() => {
+            const p = products.find((x) => String(x.id) === String(formData.productId));
+            if (!p || p.category !== "CONSUMABLE") return null;
+            if (p.segment === "KITCHEN_SUPPLY") {
+              return (
+                <p className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Kitchen / recipe input (salt, oil, sauces). Tracked for production; not sold on table tickets.
+                </p>
+              );
+            }
+            return (
+              <p className="mt-2 text-xs text-teal-900 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+                Retail consumable (drinks, packs). Sold at the till or on table orders.
+              </p>
+            );
+          })()}
       </div>
 
       {type === 'INCOMING' && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Supplier *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Supplier (optional)</label>
+          <p className="text-xs text-gray-500 mb-1">
+            Skip if meat is your own source or you don&apos;t track a vendor for this delivery.
+          </p>
           <select
             value={formData.supplierId}
             onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
           >
-            <option value="">Select a supplier</option>
+            <option value="">None — quick entry</option>
             {suppliers.map((supplier) => (
               <option key={supplier.id} value={supplier.id}>
                 {supplier.name}
@@ -2336,7 +2724,8 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
             'OPENING': 'Record Opening Stock',
             'INCOMING': 'Record Incoming Stock',
             'CLOSING': 'Record Closing Stock',
-            'WASTAGE': 'Record Wastage'
+            'WASTAGE': 'Record Wastage',
+            'KITCHEN_ISSUE': 'Issue to kitchen',
           };
           return typeLabels[type] || `Record ${type} Stock`;
         })()}

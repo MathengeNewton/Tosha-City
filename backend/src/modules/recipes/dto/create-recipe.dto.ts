@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -11,7 +10,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { RecipeBranchScope } from '../entities/recipe.entity';
 
 export class CreateRecipeIngredientDto {
   @ApiProperty({ required: false, example: 1 })
@@ -45,10 +43,6 @@ export class CreateRecipeDto {
   @IsString()
   @IsNotEmpty()
   name: string;
-
-  @ApiProperty({ enum: RecipeBranchScope, example: RecipeBranchScope.GENERAL_BUTCHERY })
-  @IsEnum(RecipeBranchScope)
-  branchScope: RecipeBranchScope;
 
   @ApiProperty({ example: 1 })
   @IsNumber()

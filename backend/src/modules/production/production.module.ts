@@ -9,11 +9,13 @@ import { ProductionController } from './production.controller';
 import { RecipesModule } from '../recipes/recipes.module';
 import { StockSessionsModule } from '../stock-sessions/stock-sessions.module';
 import { SalesModule } from '../sales/sales.module';
+import { ProductsModule } from '../products/products.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ProductionRun, ProductionRunIngredient, StockEntry, SaleItem]),
     RecipesModule,
+    ProductsModule,
     StockSessionsModule,
     forwardRef(() => SalesModule),
   ],

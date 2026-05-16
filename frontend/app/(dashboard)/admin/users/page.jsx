@@ -3,10 +3,14 @@ import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
-const defaultEnd = new Date();
-const defaultStart = new Date();
-defaultStart.setDate(defaultStart.getDate() - 365);
+import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
+
+const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(365);
+
+/** Only these roles can be assigned in the UI (matches product roles). */
+const ASSIGNABLE_ROLE_NAMES = new Set(["admin", "cashier"]);
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -34,8 +38,8 @@ const UsersPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [filters, setFilters] = useState({
-    dateFrom: defaultStart.toISOString().split("T")[0],
-    dateTo: defaultEnd.toISOString().split("T")[0],
+    dateFrom: defaultDateFrom,
+    dateTo: defaultDateTo,
   });
   const [formData, setFormData] = useState({
     username: "",
@@ -48,6 +52,17 @@ const UsersPage = () => {
     () => roles.find((r) => r.name?.toLowerCase() === "cashier"),
     [roles]
   );
+
+  const assignableRoles = useMemo(() => {
+    const filtered = roles.filter((role) =>
+      ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
+    );
+    const order = { admin: 0, cashier: 1 };
+    return [...filtered].sort(
+      (a, b) =>
+        (order[a.name?.toLowerCase()] ?? 99) - (order[b.name?.toLowerCase()] ?? 99)
+    );
+  }, [roles]);
 
   const filteredUsers = useMemo(
     () => filterByDateRange(users, filters.dateFrom, filters.dateTo),
@@ -99,7 +114,10 @@ const UsersPage = () => {
       username: user.username || "",
       email: user.email || "",
       password: "",
-      roleIds: user.roles?.map((r) => r.id) || [],
+      roleIds:
+        user.roles
+          ?.filter((role) => ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase()))
+          .map((role) => role.id) || [],
     });
     setShowModal(true);
   };
@@ -120,8 +138,13 @@ const UsersPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!editingUser && !cashierRole) {
+    if (!roles.length) {
       toast.error("Roles are still loading. Please try again.");
+      return;
+    }
+
+    if (formData.roleIds.length === 0) {
+      toast.error("Please select at least one role");
       return;
     }
 
@@ -129,7 +152,7 @@ const UsersPage = () => {
       const userData = {
         username: formData.username,
         email: formData.email,
-        roleIds: editingUser ? formData.roleIds : [cashierRole.id],
+        roleIds: formData.roleIds,
       };
 
       // Only include password if it's a new user or if password was changed
@@ -171,27 +194,35 @@ const UsersPage = () => {
   };
 
   const getUserRoles = (user) => {
-    return user.roles?.map((r) => r.name).join(", ") || "No roles";
+    const assignable =
+      user.roles?.filter((role) =>
+        ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
+      ) || [];
+    const legacy =
+      user.roles?.filter(
+        (role) => !ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
+      ) || [];
+    const main = assignable.map((role) => role.name).join(", ");
+    if (legacy.length) {
+      const legacyStr = legacy.map((role) => role.name).join(", ");
+      return main ? `${main} · legacy: ${legacyStr}` : `legacy: ${legacyStr}`;
+    }
+    return main || "No roles";
   };
+
+  const selectedRoles = assignableRoles.filter((role) => formData.roleIds.includes(role.id));
 
   if (loading) {
     return (
-      <div className="w-full space-y-8 bg-gray-50 min-h-screen p-6 flex items-center justify-center">
-        <div className="text-gray-600">Loading users...</div>
-      </div>
+      <PageShell>
+        <PageLoading message="Loading users…" />
+      </PageShell>
     );
   }
 
   return (
-    <div className="w-full space-y-8 bg-gray-50 min-h-screen p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-          Users Management
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Manage users and roles
-        </p>
-      </div>
+    <PageShell className="space-y-8">
+      <PageHeader title="Users Management" subtitle="Manage users and roles" />
 
       {/* Filter Section */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
@@ -202,7 +233,7 @@ const UsersPage = () => {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/40"
             />
           </div>
           <div>
@@ -211,7 +242,7 @@ const UsersPage = () => {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/40"
             />
           </div>
         </div>
@@ -227,7 +258,7 @@ const UsersPage = () => {
                 const rows = filteredUsers.map((u) => ({
                   username: u.username,
                   email: u.email || "",
-                  roles: u.roles?.map((r) => r.name).join(", ") || "",
+                  roles: getUserRoles(u),
                 }));
                 exportToExcel(
                   rows,
@@ -236,7 +267,7 @@ const UsersPage = () => {
                     { key: "email", label: "Email" },
                     { key: "roles", label: "Roles" },
                   ],
-                  `users-export-${new Date().toISOString().split("T")[0]}`
+                  `users-export-${todayYmd()}`
                 );
                 toast.success("Excel exported");
               }}
@@ -344,7 +375,6 @@ const UsersPage = () => {
                   onChange={handleChange}
                   placeholder="Email"
                   className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-                  required
                 />
               </div>
               <div className="mb-4">
@@ -365,23 +395,19 @@ const UsersPage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Roles *
                 </label>
-                {editingUser ? (
-                  <div className="space-y-2">
-                    {roles.map((role) => (
-                      <label key={role.id} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.roleIds.includes(role.id)}
-                          onChange={() => handleRoleToggle(role.id)}
-                          className="mr-2"
-                        />
-                        <span className="text-sm capitalize">{role.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600 py-1">Cashier</p>
-                )}
+                <div className="space-y-2">
+                  {assignableRoles.map((role) => (
+                    <label key={role.id} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.roleIds.includes(role.id)}
+                        onChange={() => handleRoleToggle(role.id)}
+                        className="mr-2"
+                      />
+                      <span className="text-sm capitalize">{role.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -402,7 +428,7 @@ const UsersPage = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 

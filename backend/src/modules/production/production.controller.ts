@@ -18,12 +18,6 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
 
-function isAdminUser(user: { roles?: Array<{ name?: string } | string> }) {
-  return (user?.roles || []).some((role) =>
-    typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
-  );
-}
-
 @ApiTags('Production')
 @Controller('production')
 @UseGuards(JwtAuthGuard)
@@ -43,10 +37,24 @@ export class ProductionController {
   @Get()
   @ApiOperation({ summary: 'Get production runs' })
   @ApiQuery({ name: 'sessionId', required: false, type: Number })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Admin only filter' })
-  findAll(@Request() req, @Query('sessionId') sessionId?: string, @Query('branchId') branchId?: string) {
-    const scopedBranchId = isAdminUser(req.user) ? (branchId ? +branchId : undefined) : req.user.branchId;
-    return this.productionService.findAll(sessionId ? +sessionId : undefined, scopedBranchId);
+  findAll(@Query('sessionId') sessionId?: string) {
+    return this.productionService.findAll(sessionId ? +sessionId : undefined);
+  }
+
+  @Get('availability')
+  @ApiOperation({ summary: 'Produced quantity available to sell this session' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  @ApiQuery({ name: 'productId', required: true, type: Number })
+  getAvailability(@Query('sessionId') sessionId: string, @Query('productId') productId: string) {
+    return this.productionService.getProducedAvailability(+sessionId, +productId);
+  }
+
+  @Get('ingredient-stock')
+  @ApiOperation({ summary: 'Session stock available for a raw ingredient product' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  @ApiQuery({ name: 'productId', required: true, type: Number })
+  getIngredientStock(@Query('sessionId') sessionId: string, @Query('productId') productId: string) {
+    return this.productionService.getIngredientStock(+sessionId, +productId);
   }
 
   @Get(':id')

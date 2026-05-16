@@ -26,10 +26,5 @@ export class ReportFiltersDto {
   @IsOptional()
   @IsNumber()
   partnerId?: number;
-
-  @ApiProperty({ description: 'Branch ID filter', required: false })
-  @IsOptional()
-  @IsNumber()
-  branchId?: number;
 }
 

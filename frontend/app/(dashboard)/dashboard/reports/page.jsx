@@ -3,16 +3,16 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { PageShell, PageHeader } from "../../components/shell";
+import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
 
-function localDateStr(d) {
-  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-const defaultReportFilters = () => ({
-  startDate: localDateStr(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
-  endDate: localDateStr(new Date()),
-});
+const defaultReportFilters = () => {
+  const { dateFrom, dateTo } = defaultDateRangeYmd(7);
+  return {
+    startDate: dateFrom,
+    endDate: dateTo,
+  };
+};
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
@@ -22,11 +22,14 @@ export default function ReportsPage() {
   const [stockReport, setStockReport] = useState(null);
   const [wastageReport, setWastageReport] = useState(null);
   const [stockShareReport, setStockShareReport] = useState(null);
+  const [productionReport, setProductionReport] = useState(null);
   const [weeklyComparison, setWeeklyComparison] = useState(null);
+  const [kitchenReport, setKitchenReport] = useState(null);
+  const [kitchenSessionId, setKitchenSessionId] = useState("");
 
   useEffect(() => {
     loadReports();
-  }, [activeTab, filters]);
+  }, [activeTab, filters, kitchenSessionId]);
 
   const loadReports = async () => {
     try {
@@ -44,9 +47,19 @@ export default function ReportsPage() {
       } else if (activeTab === 'stock-share') {
         const res = await apiClient.reports.getStockShareReport(filters);
         setStockShareReport(res.data);
+      } else if (activeTab === 'production') {
+        const res = await apiClient.reports.getProductionReport(filters);
+        setProductionReport(res.data);
       } else if (activeTab === 'weekly') {
         const res = await apiClient.reports.getWeeklyComparison();
         setWeeklyComparison(res.data);
+      } else if (activeTab === 'kitchen') {
+        if (!kitchenSessionId.trim()) {
+          setKitchenReport(null);
+        } else {
+          const res = await apiClient.reports.getKitchenReport(kitchenSessionId.trim());
+          setKitchenReport(res.data);
+        }
       }
     } catch (error) {
       console.error("Error loading reports:", error);
@@ -57,29 +70,32 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="w-full lg:p-2 space-y-8 bg-gray-50 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-          Reports & Analytics
-        </h1>
-        <p className="text-gray-600 mt-1">View sales, stock, wastage, and stock share reports</p>
-      </div>
+    <PageShell className="space-y-8">
+      <PageHeader
+        title="Reports & Analytics"
+        subtitle="Track sales, stock, wastage, stock share, and production."
+      />
 
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
           <nav className="flex -mb-px">
-            {['sales', 'stock', 'wastage', 'stock-share', 'weekly'].map((tab) => (
+            {['sales', 'stock', 'wastage', 'stock-share', 'production', 'weekly', 'kitchen'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-4 text-sm font-medium border-b-2 ${
+                className={`px-6 py-4 text-sm font-medium border-b-2 min-h-[48px] ${
                   activeTab === tab
-                    ? 'border-blue-900 text-blue-900'
+                    ? 'border-[#0D47A1] text-[#0D47A1]'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                {tab === 'stock-share' ? 'Stock Share' : tab.charAt(0).toUpperCase() + tab.slice(1)} Report
+                {tab === 'stock-share'
+                  ? 'Stock Share'
+                  : tab === 'kitchen'
+                    ? 'Kitchen'
+                    : tab.charAt(0).toUpperCase() + tab.slice(1)}{' '}
+                {tab !== 'kitchen' ? 'Report' : ''}
               </button>
             ))}
           </nav>
@@ -88,7 +104,23 @@ export default function ReportsPage() {
         {/* Filters + Export */}
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="flex flex-wrap gap-4 items-end">
-            {activeTab !== 'weekly' && (
+            {activeTab === 'kitchen' && (
+              <div className="min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stock session ID
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 42"
+                  value={kitchenSessionId}
+                  onChange={(e) => setKitchenSessionId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter a stock session ID for kitchen supply summary.</p>
+              </div>
+            )}
+            {activeTab !== 'weekly' && activeTab !== 'kitchen' && (
               <>
                 <div className="min-w-[140px]">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -125,7 +157,7 @@ export default function ReportsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  const dateStr = new Date().toISOString().split('T')[0];
+                  const dateStr = todayYmd();
                   const range = `${filters.startDate || ''}-to-${filters.endDate || ''}`.replace(/^\-to\-$/, '');
                   if (activeTab === 'sales' && salesReport?.salesByProduct) {
                     const rows = Object.entries(salesReport.salesByProduct).map(([product, stats]) => ({
@@ -142,8 +174,9 @@ export default function ReportsPage() {
                       incoming: stats.incoming,
                       closing: stats.closing,
                       wastage: stats.wastage,
+                      productionUsage: stats.productionUsage,
                     }));
-                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'opening', label: 'Opening (kg)' }, { key: 'incoming', label: 'Incoming (kg)' }, { key: 'closing', label: 'Closing (kg)' }, { key: 'wastage', label: 'Wastage (kg)' }], `stock-report-${range || dateStr}`);
+                    exportToExcel(rows, [{ key: 'product', label: 'Product' }, { key: 'opening', label: 'Opening (kg)' }, { key: 'incoming', label: 'Incoming (kg)' }, { key: 'closing', label: 'Closing (kg)' }, { key: 'wastage', label: 'Wastage (kg)' }, { key: 'productionUsage', label: 'Production Usage (kg)' }], `stock-report-${range || dateStr}`);
                     toast.success('Excel exported');
                   } else if (activeTab === 'wastage' && wastageReport?.wastageByProduct) {
                     const rows = Object.entries(wastageReport.wastageByProduct).map(([product, stats]) => ({
@@ -167,6 +200,28 @@ export default function ReportsPage() {
                       { key: 'date', label: 'Date' }, { key: 'partner', label: 'Partner' }, { key: 'product', label: 'Product' },
                       { key: 'quantity', label: 'Quantity' }, { key: 'unit', label: 'Unit' }, { key: 'paid', label: 'Paid' }, { key: 'notes', label: 'Notes' },
                     ], `stock-share-report-${range || dateStr}`);
+                    toast.success('Excel exported');
+                  } else if (activeTab === 'production' && productionReport?.entries) {
+                    const rows = productionReport.entries.map((entry) => ({
+                      branch: entry.branch || '',
+                      recipe: entry.recipe || '',
+                      finishedProduct: entry.finishedProduct || '',
+                      expectedOutputQuantity: parseFloat(entry.expectedOutputQuantity || 0),
+                      actualOutputQuantity: parseFloat(entry.actualOutputQuantity || 0),
+                      wastedQuantity: parseFloat(entry.wastedQuantity || 0),
+                      soldQuantity: parseFloat(entry.soldQuantity || 0),
+                      remainingQuantity: parseFloat(entry.remainingQuantity || 0),
+                    }));
+                    exportToExcel(rows, [
+                      { key: 'branch', label: 'Branch' },
+                      { key: 'recipe', label: 'Recipe' },
+                      { key: 'finishedProduct', label: 'Finished Product' },
+                      { key: 'expectedOutputQuantity', label: 'Expected Output' },
+                      { key: 'actualOutputQuantity', label: 'Actual Output' },
+                      { key: 'wastedQuantity', label: 'Wastage' },
+                      { key: 'soldQuantity', label: 'Sold' },
+                      { key: 'remainingQuantity', label: 'Remaining' },
+                    ], `production-report-${range || dateStr}`);
                     toast.success('Excel exported');
                   } else if (activeTab === 'weekly' && weeklyComparison) {
                     const rows = [
@@ -209,14 +264,26 @@ export default function ReportsPage() {
               {activeTab === 'stock-share' && stockShareReport && (
                 <StockShareReportView data={stockShareReport} />
               )}
+              {activeTab === 'production' && productionReport && (
+                <ProductionReportView data={productionReport} />
+              )}
               {activeTab === 'weekly' && weeklyComparison && (
                 <WeeklyComparisonView data={weeklyComparison} />
+              )}
+              {activeTab === 'kitchen' && kitchenReport && (
+                <KitchenReportView data={kitchenReport} />
+              )}
+              {activeTab === 'kitchen' && !kitchenReport && !loading && kitchenSessionId.trim() && (
+                <p className="text-gray-500 text-sm">No data — check the session ID and try again.</p>
+              )}
+              {activeTab === 'kitchen' && !kitchenSessionId.trim() && !loading && (
+                <p className="text-gray-500 text-sm">Enter a stock session ID to load kitchen prep summary.</p>
               )}
             </>
           )}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -226,6 +293,7 @@ function SalesReportView({ data }) {
   const totalRevenue = parseFloat(data.summary?.totalRevenue) || 0;
   const unpaidAmount = parseFloat(data.summary?.unpaidAmount) || 0;
   const paidSales = Number(data.summary?.paidSales) || 0;
+  const byBranch = data.byBranch || [];
 
   return (
     <div className="space-y-8">
@@ -249,6 +317,42 @@ function SalesReportView({ data }) {
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Paid Sales</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{paidSales}</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales by Branch</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Paid</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unpaid</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unpaid Amount</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {byBranch.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No branch sales data</td></tr>
+              ) : (
+                byBranch.map((row) => (
+                  <tr key={row.branch}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.branch}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.totalSales ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.paidSales ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.unpaidSales ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.quantity || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 tabular-nums">KES {parseFloat(row.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-4 py-3 text-sm text-right text-amber-700 tabular-nums">KES {parseFloat(row.unpaidAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -325,6 +429,7 @@ function SalesReportView({ data }) {
 // Stock Report Component
 function StockReportView({ data }) {
   const summary = data.summary || {};
+  const byBranch = data.byBranch || [];
   const byProduct = Object.entries(data.stockByProduct || {});
 
   return (
@@ -347,6 +452,44 @@ function StockReportView({ data }) {
       )}
 
       <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock by Branch</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Opening</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Incoming</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Closing</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Wastage</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Production Use</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales (KES)</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sales (kg)</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {byBranch.length === 0 ? (
+                <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-500">No branch stock data</td></tr>
+              ) : (
+                byBranch.map((row) => (
+                  <tr key={row.branch}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.branch}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.opening || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.incoming || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.closing || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600 tabular-nums">{parseFloat(row.wastage || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-purple-600 tabular-nums">{parseFloat(row.productionUsage || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 tabular-nums">KES {parseFloat(row.salesByPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.salesByKgs || 0).toFixed(2)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock by Product</h3>
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-200">
@@ -357,6 +500,7 @@ function StockReportView({ data }) {
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Incoming</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Closing</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Wastage</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Production Use</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sales (KES)</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sales (kg)</th>
               </tr>
@@ -364,7 +508,7 @@ function StockReportView({ data }) {
             <tbody className="bg-white divide-y divide-gray-200">
               {byProduct.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     No stock data in this period
                   </td>
                 </tr>
@@ -376,6 +520,7 @@ function StockReportView({ data }) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right tabular-nums">{parseFloat(stats.incoming || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right tabular-nums">{parseFloat(stats.closing || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right tabular-nums">{parseFloat(stats.wastage || 0).toFixed(2)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-600 text-right tabular-nums">{parseFloat(stats.productionUsage || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right tabular-nums">
                       KES {parseFloat(stats.salesByPrice || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                     </td>
@@ -582,6 +727,57 @@ function StockShareReportView({ data }) {
   );
 }
 
+function KitchenReportView({ data }) {
+  const rows = data.byProduct || [];
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white border rounded-xl p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Dine-in orders (open)</p>
+          <p className="text-2xl font-bold">{data.dineInOrders ?? 0}</p>
+        </div>
+        <div className="bg-white border rounded-xl p-5 shadow-sm">
+          <p className="text-sm text-gray-500">Takeaway orders (open)</p>
+          <p className="text-2xl font-bold">{data.takeawayOrders ?? 0}</p>
+        </div>
+      </div>
+      <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b bg-gray-50 font-medium text-sm">Unserved prep by product</div>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500 border-b">
+              <th className="px-4 py-2">Product</th>
+              <th className="px-4 py-2">Total qty</th>
+              <th className="px-4 py-2">Queued</th>
+              <th className="px-4 py-2">Cooking</th>
+              <th className="px-4 py-2">Ready</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-gray-500 text-center">
+                  No unserved lines for this session.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr key={row.productId} className="border-b">
+                  <td className="px-4 py-2">{row.productName}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.quantity}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.queued}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.cooking}</td>
+                  <td className="px-4 py-2 tabular-nums">{row.ready}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // Weekly Comparison Component
 function WeeklyComparisonView({ data }) {
   const revenueChange = Number(data.comparison?.revenueChange) || 0;
@@ -629,6 +825,188 @@ function WeeklyComparisonView({ data }) {
               {salesChange >= 0 ? '+' : ''}{salesChange}%
             </p>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductionReportView({ data }) {
+  const summary = data.summary || {};
+  const byBranch = data.byBranch || [];
+  const byProduct = data.byProduct || [];
+  const byRecipe = data.byRecipe || [];
+  const entries = data.entries || [];
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Runs</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{summary.totalRuns ?? 0}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Expected Output</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{parseFloat(summary.totalExpectedOutput || 0).toFixed(2)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Output</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{parseFloat(summary.totalOutput || 0).toFixed(2)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Sold</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{parseFloat(summary.totalSold || 0).toFixed(2)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Remaining</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">{parseFloat(summary.totalRemaining || 0).toFixed(2)}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Productivity</p>
+          <p className="mt-1 text-2xl font-bold text-blue-900 tabular-nums">{parseFloat(summary.productivity || 0).toFixed(2)}%</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Sell Through</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-700 tabular-nums">{parseFloat(summary.sellThrough || 0).toFixed(2)}%</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Wastage Rate</p>
+          <p className="mt-1 text-2xl font-bold text-amber-700 tabular-nums">{parseFloat(summary.wastageRate || 0).toFixed(2)}%</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Branch Productivity</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Runs</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Expected</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sold</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Productivity</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sell Through</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Wastage</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {byBranch.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-500">No branch productivity data</td></tr>
+              ) : (
+                byBranch.map((row) => (
+                  <tr key={row.branch}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.branch}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{row.runs ?? 0}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.expectedOutput || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.output || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.sold || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.remaining || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-blue-900 tabular-nums">{parseFloat(row.productivity || 0).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700 tabular-nums">{parseFloat(row.sellThrough || 0).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-amber-700 tabular-nums">{parseFloat(row.wastageRate || 0).toFixed(2)}%</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">By Product</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Output</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sold</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {byProduct.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No production data</td></tr>
+                ) : (
+                  byProduct.map((row) => (
+                    <tr key={row.product}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.product}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.output || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.sold || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.remaining || 0).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">By Recipe</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recipe</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Runs</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Output</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Wastage</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {byRecipe.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No production data</td></tr>
+                ) : (
+                  byRecipe.map((row) => (
+                    <tr key={row.recipe}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.recipe}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{row.runs ?? 0}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(row.output || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums text-red-600">{parseFloat(row.wastage || 0).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Production Entries</h3>
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recipe</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sold</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {entries.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No production entries</td></tr>
+              ) : (
+                entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="px-4 py-3 text-sm text-gray-700">{entry.branch || '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{entry.recipe || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{entry.finishedProduct || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(entry.actualOutputQuantity || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(entry.soldQuantity || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right tabular-nums">{parseFloat(entry.remainingQuantity || 0).toFixed(2)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

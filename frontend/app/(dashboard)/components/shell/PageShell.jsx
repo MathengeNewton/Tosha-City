@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Standard LakeTown page canvas — gray field, consistent spacing, max width.
+ * Standard ToshaCity page canvas — gray field, consistent spacing, max width.
  */
 export default function PageShell({ children, className = "" }) {
   return (

@@ -12,6 +12,24 @@ import { ApiProperty } from '@nestjs/swagger';
 import { StockEntry } from '../../stock-entries/entities/stock-entry.entity';
 import { SaleItem } from '../../sales/entities/sale-item.entity';
 
+export enum ProductCategory {
+  RAW_STOCK = 'RAW_STOCK',
+  PRODUCTION_ITEM = 'PRODUCTION_ITEM',
+  CONSUMABLE = 'CONSUMABLE',
+}
+
+export enum ProductSegment {
+  MEAT = 'MEAT',
+  PREPARED = 'PREPARED',
+  RETAIL = 'RETAIL',
+  KITCHEN_SUPPLY = 'KITCHEN_SUPPLY',
+}
+
+export enum ProductSaleMode {
+  WEIGHT = 'WEIGHT',
+  UNIT = 'UNIT',
+}
+
 @Entity()
 export class Product {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
@@ -34,6 +52,34 @@ export class Product {
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   wholesalePrice: number | null;
 
+  @ApiProperty({ description: 'Product category', enum: ProductCategory })
+  @Column({
+    type: 'enum',
+    enum: ProductCategory,
+    default: ProductCategory.RAW_STOCK,
+  })
+  category: ProductCategory;
+
+  @ApiProperty({ description: 'Business segment', enum: ProductSegment })
+  @Column({
+    type: 'enum',
+    enum: ProductSegment,
+    default: ProductSegment.MEAT,
+  })
+  segment: ProductSegment;
+
+  @ApiProperty({ description: 'Sale mode', enum: ProductSaleMode })
+  @Column({
+    type: 'enum',
+    enum: ProductSaleMode,
+    default: ProductSaleMode.WEIGHT,
+  })
+  saleMode: ProductSaleMode;
+
+  @ApiProperty({ description: 'Optional sales prompt', required: false })
+  @Column({ type: 'varchar', nullable: true })
+  salesPrompt: string | null;
+
   @ApiProperty({ description: 'Whether product is active', example: true })
   @Column({ default: true })
   isActive: boolean;
@@ -55,7 +101,6 @@ export class Product {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  // Relationships
   @OneToMany(() => StockEntry, (entry) => entry.product)
   stockEntries: StockEntry[];
 
@@ -65,4 +110,3 @@ export class Product {
   @OneToMany(() => Product, (product) => product.parentProduct)
   byproducts: Product[];
 }
-

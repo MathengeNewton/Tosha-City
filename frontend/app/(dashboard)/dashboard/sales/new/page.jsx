@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
+import { customerIsWholesale } from "../../../../../lib/customerFlags";
 
 export default function NewSalePage() {
   const router = useRouter();
@@ -12,7 +13,7 @@ export default function NewSalePage() {
   const [customers, setCustomers] = useState([]);
   const [saleItems, setSaleItems] = useState([]);
   const [availableStock, setAvailableStock] = useState({});
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [customerId, setCustomerId] = useState('');
 
   useEffect(() => {
@@ -45,21 +46,28 @@ export default function NewSalePage() {
       const customersRes = await apiClient.customers.getAll({ activeOnly: true });
       setCustomers(customersRes.data || []);
 
-      // Get available stock for each product
       const stockPromises = productsList.map(async (product) => {
         try {
-          // We'll need to calculate available stock from stock entries and sales
-          // For now, we'll just set a placeholder
-          return { productId: product.id, available: 0 };
-        } catch (error) {
-          return { productId: product.id, available: 0 };
+          const res = await apiClient.sales.getProductAvailability({
+            sessionId: session.id,
+            productId: product.id,
+          });
+          const data = res.data || {};
+          return {
+            productId: product.id,
+            available: Number(data.available ?? 0),
+            unit: data.unit || product.unit,
+            source: data.source || "stock",
+          };
+        } catch {
+          return { productId: product.id, available: 0, unit: product.unit, source: "stock" };
         }
       });
 
       const stockData = await Promise.all(stockPromises);
       const stockMap = {};
-      stockData.forEach(s => {
-        stockMap[s.productId] = s.available;
+      stockData.forEach((s) => {
+        stockMap[s.productId] = s;
       });
       setAvailableStock(stockMap);
 
@@ -89,7 +97,7 @@ export default function NewSalePage() {
         item.productId = value;
         // Use wholesale price when wholesale customer selected (fallback to retail if wholesale not set)
         const selectedCustomer = customerId ? customers.find(c => c.id === parseInt(customerId)) : null;
-        const useWholesale = selectedCustomer?.type === 'WHOLESALE';
+        const useWholesale = customerIsWholesale(selectedCustomer);
         const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
         item.price = useWholesale ? (product.wholesalePrice ?? retail) : retail;
         // Recalculate quantity if amount exists
@@ -131,6 +139,11 @@ export default function NewSalePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!paymentMethod) {
+      toast.error("Please select a payment method");
+      return;
+    }
+
     if (saleItems.length === 0) {
       toast.error("Please add at least one item to the sale");
       return;
@@ -205,29 +218,11 @@ export default function NewSalePage() {
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
         <div className="space-y-6">
-          {/* Customer & payment first so wholesale selection applies to items */}
+          {/* Customer first — wholesale pricing applies when adding items */}
           <div className="border-b border-gray-200 pb-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => {
-                  setPaymentMethod(e.target.value);
-                  if (e.target.value !== 'CREDIT') {
-                    setCustomerId('');
-                  }
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                required
-              >
-                <option value="CASH">Cash</option>
-                <option value="MPESA">MPESA</option>
-                <option value="CREDIT">Credit</option>
-              </select>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {paymentMethod === 'CREDIT' ? 'Customer *' : 'Customer (optional – for wholesale pricing)'}
+                Customer (optional – wholesale pricing; required if paying on credit below)
               </label>
               <select
                 value={customerId}
@@ -235,7 +230,7 @@ export default function NewSalePage() {
                   const newId = e.target.value;
                   setCustomerId(newId);
                   const selectedCustomer = newId ? customers.find(c => c.id === parseInt(newId)) : null;
-                  const useWholesale = selectedCustomer?.type === 'WHOLESALE';
+                  const useWholesale = customerIsWholesale(selectedCustomer);
                   setSaleItems(prev => prev.map(item => {
                     const product = products.find(p => p.id === parseInt(item.productId));
                     if (!product) return item;
@@ -247,19 +242,22 @@ export default function NewSalePage() {
                   }));
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                required={paymentMethod === 'CREDIT'}
               >
-                <option value="">{paymentMethod === 'CREDIT' ? 'Select a customer' : 'None'}</option>
+                <option value="">None (walk-in / retail pricing)</option>
                 {customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
-                    {customer.name} {customer.type === 'CREDIT' && customer.creditLimit ? `(Limit: KES ${parseFloat(customer.creditLimit).toLocaleString('en-KE', { minimumFractionDigits: 2 })})` : ''} {customer.type === 'WHOLESALE' ? '(Wholesale)' : ''}
+                    {customer.name}
+                    {customer.creditLimit
+                      ? ` (Credit limit: KES ${parseFloat(customer.creditLimit).toLocaleString("en-KE", { minimumFractionDigits: 2 })})`
+                      : ""}
+                    {customerIsWholesale(customer) ? " (Wholesale)" : ""}
                   </option>
                 ))}
               </select>
             </div>
-            {customerId && customers.find(c => c.id === parseInt(customerId))?.type === 'WHOLESALE' && (
+            {customerId && customerIsWholesale(customers.find(c => c.id === parseInt(customerId))) && (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800">
-                <span className="font-medium">Wholesale sale</span> – Prices shown are wholesale. Add items below.
+                <span className="font-medium">Wholesale sale</span> – line prices use wholesale rates.
               </div>
             )}
           </div>
@@ -303,6 +301,17 @@ export default function NewSalePage() {
                           </option>
                         ))}
                       </select>
+                      {item.productId && availableStock[parseInt(item.productId, 10)] != null && (
+                        <p className="text-xs mt-1 text-emerald-700">
+                          {availableStock[parseInt(item.productId, 10)].source === "produced"
+                            ? "Produced"
+                            : "Available"}
+                          :{" "}
+                          {Number(availableStock[parseInt(item.productId, 10)].available || 0).toFixed(2)}{" "}
+                          {availableStock[parseInt(item.productId, 10)].unit ||
+                            products.find((p) => p.id === parseInt(item.productId, 10))?.unit}
+                        </p>
+                      )}
                     </div>
 
                     <div className="sm:col-span-3">
@@ -378,7 +387,33 @@ export default function NewSalePage() {
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Payment — last step before confirming */}
+          <div className="border-t border-gray-200 pt-4 space-y-2">
+            <h2 className="text-lg font-semibold text-gray-900">Payment</h2>
+            <p className="text-sm text-gray-500">
+              Choose how this sale will be paid after you have added all items.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment method *</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                required
+              >
+                <option value="">Select payment method</option>
+                <option value="CASH">Cash</option>
+                <option value="MPESA">MPESA</option>
+                <option value="CREDIT">Credit (customer required above)</option>
+              </select>
+            </div>
+            {paymentMethod === "CREDIT" && !customerId && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                Select a customer at the top of this form before creating a credit sale.
+              </p>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4">
             <button
               type="button"

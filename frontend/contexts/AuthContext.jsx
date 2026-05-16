@@ -6,6 +6,16 @@ import { toast } from "react-toastify";
 
 const AuthContext = createContext(undefined);
 
+/** Kitchen role only — no admin/cashier (restricted nav to kitchen board). */
+export function isKitchenOnlyAccount(user) {
+  if (!user?.roles?.length) return false;
+  const names = user.roles
+    .map((r) => (typeof r === "string" ? r : r?.name) || "")
+    .filter(Boolean);
+  const has = (role) => names.some((n) => n === role);
+  return has("kitchen") && !has("admin") && !has("cashier");
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -19,10 +29,9 @@ export function AuthProvider({ children }) {
     sessionStorage.clear();
     setToken(null);
     setUser(null);
-    router.push("/auth/login");
+    router.replace("/auth/login");
   };
 
-  // Initialize auth state from storage
   useEffect(() => {
     const initAuth = () => {
       try {
@@ -35,7 +44,6 @@ export function AuthProvider({ children }) {
         }
       } catch (error) {
         console.error("Error initializing auth:", error);
-        // Clear invalid data
         localStorage.removeItem("toshacity-token");
         localStorage.removeItem("toshacity-user");
       } finally {
@@ -48,14 +56,12 @@ export function AuthProvider({ children }) {
 
   const login = async (emailOrUsername, password) => {
     try {
-      // Backend accepts username or email in the username field
-      const response = await apiClient.auth.login({ 
-        username: emailOrUsername, 
-        password 
+      const response = await apiClient.auth.login({
+        username: emailOrUsername,
+        password,
       });
       const { access_token, user: userData } = response.data;
 
-      // Store token and user
       localStorage.setItem("toshacity-token", access_token);
       localStorage.setItem("toshacity-user", JSON.stringify(userData));
 
@@ -72,12 +78,10 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const isAuthenticated = () => {
-    return !!token && !!user;
-  };
+  const isAuthenticated = () => !!token && !!user;
 
   const hasRole = (role) => {
-    if (!user || !user.roles) return false;
+    if (!user?.roles) return false;
     return user.roles.some((r) => r.name === role || r === role);
   };
 
@@ -101,4 +105,3 @@ export function useAuth() {
   }
   return context;
 }
-

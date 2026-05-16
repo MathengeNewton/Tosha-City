@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Recipe, RecipeBranchScope } from './entities/recipe.entity';
+import { Recipe } from './entities/recipe.entity';
 import { RecipeIngredient } from './entities/recipe-ingredient.entity';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
@@ -34,7 +34,6 @@ export class RecipesService {
 
     const recipe = this.recipeRepository.create({
       name: createRecipeDto.name.trim(),
-      branchScope: createRecipeDto.branchScope ?? RecipeBranchScope.GENERAL_BUTCHERY,
       finishedProductId: createRecipeDto.finishedProductId,
       expectedOutputQuantity: createRecipeDto.expectedOutputQuantity,
       outputUnit: createRecipeDto.outputUnit.trim(),
@@ -55,10 +54,14 @@ export class RecipesService {
   }
 
   async findAll(activeOnly?: boolean): Promise<Recipe[]> {
-    return this.recipeRepository.find({
+    const recipes = await this.recipeRepository.find({
       where: activeOnly ? { isActive: true } : {},
       order: { name: 'ASC' },
     });
+    for (const recipe of recipes) {
+      recipe.ingredients = [...(recipe.ingredients || [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    }
+    return recipes;
   }
 
   async findOne(id: number): Promise<Recipe> {

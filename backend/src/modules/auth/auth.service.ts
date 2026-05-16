@@ -17,30 +17,33 @@ export class AuthService {
 
   async validateUser(username: string, password: string): Promise<any> {
     this.logger.debug(`Searching for user: ${username}`);
-    
-    // Search by both username and email
-    const user = await this.userRepo.createQueryBuilder('user')
+
+    const user = await this.userRepo
+      .createQueryBuilder('user')
       .leftJoinAndSelect('user.roles', 'roles')
       .where('user.username = :username OR user.email = :email', {
         username,
-        email: username
+        email: username,
       })
-      .addSelect('user.password') // Explicitly select password for comparison
+      .addSelect('user.password')
       .getOne();
 
-    if (user && await bcrypt.compare(password, user.password)) {
+    if (user && (await bcrypt.compare(password, user.password))) {
       this.logger.debug(`Password matched for user: ${user.username}`);
-      const { password, ...result } = user;
+      const { password: _pw, ...result } = user;
       return result;
     }
-    
+
     this.logger.warn(`User not found or invalid password for: ${username}`);
     return null;
   }
 
-  // Example method: issue JWT
   async login(user: any) {
-    const payload = { username: user.username, sub: user.id, roles: user.roles };
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      roles: user.roles,
+    };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -48,23 +51,23 @@ export class AuthService {
         username: user.username,
         roles: user.roles,
         email: user.email,
-        // Add other fields as needed
       },
     };
   }
 
   async register(username: string, password: string, roles: string[]) {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = this.userRepo.create({ username, password: hashedPassword, roles: roles.map(role => ({ name: role })) });
+    const newUser = this.userRepo.create({
+      username,
+      password: hashedPassword,
+      roles: roles.map((role) => ({ name: role })),
+    });
     return this.userRepo.save(newUser);
   }
 
   async resetPassword(usernameOrEmail: string, password: string): Promise<{ message: string }> {
-    const user = await this.userRepo.findOne({ 
-      where: [ 
-        { username: usernameOrEmail }, 
-        { email: usernameOrEmail } 
-      ] 
+    const user = await this.userRepo.findOne({
+      where: [{ username: usernameOrEmail }, { email: usernameOrEmail }],
     });
     if (!user) {
       throw new Error('User not found');
@@ -75,27 +78,29 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 
-  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<{ message: string }> {
-    const user = await this.userRepo.findOne({ 
+  async changePassword(
+    userId: number,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.userRepo.findOne({
       where: { id: userId },
       select: ['id', 'password', 'username', 'email'],
     });
-    
+
     if (!user) {
       throw new Error('User not found');
     }
 
-    // Verify current password
     const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
     if (!isPasswordValid) {
       throw new Error('Current password is incorrect');
     }
 
-    // Hash and save new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     await this.userRepo.save(user);
-    
+
     return { message: 'Password changed successfully' };
   }
 }

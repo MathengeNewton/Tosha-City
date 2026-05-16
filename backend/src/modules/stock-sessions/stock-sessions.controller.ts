@@ -20,12 +20,6 @@ import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
 import { SessionStatus } from './entities/stock-session.entity';
 
-function isAdminUser(user: { roles?: Array<{ name?: string } | string> }) {
-  return (user?.roles || []).some((role) =>
-    typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
-  );
-}
-
 @ApiTags('Stock Sessions')
 @Controller('stock-sessions')
 @UseGuards(JwtAuthGuard)
@@ -67,38 +61,29 @@ export class StockSessionsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all stock sessions with optional filters and statistics' })
-  @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date in YYYY-MM-DD format' })
-  @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date in YYYY-MM-DD format' })
-  @ApiQuery({ name: 'status', required: false, enum: SessionStatus, description: 'Filter by session status' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID filter (admin only)' })
+  @ApiQuery({ name: 'dateFrom', required: false, type: String })
+  @ApiQuery({ name: 'dateTo', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, enum: SessionStatus })
   findAll(
-    @Request() req,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('status') status?: SessionStatus,
-    @Query('branchId') branchId?: string,
   ) {
-    const scopedBranchId = isAdminUser(req.user) ? (branchId ? +branchId : undefined) : req.user.branchId;
-    // If any filter is provided, use findAllWithStats, otherwise use simple findAll
-    if (dateFrom || dateTo || status || scopedBranchId) {
-      return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status, scopedBranchId);
+    if (dateFrom || dateTo || status) {
+      return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status);
     }
-    return this.stockSessionsService.findAll(scopedBranchId);
+    return this.stockSessionsService.findAll();
   }
 
   @Get('current')
   @ApiOperation({ summary: 'Get current open session' })
-  @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID filter (admin only)' })
-  findCurrent(@Request() req, @Query('branchId') branchId?: string) {
-    const scopedBranchId = isAdminUser(req.user) ? (branchId ? +branchId : undefined) : req.user.branchId;
-    return this.stockSessionsService.findCurrent(scopedBranchId);
+  findCurrent() {
+    return this.stockSessionsService.findCurrent();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a stock session by ID' })
-  findOne(@Param('id') id: string, @Request() req) {
-    const scopedBranchId = isAdminUser(req.user) ? undefined : req.user.branchId;
-    return this.stockSessionsService.findOne(+id, scopedBranchId);
+  findOne(@Param('id') id: string) {
+    return this.stockSessionsService.findOne(+id);
   }
 }
-

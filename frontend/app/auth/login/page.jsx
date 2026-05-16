@@ -7,11 +7,6 @@ export const metadata = {
   title: "Login | ToshaCity Butchery",
   description:
     "Access your ToshaCity Butchery Management System to manage stock, sales, and daily operations.",
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
-  },
 };
 
 export default function LoginPage() {

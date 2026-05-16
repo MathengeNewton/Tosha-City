@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { AdHocProductionIngredientDto } from './ad-hoc-production-ingredient.dto';
 
 export class ProductionIngredientAdjustmentDto {
   @ApiProperty({ example: 1 })
@@ -44,4 +45,11 @@ export class CreateProductionRunDto {
   @ValidateNested({ each: true })
   @Type(() => ProductionIngredientAdjustmentDto)
   ingredientAdjustments?: ProductionIngredientAdjustmentDto[];
+
+  @ApiProperty({ type: [AdHocProductionIngredientDto], required: false })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AdHocProductionIngredientDto)
+  adHocIngredients?: AdHocProductionIngredientDto[];
 }

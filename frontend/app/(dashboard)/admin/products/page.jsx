@@ -4,10 +4,18 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
+import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
+import {
+  PRODUCT_TYPES,
+  configForProductType,
+  emptyProductForm,
+  formFromProduct,
+  payloadFromForm,
+  productTypeKey,
+  typeBadgeClass,
+} from "../../../../lib/productCatalog";
 
-const defaultEnd = new Date();
-const defaultStart = new Date();
-defaultStart.setDate(defaultStart.getDate() - 365);
+const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(365);
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -36,18 +44,12 @@ export default function ProductsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [filters, setFilters] = useState({
-    dateFrom: defaultStart.toISOString().split("T")[0],
-    dateTo: defaultEnd.toISOString().split("T")[0],
+    dateFrom: defaultDateFrom,
+    dateTo: defaultDateTo,
   });
-  const [formData, setFormData] = useState({
-    name: '',
-    unit: 'kg',
-    pricePerUnit: '',
-    wholesalePricePerUnit: '',
-    description: '',
-    isActive: true,
-    parentProductId: '',
-  });
+  const [formData, setFormData] = useState(() => emptyProductForm());
+
+  const typeConfig = configForProductType(formData.productType);
 
   const filteredProducts = useMemo(
     () => filterByDateRange(products, filters.dateFrom, filters.dateTo),
@@ -62,12 +64,11 @@ export default function ProductsPage() {
     try {
       setLoading(true);
       const response = await apiClient.products.getAll();
-      // Map defaultPrice to pricePerUnit for frontend display
-      const products = (response.data || []).map(product => ({
+      const list = (response.data || []).map((product) => ({
         ...product,
         pricePerUnit: product.defaultPrice || product.pricePerUnit || 0,
       }));
-      setProducts(products);
+      setProducts(list);
     } catch (error) {
       console.error("Error loading products:", error);
       toast.error("Failed to load products");
@@ -76,29 +77,23 @@ export default function ProductsPage() {
     }
   };
 
+  const setProductType = (typeKey) => {
+    const cfg = configForProductType(typeKey);
+    setFormData((prev) => ({
+      ...prev,
+      productType: typeKey,
+      unit: cfg.unitOptions.some((o) => o.value === prev.unit) ? prev.unit : cfg.defaultUnit,
+      parentProductId: cfg.showParentProduct ? prev.parentProductId : "",
+    }));
+  };
+
   const handleOpenModal = (product = null) => {
     if (product) {
       setEditingProduct(product);
-      setFormData({
-        name: product.name,
-        unit: product.unit,
-        pricePerUnit: (product.defaultPrice || product.pricePerUnit || 0).toString(),
-        wholesalePricePerUnit: (product.wholesalePrice != null ? product.wholesalePrice : '').toString(),
-        description: product.description || '',
-        isActive: product.isActive,
-        parentProductId: product.parentProductId ? product.parentProductId.toString() : '',
-      });
+      setFormData(formFromProduct(product));
     } else {
       setEditingProduct(null);
-      setFormData({
-        name: '',
-        unit: 'kg',
-        pricePerUnit: '',
-        wholesalePricePerUnit: '',
-        description: '',
-        isActive: true,
-        parentProductId: '',
-      });
+      setFormData(emptyProductForm());
     }
     setShowModal(true);
   };
@@ -106,42 +101,27 @@ export default function ProductsPage() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingProduct(null);
-    setFormData({
-      name: '',
-      unit: 'kg',
-      pricePerUnit: '',
-      description: '',
-      isActive: true,
-    });
+    setFormData(emptyProductForm());
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate price
-    const price = parseFloat(formData.pricePerUnit);
-    if (isNaN(price) || price <= 0) {
-      toast.error("Please enter a valid retail price greater than 0");
-      return;
-    }
-    const wholesaleInput = formData.wholesalePricePerUnit ? parseFloat(formData.wholesalePricePerUnit) : null;
-    if (wholesaleInput !== null && (isNaN(wholesaleInput) || wholesaleInput < 0)) {
-      toast.error("Wholesale price must be 0 or greater");
-      return;
-    }
-    // Every product has both: if wholesale left blank, use retail so wholesale sales always have a price
-    const wholesalePrice = wholesaleInput !== null && !isNaN(wholesaleInput) ? wholesaleInput : price;
-    try {
-      const data = {
-        name: formData.name.trim(),
-        unit: formData.unit.trim(),
-        defaultPrice: price,
-        wholesalePrice,
-        isActive: formData.isActive,
-        parentProductId: formData.parentProductId ? parseInt(formData.parentProductId) : undefined,
-      };
 
-      console.log("Sending product data:", data); // Debug log
+    const price = parseFloat(formData.pricePerUnit);
+    if (Number.isNaN(price) || price <= 0) {
+      toast.error("Please enter a valid price greater than 0");
+      return;
+    }
+    if (typeConfig.showWholesale && formData.wholesalePricePerUnit) {
+      const wholesaleInput = parseFloat(formData.wholesalePricePerUnit);
+      if (Number.isNaN(wholesaleInput) || wholesaleInput < 0) {
+        toast.error("Wholesale price must be 0 or greater");
+        return;
+      }
+    }
+
+    try {
+      const data = payloadFromForm(formData);
 
       if (editingProduct) {
         await apiClient.products.update(editingProduct.id, data);
@@ -150,7 +130,7 @@ export default function ProductsPage() {
         await apiClient.products.create(data);
         toast.success("Product created successfully");
       }
-      
+
       handleCloseModal();
       loadProducts();
     } catch (error) {
@@ -175,19 +155,32 @@ export default function ProductsPage() {
 
   const handleToggleActive = async (product) => {
     try {
+      const typeKey = productTypeKey(product);
+      const cfg = configForProductType(typeKey);
       await apiClient.products.update(product.id, {
         name: product.name,
         unit: product.unit,
         defaultPrice: product.defaultPrice || product.pricePerUnit || 0,
         wholesalePrice: product.wholesalePrice ?? undefined,
+        category: product.category || cfg.value,
+        segment: product.segment || cfg.segment,
+        saleMode: product.saleMode || cfg.saleMode,
         isActive: !product.isActive,
+        parentProductId: product.parentProductId ?? undefined,
       });
-      toast.success(`Product ${product.isActive ? 'deactivated' : 'activated'} successfully`);
+      toast.success(`Product ${product.isActive ? "deactivated" : "activated"} successfully`);
       loadProducts();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update product");
     }
   };
+
+  const parentOptions = products.filter(
+    (p) =>
+      p.isActive &&
+      p.category !== "PRODUCTION_ITEM" &&
+      (!editingProduct || p.id !== editingProduct.id)
+  );
 
   if (loading) {
     return (
@@ -204,31 +197,37 @@ export default function ProductsPage() {
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
             Products Management
           </h1>
-          <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage butchery products</p>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">
+            Raw meat by weight, or production items sold per piece (mutura, soup, etc.)
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => {
-              const rows = filteredProducts.map((p) => ({
-                name: p.name,
-                unit: p.unit,
-                pricePerUnit: parseFloat(p.defaultPrice || p.pricePerUnit || 0),
-                description: p.description || "",
-                status: p.isActive ? "Active" : "Inactive",
-                createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : "",
-              }));
+              const rows = filteredProducts.map((p) => {
+                const tk = productTypeKey(p);
+                const cfg = configForProductType(tk);
+                return {
+                  name: p.name,
+                  type: cfg.shortLabel,
+                  unit: p.unit,
+                  pricePerUnit: parseFloat(p.defaultPrice || p.pricePerUnit || 0),
+                  status: p.isActive ? "Active" : "Inactive",
+                  createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : "",
+                };
+              });
               exportToExcel(
                 rows,
                 [
                   { key: "name", label: "Name" },
+                  { key: "type", label: "Type" },
                   { key: "unit", label: "Unit" },
                   { key: "pricePerUnit", label: "Price (KES)" },
-                  { key: "description", label: "Description" },
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
-                `products-export-${new Date().toISOString().split("T")[0]}`
+                `products-export-${todayYmd()}`
               );
               toast.success("Excel exported");
             }}
@@ -245,7 +244,6 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -269,19 +267,32 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Products Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Retail (KES)</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Wholesale (KES)</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Description</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Name
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Type
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Unit
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                  Retail (KES)
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                  Wholesale (KES)
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Status
+                </th>
+                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -292,164 +303,229 @@ export default function ProductsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50">
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.name}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {product.unit}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 hidden sm:table-cell">
-                      KES {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 hidden md:table-cell">
-                      {product.wholesalePrice != null ? `KES ${parseFloat(product.wholesalePrice).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '–'}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 text-sm text-gray-500 hidden md:table-cell">
-                      {product.description || '-'}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        product.isActive 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {product.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        {isAdmin && (
-                          <>
-                            <button
-                              onClick={() => handleOpenModal(product)}
-                              className="text-blue-600 hover:text-blue-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleToggleActive(product)}
-                              className="text-yellow-600 hover:text-yellow-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
-                            >
-                              {product.isActive ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(product.id)}
-                              className="text-red-600 hover:text-red-800 min-h-[44px] sm:min-h-0 text-left sm:text-left"
-                            >
-                              Delete
-                            </button>
-                          </>
-                        )}
-                        {!isAdmin && <span className="text-gray-400 text-sm">View only</span>}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filteredProducts.map((product) => {
+                  const tk = productTypeKey(product);
+                  const cfg = configForProductType(tk);
+                  const priceLabel =
+                    tk === "PRODUCTION_ITEM" ? "per piece" : `per ${product.unit}`;
+                  return (
+                    <tr key={product.id} className="hover:bg-gray-50">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {product.name}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${typeBadgeClass(tk)}`}
+                        >
+                          {cfg.shortLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.unit}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 hidden sm:table-cell">
+                        {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString(
+                          "en-KE",
+                          { minimumFractionDigits: 2 }
+                        )}{" "}
+                        <span className="text-gray-500 font-normal text-xs">{priceLabel}</span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-600 hidden md:table-cell">
+                        {product.wholesalePrice != null
+                          ? parseFloat(product.wholesalePrice).toLocaleString("en-KE", {
+                              minimumFractionDigits: 2,
+                            })
+                          : "–"}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                            product.isActive
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {product.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          {isAdmin && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenModal(product)}
+                                className="text-blue-600 hover:text-blue-800 min-h-[44px] sm:min-h-0 text-left"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleActive(product)}
+                                className="text-yellow-600 hover:text-yellow-800 min-h-[44px] sm:min-h-0 text-left"
+                              >
+                                {product.isActive ? "Deactivate" : "Activate"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(product.id)}
+                                className="text-red-600 hover:text-red-800 min-h-[44px] sm:min-h-0 text-left"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                          {!isAdmin && <span className="text-gray-400 text-sm">View only</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">
-              {editingProduct ? 'Edit Product' : 'Add Product'}
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
+              {editingProduct ? "Edit Product" : "Add Product"}
             </h2>
-            
+            <p className="text-sm text-gray-500 mb-4">Choose what kind of product you are adding first.</p>
+
             <form onSubmit={handleSubmit} className="space-y-4">
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium text-gray-700">Product type *</legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {Object.values(PRODUCT_TYPES).map((type) => {
+                    const selected = formData.productType === type.value;
+                    return (
+                      <label
+                        key={type.value}
+                        className={`relative flex cursor-pointer rounded-lg border p-3 transition-colors ${
+                          selected
+                            ? "border-[#0D47A1] bg-blue-50 ring-1 ring-[#0D47A1]"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="productType"
+                          value={type.value}
+                          checked={selected}
+                          onChange={() => setProductType(type.value)}
+                          className="sr-only"
+                        />
+                        <div>
+                          <span className="block text-sm font-semibold text-gray-900">
+                            {type.label}
+                          </span>
+                          <span className="block text-xs text-gray-600 mt-1">{type.description}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              {formData.productType === "PRODUCTION_ITEM" && (
+                <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">
+                  Production items are made in the stock session <strong>Production</strong> tab using
+                  a recipe. After you save this product, add a recipe that outputs it.
+                </div>
+              )}
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Name *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                  placeholder={
+                    formData.productType === "PRODUCTION_ITEM" ? "e.g. Mutura" : "e.g. Beef"
+                  }
                   required
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit *
-                  </label>
-                  <input
-                    type="text"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+                  <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    placeholder="kg"
                     required
-                  />
+                  >
+                    {typeConfig.unitOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Retail price per Unit (KES) *
+                    {typeConfig.priceLabel} *
                   </label>
                   <input
                     type="number"
                     step="0.01"
+                    min="0.01"
                     value={formData.pricePerUnit}
                     onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                    placeholder={formData.productType === "PRODUCTION_ITEM" ? "20" : "800"}
                     required
                   />
                 </div>
+
+                {typeConfig.showWholesale && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {typeConfig.wholesaleLabel}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.wholesalePricePerUnit}
+                      onChange={(e) =>
+                        setFormData({ ...formData, wholesalePricePerUnit: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                      placeholder="Optional — defaults to retail if blank"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {typeConfig.showParentProduct && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Wholesale price (KES)
+                    Parent product (for byproducts)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.wholesalePricePerUnit}
-                    onChange={(e) => setFormData({ ...formData, wholesalePricePerUnit: e.target.value })}
+                  <select
+                    value={formData.parentProductId}
+                    onChange={(e) => setFormData({ ...formData, parentProductId: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    placeholder="Optional"
-                  />
+                  >
+                    <option value="">None (main product)</option>
+                    {parentOptions.map((p) => (
+                      <option key={p.id} value={p.id.toString()}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    e.g. link &quot;Minced meat&quot; to &quot;Beef&quot; (raw stock only).
+                  </p>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Parent Product (for byproducts)
-                </label>
-                <select
-                  value={formData.parentProductId}
-                  onChange={(e) => setFormData({ ...formData, parentProductId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                >
-                  <option value="">None (Main Product)</option>
-                  {products.filter(p => p.isActive && (!editingProduct || p.id !== editingProduct.id)).map(product => (
-                    <option key={product.id} value={product.id.toString()}>
-                      {product.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Select a parent product if this is a byproduct (e.g., select "Beef" for "Minced Meat")
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                  rows="3"
-                />
-              </div>
+              )}
 
               <div className="flex items-center min-h-[44px]">
                 <input
@@ -476,7 +552,7 @@ export default function ProductsPage() {
                   type="submit"
                   className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-[#1e88b5] transition-colors min-h-[44px] text-base"
                 >
-                  {editingProduct ? 'Update' : 'Create'}
+                  {editingProduct ? "Update" : "Create"}
                 </button>
               </div>
             </form>
@@ -486,4 +562,3 @@ export default function ProductsPage() {
     </div>
   );
 }
-

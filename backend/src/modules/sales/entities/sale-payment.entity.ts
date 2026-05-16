@@ -2,7 +2,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  OneToOne,
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
@@ -18,13 +17,13 @@ export class SalePayment {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ApiProperty({ description: 'Sale this payment is for' })
-  @OneToOne(() => Sale, (sale) => sale.payment)
+  @ApiProperty({ description: 'Sale this payment line belongs to' })
+  @ManyToOne(() => Sale, (sale) => sale.payments)
   @JoinColumn({ name: 'saleId' })
   sale: Sale;
 
-  @ApiProperty({ description: 'Sale ID (unique)', example: 1 })
-  @Column({ unique: true })
+  @ApiProperty({ description: 'Sale ID', example: 1 })
+  @Column()
   saleId: number;
 
   @ApiProperty({ description: 'Payment amount', example: 2000.0 })
@@ -59,4 +58,3 @@ export class SalePayment {
   @CreateDateColumn()
   createdAt: Date;
 }
-

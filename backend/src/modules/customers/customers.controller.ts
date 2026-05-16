@@ -41,11 +41,22 @@ export class CustomersController {
   @ApiOperation({ summary: 'Get all customers' })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
   @ApiQuery({ name: 'type', required: false, enum: CustomerType })
+  @ApiQuery({ name: 'isWholesale', required: false, type: Boolean })
+  @ApiQuery({ name: 'creditEnabled', required: false, type: Boolean })
   findAll(
     @Query('activeOnly') activeOnly?: string,
     @Query('type') type?: CustomerType,
+    @Query('isWholesale') isWholesale?: string,
+    @Query('creditEnabled') creditEnabled?: string,
   ) {
-    return this.customersService.findAll(activeOnly === 'true', type);
+    const wholesaleFilter =
+      isWholesale === 'true' ? true : isWholesale === 'false' ? false : undefined;
+    return this.customersService.findAll(
+      activeOnly === 'true',
+      type,
+      wholesaleFilter,
+      creditEnabled === 'true' ? true : undefined,
+    );
   }
 
   @Get('credit/balances')
@@ -63,7 +74,7 @@ export class CustomersController {
   @Get(':id/balance')
   @ApiOperation({ summary: 'Get outstanding balance for a credit customer' })
   getOutstandingBalance(@Param('id') id: string) {
-    return this.customersService.getOutstandingBalance(+id);
+    return this.customersService.getBalanceSummary(+id);
   }
 
   @Patch(':id')

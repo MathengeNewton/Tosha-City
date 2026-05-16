@@ -5,9 +5,9 @@ import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
 
-const defaultEnd = new Date();
-const defaultStart = new Date();
-defaultStart.setDate(defaultStart.getDate() - 365);
+import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
+
+const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(365);
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -36,8 +36,8 @@ export default function SuppliersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [filters, setFilters] = useState({
-    dateFrom: defaultStart.toISOString().split("T")[0],
-    dateTo: defaultEnd.toISOString().split("T")[0],
+    dateFrom: defaultDateFrom,
+    dateTo: defaultDateTo,
   });
   const [formData, setFormData] = useState({
     name: '',
@@ -160,7 +160,7 @@ export default function SuppliersPage() {
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
-                `suppliers-export-${new Date().toISOString().split("T")[0]}`
+                `suppliers-export-${todayYmd()}`
               );
               toast.success("Excel exported");
             }}

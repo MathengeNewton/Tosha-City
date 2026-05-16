@@ -1,9 +1,8 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Role } from '../../modules/roles/entities/role.entity';
+import { Role, UserRole } from '../../modules/roles/entities/role.entity';
 import { User } from '../../modules/users/entities/user.entity';
-import { UserRole } from '../../modules/roles/entities/role.entity';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -42,7 +41,7 @@ export class SeedService implements OnApplicationBootstrap {
       if (!adminRole) {
         throw new Error('Admin role not found! Did you seed roles first?');
       }
-      
+
       const user = this.userRepo.create({
         username: 'admin',
         email: 'admin@toshacity.co.ke',

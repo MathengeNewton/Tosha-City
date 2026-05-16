@@ -1,46 +1,19 @@
-import AdminDashboardPage from "./AdminDashboard";
+"use client";
 
-// app/dashboard/admin/page.js or page.tsx
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export const metadata = {
-  title: "Admin Dashboard | PCEA Church Kenya",
-  description:
-    "Manage PCEA Church Kenya's administrative operations securely. Access member management, church events, and ministry resources from the admin portal.",
-  icons: {
-    icon: "/pcea-seeklogo.svg",
-    shortcut: "/icons/favicon-16x16.png",
-    apple: "/icons/apple-touch-icon.png",
-  },
-  openGraph: {
-    title: "Admin Dashboard | PCEA Church Kenya",
-    description:
-      "Access the PCEA Church Kenya admin portal to manage members, events, and church resources securely.",
-    url: "https://pceachurch.or.ke/dashboard/admin",
-    siteName: "PCEA Church Kenya",
-    type: "website",
-    images: [
-      {
-        url: "/images/og-admin-dashboard.png",
-        width: 1200,
-        height: 630,
-        alt: "PCEA Church Kenya Admin Dashboard",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Admin Dashboard | PCEA Church Kenya",
-    description:
-      "Securely manage PCEA Church Kenya operations including members, events, and resources through the admin dashboard.",
-    images: ["/images/og-admin-dashboard.png"],
-  },
-};
+/** Legacy route — operational home is the butchery dashboard at /dashboard */
+export default function AdminDashboardRedirect() {
+  const router = useRouter();
 
-const AdminDashboard = () => {
+  useEffect(() => {
+    router.replace("/dashboard");
+  }, [router]);
+
   return (
-    <>
-      <AdminDashboardPage />
-    </>
+    <div className="w-full lg:p-2 min-h-[40vh] flex items-center justify-center text-gray-600">
+      Redirecting to dashboard…
+    </div>
   );
-};
-export default AdminDashboard;
+}

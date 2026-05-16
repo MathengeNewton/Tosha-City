@@ -2,11 +2,12 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
+import { PageShell, PageHeader } from "../../components/shell";
 
 const PAGE_SIZE = 50;
-const defaultEnd = new Date();
-const defaultStart = new Date();
-defaultStart.setDate(defaultStart.getDate() - 7);
+import { defaultDateRangeYmd } from "../../../../lib/time";
+
+const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(7);
 
 const ACTION_LABELS = {
   SESSION_OPENED: "Session opened",
@@ -32,8 +33,8 @@ export default function ActivityLogPage() {
   const [result, setResult] = useState({ items: [], total: 0 });
   const [users, setUsers] = useState([]);
   const [filters, setFilters] = useState({
-    dateFrom: defaultStart.toISOString().split("T")[0],
-    dateTo: defaultEnd.toISOString().split("T")[0],
+    dateFrom: defaultDateFrom,
+    dateTo: defaultDateTo,
     userId: "",
     entityType: "",
     success: "",
@@ -83,13 +84,13 @@ export default function ActivityLogPage() {
   const currentPage = Math.floor(filters.offset / PAGE_SIZE) + 1;
 
   return (
-    <div className="p-4 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-4">Activity log</h1>
-      <p className="text-gray-600 mb-6">
-        View everyone&apos;s activity on the system — stock sessions, entries, and sales (success and failures).
-      </p>
+    <PageShell className="max-w-7xl space-y-6">
+      <PageHeader
+        title="Activity log"
+        subtitle={`View everyone's activity on the system — stock sessions, entries, and sales (success and failures).`}
+      />
 
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-gray-200 flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
@@ -97,7 +98,7 @@ export default function ActivityLogPage() {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value, offset: 0 })}
-              className="border border-gray-300 rounded px-2 py-1.5 text-sm"
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
             />
           </div>
           <div>
@@ -106,7 +107,7 @@ export default function ActivityLogPage() {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters({ ...filters, dateTo: e.target.value, offset: 0 })}
-              className="border border-gray-300 rounded px-2 py-1.5 text-sm"
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
             />
           </div>
           <div>
@@ -114,7 +115,7 @@ export default function ActivityLogPage() {
             <select
               value={filters.userId}
               onChange={(e) => setFilters({ ...filters, userId: e.target.value, offset: 0 })}
-              className="border border-gray-300 rounded px-2 py-1.5 text-sm min-w-[140px]"
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm min-w-[140px] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
             >
               <option value="">All users</option>
               {users.map((u) => (
@@ -127,7 +128,7 @@ export default function ActivityLogPage() {
             <select
               value={filters.entityType}
               onChange={(e) => setFilters({ ...filters, entityType: e.target.value, offset: 0 })}
-              className="border border-gray-300 rounded px-2 py-1.5 text-sm"
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
             >
               <option value="">All</option>
               <option value="stock_session">Stock session</option>
@@ -140,7 +141,7 @@ export default function ActivityLogPage() {
             <select
               value={filters.success}
               onChange={(e) => setFilters({ ...filters, success: e.target.value, offset: 0 })}
-              className="border border-gray-300 rounded px-2 py-1.5 text-sm"
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/30"
             >
               <option value="">All</option>
               <option value="true">Success</option>
@@ -224,7 +225,7 @@ export default function ActivityLogPage() {
                     type="button"
                     onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - PAGE_SIZE) })}
                     disabled={filters.offset === 0}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-50 min-h-[40px]"
                   >
                     Previous
                   </button>
@@ -235,7 +236,7 @@ export default function ActivityLogPage() {
                     type="button"
                     onClick={() => setFilters({ ...filters, offset: filters.offset + PAGE_SIZE })}
                     disabled={filters.offset + PAGE_SIZE >= result.total}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 hover:bg-gray-50 min-h-[40px]"
                   >
                     Next
                   </button>
@@ -245,6 +246,6 @@ export default function ActivityLogPage() {
           </>
         )}
       </div>
-    </div>
+    </PageShell>
   );
 }

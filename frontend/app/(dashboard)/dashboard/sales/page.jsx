@@ -6,6 +6,8 @@ import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { useAuth } from "../../../../contexts/AuthContext";
+import SplitPaymentFields from "./SplitPaymentFields";
+import { defaultLinesForTotal, validateLines, buildSplitPayload } from "../../../../lib/splitPayment";
 
 export default function SalesListPage() {
   const router = useRouter();
@@ -21,8 +23,7 @@ export default function SalesListPage() {
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalSale, setPaymentModalSale] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [mpesaReference, setMpesaReference] = useState('');
+  const [paymentLines, setPaymentLines] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [saleToEdit, setSaleToEdit] = useState(null);
   const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
@@ -60,34 +61,31 @@ export default function SalesListPage() {
   };
 
   const openRecordPaymentModal = (sale) => {
+    const total = parseFloat(sale.totalAmount || 0);
     setPaymentModalSale({ saleId: sale.id, totalAmount: sale.totalAmount });
-    setPaymentMethod('CASH');
-    setMpesaReference('');
+    setPaymentLines(defaultLinesForTotal(total));
     setShowPaymentModal(true);
   };
 
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setPaymentModalSale(null);
-    setPaymentMethod('CASH');
-    setMpesaReference('');
+    setPaymentLines([]);
   };
 
   const handleRecordPaymentSubmit = async (e) => {
     e.preventDefault();
     if (!paymentModalSale) return;
-    if (paymentMethod === 'MPESA' && !mpesaReference.trim()) {
-      toast.error("MPESA reference is required");
+    const validation = validateLines(paymentLines, paymentModalSale.totalAmount);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
     try {
       setSubmitting(true);
-      await apiClient.payments.create({
-        saleId: paymentModalSale.saleId,
-        amount: paymentModalSale.totalAmount,
-        method: paymentMethod,
-        mpesaReference: paymentMethod === 'MPESA' ? mpesaReference.trim() : undefined,
-      });
+      await apiClient.payments.createSplit(
+        buildSplitPayload(paymentModalSale.saleId, paymentLines),
+      );
       toast.success("Payment recorded successfully");
       closePaymentModal();
       loadData();
@@ -257,7 +255,7 @@ export default function SalesListPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {sales.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-4 sm:px-6 py-4 text-center text-gray-500">
                     No sales found
                   </td>
                 </tr>
@@ -270,6 +268,17 @@ export default function SalesListPage() {
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <span className="sm:hidden">{new Date(sale.soldAt).toLocaleDateString()}</span>
                       <span className="hidden sm:inline">{new Date(sale.soldAt).toLocaleString()}</span>
+                    </td>
+                    <td className="px-4 sm:px-6 py-4 text-sm">
+                      <div className="font-medium text-gray-900">{sale.customer?.name || 'Walk-in'}</div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(sale.customer?.isWholesale || sale.customer?.type === 'WHOLESALE') && (
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-purple-100 text-purple-800">Wholesale</span>
+                        )}
+                        {(sale.paymentMethod === 'CREDIT' || sale.customer?.creditEnabled || sale.customer?.type === 'CREDIT') && (
+                          <span className="px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-800">Credit</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 sm:px-6 py-4 text-sm w-[180px] max-w-[220px]">
                       <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto overflow-x-hidden border border-gray-100 rounded-md p-1.5 bg-gray-50/50">
@@ -287,9 +296,12 @@ export default function SalesListPage() {
                       KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <div className="text-xs text-gray-600 mb-1">{sale.paymentMethod || '—'}</div>
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         sale.paymentStatus === 'PAID' 
                           ? 'bg-green-100 text-green-800' 
+                          : sale.paymentStatus === 'PARTIAL'
+                          ? 'bg-orange-100 text-orange-800'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
                         {sale.paymentStatus}
@@ -387,35 +399,12 @@ export default function SalesListPage() {
             <p className="text-sm text-gray-600 mb-4">
               Amount: KES {parseFloat(paymentModalSale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
             </p>
-            <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => {
-                    setPaymentMethod(e.target.value);
-                    if (e.target.value === 'CASH') setMpesaReference('');
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="MPESA">MPESA</option>
-                </select>
-              </div>
-              {paymentMethod === 'MPESA' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">MPESA Reference *</label>
-                  <input
-                    type="text"
-                    value={mpesaReference}
-                    onChange={(e) => setMpesaReference(e.target.value)}
-                    placeholder="e.g. ABC123XYZ"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    required={paymentMethod === 'MPESA'}
-                  />
-                </div>
-              )}
+                        <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
+              <SplitPaymentFields
+                lines={paymentLines}
+                onChange={setPaymentLines}
+                saleTotal={paymentModalSale.totalAmount}
+              />
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   type="button"

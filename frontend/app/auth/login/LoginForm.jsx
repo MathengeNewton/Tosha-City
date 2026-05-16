@@ -11,7 +11,7 @@ import {
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Link from "next/link";
-import { useAuth } from "../../../contexts/AuthContext";
+import { useAuth, isKitchenOnlyAccount } from "../../../contexts/AuthContext";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -94,11 +94,9 @@ export default function LoginForm() {
           localStorage.removeItem("toshacity-remembered-email");
         }
 
-        // Determine redirect based on user role
-        const userRole =
-          result.user.roles?.[0]?.name || result.user.roles?.[0];
-        // All users go to the main dashboard
-        const redirectPath = "/dashboard";
+        const redirectPath = isKitchenOnlyAccount(result.user)
+            ? "/dashboard/stock?tab=kitchen"
+            : "/dashboard";
 
         // Redirect after successful login
         setTimeout(() => {

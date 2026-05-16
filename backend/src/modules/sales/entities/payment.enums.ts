@@ -2,6 +2,7 @@ export enum PaymentMethod {
   CASH = 'CASH',
   MPESA = 'MPESA',
   CREDIT = 'CREDIT',
+  MIXED = 'MIXED',
 }
 
 export enum PaymentStatus {

@@ -6,6 +6,8 @@ import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import ReceiptView from "../ReceiptView";
 import { useAuth } from "../../../../../contexts/AuthContext";
+import SplitPaymentFields from "../SplitPaymentFields";
+import { defaultLinesForTotal, validateLines, buildSplitPayload } from "../../../../../lib/splitPayment";
 
 export default function SaleDetailsPage() {
   const router = useRouter();
@@ -15,10 +17,9 @@ export default function SaleDetailsPage() {
   const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [sale, setSale] = useState(null);
-  const [payment, setPayment] = useState(null);
+  const [payments, setPayments] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
-  const [mpesaReference, setMpesaReference] = useState("");
+  const [paymentLines, setPaymentLines] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
@@ -40,10 +41,10 @@ export default function SaleDetailsPage() {
       // Try to get payment
       try {
         const paymentRes = await apiClient.payments.getBySaleId(saleId);
-        setPayment(paymentRes.data);
+        const data = paymentRes.data;
+        setPayments(Array.isArray(data) ? data : data ? [data] : []);
       } catch (error) {
-        // Payment might not exist yet
-        setPayment(null);
+        setPayments([]);
       }
 
     } catch (error) {
@@ -55,32 +56,28 @@ export default function SaleDetailsPage() {
   };
 
   const openRecordPaymentModal = () => {
-    setPaymentMethod("CASH");
-    setMpesaReference("");
+    if (sale) {
+      setPaymentLines(defaultLinesForTotal(parseFloat(sale.totalAmount || 0)));
+    }
     setShowPaymentModal(true);
   };
 
   const closePaymentModal = () => {
     setShowPaymentModal(false);
-    setPaymentMethod("CASH");
-    setMpesaReference("");
+    setPaymentLines([]);
   };
 
   const handleRecordPaymentSubmit = async (e) => {
     e.preventDefault();
     if (!sale) return;
-    if (paymentMethod === "MPESA" && !mpesaReference.trim()) {
-      toast.error("MPESA reference is required");
+    const validation = validateLines(paymentLines, sale.totalAmount);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
     try {
       setSubmitting(true);
-      await apiClient.payments.create({
-        saleId: sale.id,
-        amount: sale.totalAmount,
-        method: paymentMethod,
-        mpesaReference: paymentMethod === "MPESA" ? mpesaReference.trim() : undefined,
-      });
+      await apiClient.payments.createSplit(buildSplitPayload(sale.id, paymentLines));
       toast.success("Payment recorded successfully");
       closePaymentModal();
       loadSaleData();
@@ -207,7 +204,22 @@ export default function SaleDetailsPage() {
               Print Receipt
             </button>
           )}
-          {sale.paymentStatus === "PENDING" && (
+          {sale.customer && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-4">
+          <h3 className="font-semibold text-gray-900 mb-2">Customer</h3>
+          <p className="text-gray-900 font-medium">{sale.customer.name}</p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {(sale.customer.isWholesale || sale.customer.type === 'WHOLESALE') && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800">Wholesale</span>
+            )}
+            {(sale.customer.creditEnabled || sale.customer.type === 'CREDIT') && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">Credit account</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {sale.paymentStatus === "PENDING" && (
             <button
               onClick={openRecordPaymentModal}
               className="flex-1 sm:flex-none bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors text-sm min-h-[44px]"
@@ -252,6 +264,21 @@ export default function SaleDetailsPage() {
       )}
 
       {/* When PENDING: message only; when PAID: receipt + print button already in header */}
+      {sale.customer && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-4">
+          <h3 className="font-semibold text-gray-900 mb-2">Customer</h3>
+          <p className="text-gray-900 font-medium">{sale.customer.name}</p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {(sale.customer.isWholesale || sale.customer.type === 'WHOLESALE') && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-800">Wholesale</span>
+            )}
+            {(sale.customer.creditEnabled || sale.customer.type === 'CREDIT') && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">Credit account</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {sale.paymentStatus === "PENDING" && (
         <div className="no-print bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
           Complete payment above to print receipt.
@@ -259,7 +286,7 @@ export default function SaleDetailsPage() {
       )}
 
       {sale.paymentStatus === "PAID" && (
-        <ReceiptView sale={sale} payment={payment} />
+        <ReceiptView sale={sale} payments={payments} />
       )}
 
       <div className="no-print flex gap-4">
@@ -324,38 +351,11 @@ export default function SaleDetailsPage() {
               })}
             </p>
             <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Method *
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => {
-                    setPaymentMethod(e.target.value);
-                    if (e.target.value === "CASH") setMpesaReference("");
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="MPESA">MPESA</option>
-                </select>
-              </div>
-              {paymentMethod === "MPESA" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    MPESA Reference *
-                  </label>
-                  <input
-                    type="text"
-                    value={mpesaReference}
-                    onChange={(e) => setMpesaReference(e.target.value)}
-                    placeholder="e.g. ABC123XYZ"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    required={paymentMethod === "MPESA"}
-                  />
-                </div>
-              )}
+              <SplitPaymentFields
+                lines={paymentLines}
+                onChange={setPaymentLines}
+                saleTotal={sale?.totalAmount}
+              />
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   type="button"

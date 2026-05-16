@@ -16,5 +16,8 @@ export default registerAs(
     logging: true,
     migrationsRun: true,
     migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+    extra: {
+      options: `-c timezone=${process.env.APP_TIMEZONE?.trim() || 'Africa/Nairobi'}`,
+    },
   }),
 );

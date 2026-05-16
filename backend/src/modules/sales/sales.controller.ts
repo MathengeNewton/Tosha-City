@@ -59,6 +59,17 @@ export class SalesController {
     );
   }
 
+  @Get('product-availability')
+  @ApiOperation({ summary: 'Available quantity to sell for a product in a session' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  @ApiQuery({ name: 'productId', required: true, type: Number })
+  getProductAvailability(
+    @Query('sessionId') sessionId: string,
+    @Query('productId') productId: string,
+  ) {
+    return this.salesService.getProductAvailability(+sessionId, +productId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a sale by ID' })
   findOne(@Param('id') id: string) {

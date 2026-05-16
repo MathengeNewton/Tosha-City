@@ -24,7 +24,18 @@ export class CreateCustomerDto {
 
   @ApiProperty({ description: 'Customer type', enum: CustomerType, example: CustomerType.REGULAR })
   @IsEnum(CustomerType)
-  type: CustomerType;
+  @IsOptional()
+  type?: CustomerType;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isWholesale?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  creditEnabled?: boolean;
 
   @ApiProperty({ description: 'Credit limit (for credit customers)', required: false })
   @IsOptional()

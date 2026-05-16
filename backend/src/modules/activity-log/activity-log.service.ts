@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ActivityLog } from './entities/activity-log.entity';
+import { endOfDayInAppTz, startOfDayInAppTz } from '../../common/time/app-time';
 
 export interface CreateActivityLogDto {
   userId?: number | null;
@@ -48,14 +49,12 @@ export class ActivityLogService {
       .orderBy('log.createdAt', 'DESC');
 
     if (params.dateFrom) {
-      const from = new Date(params.dateFrom);
-      from.setHours(0, 0, 0, 0);
-      query.andWhere('log.createdAt >= :from', { from });
+      const ymd = params.dateFrom.trim().split('T')[0];
+      query.andWhere('log.createdAt >= :from', { from: startOfDayInAppTz(ymd) });
     }
     if (params.dateTo) {
-      const to = new Date(params.dateTo);
-      to.setHours(23, 59, 59, 999);
-      query.andWhere('log.createdAt <= :to', { to });
+      const ymd = params.dateTo.trim().split('T')[0];
+      query.andWhere('log.createdAt <= :to', { to: endOfDayInAppTz(ymd) });
     }
     if (params.userId != null) {
       query.andWhere('log.userId = :userId', { userId: params.userId });

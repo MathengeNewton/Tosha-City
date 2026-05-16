@@ -1,28 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { apiClient } from "../../../../lib/api";
-
-function recipeMatchesBranch(recipe, branchType) {
-  if (!recipe) return false;
-  if (recipe.branchScope === "ALL") return true;
-  return recipe.branchScope === branchType;
-}
 
 export default function ProductionTab({ session, canManage, onRefresh, productionRuns = [] }) {
   const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [recipes, setRecipes] = useState([]);
+  const [ingredientProducts, setIngredientProducts] = useState([]);
+  const [ingredientStock, setIngredientStock] = useState({});
   const [showForm, setShowForm] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [actualOutputQuantity, setActualOutputQuantity] = useState("");
   const [wastedQuantity, setWastedQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [ingredientAdjustments, setIngredientAdjustments] = useState([]);
+  const [adHocIngredients, setAdHocIngredients] = useState([]);
+  const [adHocProductId, setAdHocProductId] = useState("");
+  const [adHocQuantity, setAdHocQuantity] = useState("");
+  const [expandedRunId, setExpandedRunId] = useState(null);
 
   const availableRecipes = useMemo(
-    () => recipes.filter((recipe) => recipe.isActive !== false && recipeMatchesBranch(recipe, session?.branch?.type)),
-    [recipes, session?.branch?.type]
+    () => recipes.filter((recipe) => recipe.isActive !== false),
+    [recipes]
   );
 
   const selectedRecipe = useMemo(
@@ -30,9 +30,52 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
     [availableRecipes, selectedRecipeId]
   );
 
+  const sellableQuantity = useMemo(() => {
+    const output = parseFloat(actualOutputQuantity || 0);
+    const waste = parseFloat(wastedQuantity || 0);
+    return Math.max(0, output - waste);
+  }, [actualOutputQuantity, wastedQuantity]);
+
+  const adHocProductOptions = useMemo(
+    () =>
+      ingredientProducts.filter(
+        (p) => p.isActive !== false && p.category !== "PRODUCTION_ITEM"
+      ),
+    [ingredientProducts]
+  );
+
+  const loadIngredientStock = useCallback(
+    async (productIds) => {
+      if (!session?.id || !productIds.length) return;
+      const entries = await Promise.all(
+        productIds.map(async (productId) => {
+          try {
+            const res = await apiClient.production.getIngredientStock({
+              sessionId: session.id,
+              productId,
+            });
+            const available = typeof res.data === "number" ? res.data : Number(res.data?.available ?? res.data ?? 0);
+            return [productId, available];
+          } catch {
+            return [productId, 0];
+          }
+        })
+      );
+      setIngredientStock((prev) => {
+        const next = { ...prev };
+        entries.forEach(([productId, available]) => {
+          next[productId] = available;
+        });
+        return next;
+      });
+    },
+    [session?.id]
+  );
+
   useEffect(() => {
     if (!session?.id) return;
     loadRecipes();
+    loadIngredientProducts();
   }, [session?.id]);
 
   useEffect(() => {
@@ -41,9 +84,12 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
       return;
     }
     setActualOutputQuantity(String(selectedRecipe.expectedOutputQuantity || ""));
+    setWastedQuantity("");
+    setAdHocIngredients([]);
     setIngredientAdjustments(
       (selectedRecipe.ingredients || []).map((ingredient) => ({
         recipeIngredientId: ingredient.id,
+        productId: ingredient.productId,
         ingredientName: ingredient.ingredientName,
         productName: ingredient.product?.name || "",
         actualQuantity: String(ingredient.estimatedQuantity || ""),
@@ -51,6 +97,15 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
       }))
     );
   }, [selectedRecipe]);
+
+  useEffect(() => {
+    const productIds = [
+      ...ingredientAdjustments.map((i) => i.productId).filter(Boolean),
+      ...adHocIngredients.map((i) => i.productId),
+    ];
+    const unique = [...new Set(productIds)];
+    if (unique.length) loadIngredientStock(unique);
+  }, [ingredientAdjustments, adHocIngredients, loadIngredientStock]);
 
   const loadRecipes = async () => {
     try {
@@ -65,6 +120,65 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
     }
   };
 
+  const loadIngredientProducts = async () => {
+    try {
+      const res = await apiClient.products.getActive();
+      setIngredientProducts(res.data || []);
+    } catch (error) {
+      console.error("Error loading products:", error);
+    }
+  };
+
+  const addAdHocIngredient = () => {
+    const productId = parseInt(adHocProductId, 10);
+    const qty = parseFloat(adHocQuantity);
+    if (!productId || Number.isNaN(qty) || qty < 0) {
+      toast.error("Select a product and enter a valid quantity");
+      return;
+    }
+    const product = adHocProductOptions.find((p) => p.id === productId);
+    if (!product) return;
+
+    const templateLine = ingredientAdjustments.find((i) => i.productId === productId);
+    if (templateLine) {
+      const next = [...ingredientAdjustments];
+      const index = next.findIndex((i) => i.productId === productId);
+      const current = parseFloat(next[index].actualQuantity || 0);
+      next[index] = {
+        ...next[index],
+        actualQuantity: String(current + qty),
+      };
+      setIngredientAdjustments(next);
+    } else {
+      const existing = adHocIngredients.find((i) => i.productId === productId);
+      if (existing) {
+        setAdHocIngredients(
+          adHocIngredients.map((i) =>
+            i.productId === productId
+              ? { ...i, actualQuantity: i.actualQuantity + qty }
+              : i
+          )
+        );
+      } else {
+        setAdHocIngredients([
+          ...adHocIngredients,
+          {
+            productId,
+            productName: product.name,
+            unit: product.unit,
+            actualQuantity: qty,
+          },
+        ]);
+      }
+    }
+    setAdHocProductId("");
+    setAdHocQuantity("");
+  };
+
+  const removeAdHocIngredient = (productId) => {
+    setAdHocIngredients(adHocIngredients.filter((i) => i.productId !== productId));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedRecipe) {
@@ -72,6 +186,9 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
       return;
     }
     try {
+      const adHocOnly = adHocIngredients.filter(
+        (line) => !ingredientAdjustments.some((t) => t.productId === line.productId)
+      );
       await apiClient.production.create({
         recipeId: selectedRecipe.id,
         sessionId: session.id,
@@ -82,6 +199,10 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
           recipeIngredientId: ingredient.recipeIngredientId,
           actualQuantity: parseFloat(ingredient.actualQuantity || 0),
         })),
+        adHocIngredients: adHocOnly.map((line) => ({
+          productId: line.productId,
+          actualQuantity: line.actualQuantity,
+        })),
       });
       toast.success("Production run recorded");
       setShowForm(false);
@@ -90,6 +211,7 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
       setWastedQuantity("");
       setNotes("");
       setIngredientAdjustments([]);
+      setAdHocIngredients([]);
       await onRefresh?.();
     } catch (error) {
       console.error("Error recording production run:", error);
@@ -100,7 +222,8 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
   return (
     <div className="space-y-6">
       <p className="text-gray-600 text-sm">
-        Record mutura, soup, pork fry, and other prepared-item production from the stock session for this branch.
+        Record mutura, cooked heads, soup, and other prepared items. Ingredients must be in opening or
+        incoming stock for this session before you run production.
       </p>
 
       {canManage && session?.status === "OPEN" && (
@@ -145,6 +268,9 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
                       className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       required
                     />
+                    {selectedRecipe && (
+                      <p className="text-xs text-gray-500 mt-1">Unit: {selectedRecipe.outputUnit}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">Wastage</label>
@@ -160,26 +286,51 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
                 </div>
 
                 {selectedRecipe && (
+                  <div className="rounded-md bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-900">
+                    Sellable after this run:{" "}
+                    <span className="font-semibold tabular-nums">
+                      {sellableQuantity.toFixed(2)} {selectedRecipe.outputUnit}
+                    </span>
+                    <span className="text-blue-700 ml-2">
+                      (output {parseFloat(actualOutputQuantity || 0).toFixed(2)} − waste{" "}
+                      {parseFloat(wastedQuantity || 0).toFixed(2)})
+                    </span>
+                  </div>
+                )}
+
+                {selectedRecipe && (
                   <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
                       <p className="text-sm font-medium text-gray-900">
-                        Estimated ingredients for {selectedRecipe.name}
+                        Recipe ingredients — enter actual quantities used
                       </p>
                       <p className="text-xs text-gray-500">
-                        Expected output: {parseFloat(selectedRecipe.expectedOutputQuantity || 0).toFixed(2)} {selectedRecipe.outputUnit}
+                        Expected output: {parseFloat(selectedRecipe.expectedOutputQuantity || 0).toFixed(2)}{" "}
+                        {selectedRecipe.outputUnit}
                       </p>
                     </div>
                     <div className="divide-y divide-gray-200">
                       {ingredientAdjustments.map((ingredient, index) => (
-                        <div key={ingredient.recipeIngredientId} className="grid grid-cols-1 md:grid-cols-4 gap-3 px-4 py-3">
+                        <div
+                          key={ingredient.recipeIngredientId}
+                          className="grid grid-cols-1 md:grid-cols-4 gap-3 px-4 py-3"
+                        >
                           <div className="text-sm text-gray-900">
                             <div className="font-medium">{ingredient.ingredientName}</div>
                             {ingredient.productName && (
-                              <div className="text-xs text-gray-500">Linked product: {ingredient.productName}</div>
+                              <div className="text-xs text-gray-500">Product: {ingredient.productName}</div>
                             )}
                           </div>
                           <div className="text-sm text-gray-500">
-                            Estimated: {parseFloat(selectedRecipe.ingredients?.[index]?.estimatedQuantity || 0).toFixed(2)} {ingredient.unit}
+                            Template:{" "}
+                            {parseFloat(selectedRecipe.ingredients?.[index]?.estimatedQuantity || 0).toFixed(2)}{" "}
+                            {ingredient.unit}
+                            {ingredient.productId && ingredientStock[ingredient.productId] !== undefined && (
+                              <div className="text-xs text-emerald-700 mt-1">
+                                In session: {Number(ingredientStock[ingredient.productId]).toFixed(2)}{" "}
+                                {ingredient.unit}
+                              </div>
+                            )}
                           </div>
                           <div className="md:col-span-2">
                             <label className="block text-xs text-gray-600 mb-1">Actual quantity used</label>
@@ -202,6 +353,68 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {showForm && (
+                  <div className="rounded-lg border border-dashed border-gray-300 p-4 space-y-3">
+                    <p className="text-sm font-medium text-gray-900">Add extra ingredient (not on recipe)</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <select
+                        value={adHocProductId}
+                        onChange={(e) => setAdHocProductId(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md md:col-span-2"
+                      >
+                        <option value="">Select product from stock</option>
+                        {adHocProductOptions.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name} ({product.unit})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Quantity"
+                        value={adHocQuantity}
+                        onChange={(e) => setAdHocQuantity(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addAdHocIngredient}
+                      className="text-sm text-blue-900 hover:underline"
+                    >
+                      + Add ingredient line
+                    </button>
+                    {adHocIngredients.length > 0 && (
+                      <ul className="text-sm divide-y divide-gray-100 border border-gray-200 rounded-md">
+                        {adHocIngredients.map((line) => (
+                          <li
+                            key={line.productId}
+                            className="flex justify-between items-center px-3 py-2"
+                          >
+                            <span>
+                              {line.productName}: {line.actualQuantity} {line.unit}
+                              {ingredientStock[line.productId] !== undefined && (
+                                <span className="text-xs text-gray-500 ml-2">
+                                  (session stock: {Number(ingredientStock[line.productId]).toFixed(2)})
+                                </span>
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeAdHocIngredient(line.productId)}
+                              className="text-red-600 text-xs hover:underline"
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
 
@@ -249,33 +462,76 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8" />
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recipe</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Finished Product</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Expected</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actual</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Wastage</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sellable</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {productionRuns.map((run) => (
-                  <tr key={run.id}>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{run.recipe?.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{run.finishedProduct?.name}</td>
-                    <td className="px-4 py-3 text-sm text-right tabular-nums">
-                      {parseFloat(run.expectedOutputQuantity || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right tabular-nums">
-                      {parseFloat(run.actualOutputQuantity || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right tabular-nums text-red-600">
-                      {parseFloat(run.wastedQuantity || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {run.recordedAt ? new Date(run.recordedAt).toLocaleString() : "—"}
-                    </td>
-                  </tr>
-                ))}
+                {productionRuns.map((run) => {
+                  const sellable =
+                    parseFloat(run.actualOutputQuantity || 0) - parseFloat(run.wastedQuantity || 0);
+                  const isExpanded = expandedRunId === run.id;
+                  return (
+                    <Fragment key={run.id}>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                            className="text-gray-500 hover:text-gray-800 text-xs"
+                            aria-label={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            {isExpanded ? "▼" : "▶"}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{run.recipe?.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{run.finishedProduct?.name}</td>
+                        <td className="px-4 py-3 text-sm text-right tabular-nums">
+                          {parseFloat(run.actualOutputQuantity || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right tabular-nums text-red-600">
+                          {parseFloat(run.wastedQuantity || 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right tabular-nums text-emerald-700 font-medium">
+                          {sellable.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {run.recordedAt ? new Date(run.recordedAt).toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${run.id}-detail`}>
+                          <td colSpan={7} className="px-4 py-3 bg-gray-50">
+                            <p className="text-xs font-medium text-gray-700 mb-2">Ingredients used</p>
+                            {(run.ingredients || []).length === 0 ? (
+                              <p className="text-xs text-gray-500">No ingredient breakdown recorded.</p>
+                            ) : (
+                              <ul className="text-xs text-gray-700 space-y-1">
+                                {run.ingredients.map((ing) => (
+                                  <li key={ing.id}>
+                                    {ing.ingredientName}
+                                    {ing.recipeIngredientId == null && (
+                                      <span className="ml-1 text-amber-700">(extra)</span>
+                                    )}
+                                    : {parseFloat(ing.actualQuantity || 0).toFixed(2)} {ing.unit}
+                                    {ing.product?.name && (
+                                      <span className="text-gray-500"> — {ing.product.name}</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

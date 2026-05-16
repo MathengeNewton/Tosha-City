@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ProductionRun } from './entities/production-run.entity';
@@ -8,19 +8,17 @@ import { RecipesService } from '../recipes/recipes.service';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { SalesService } from '../sales/sales.service';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
-import { BranchType } from '../branches/entities/branch.entity';
-import { RecipeBranchScope } from '../recipes/entities/recipe.entity';
 import { SaleItem } from '../sales/entities/sale-item.entity';
-import { UserRole } from '../roles/entities/role.entity';
+import { ProductsService } from '../products/products.service';
+import { ProductCategory } from '../products/entities/product.entity';
 
 type RequestUser = {
   userId: number;
   roles?: Array<{ name?: string } | string>;
-  branchId?: number | null;
 };
 
 type IngredientSnapshot = {
-  recipeIngredientId: number;
+  recipeIngredientId: number | null;
   productId: number | null;
   ingredientName: string;
   estimatedQuantity: number;
@@ -42,43 +40,20 @@ export class ProductionService {
     private readonly dataSource: DataSource,
     private readonly recipesService: RecipesService,
     private readonly stockSessionsService: StockSessionsService,
+    @Inject(forwardRef(() => SalesService))
     private readonly salesService: SalesService,
+    private readonly productsService: ProductsService,
   ) {}
-
-  private isAdmin(user?: RequestUser): boolean {
-    return (user?.roles || []).some((role) =>
-      typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
-    );
-  }
-
-  private ensureBranchAccess(user: RequestUser, branchId: number) {
-    if (!this.isAdmin(user) && user.branchId !== branchId) {
-      throw new BadRequestException('You can only record production in your assigned branch');
-    }
-  }
-
-  private validateRecipeForBranch(recipeBranchScope: RecipeBranchScope, branchType: BranchType) {
-    if (recipeBranchScope === RecipeBranchScope.ALL) {
-      return;
-    }
-    if (recipeBranchScope === RecipeBranchScope.GENERAL_BUTCHERY && branchType === BranchType.GENERAL_BUTCHERY) {
-      return;
-    }
-    if (recipeBranchScope === RecipeBranchScope.PORK_BUTCHERY && branchType === BranchType.PORK_BUTCHERY) {
-      return;
-    }
-    throw new BadRequestException('This recipe does not apply to the selected branch');
-  }
 
   async create(createProductionRunDto: CreateProductionRunDto, user: RequestUser): Promise<ProductionRun> {
     const session = await this.stockSessionsService.findOne(createProductionRunDto.sessionId);
-    this.ensureBranchAccess(user, session.branchId);
-
     const recipe = await this.recipesService.findOne(createProductionRunDto.recipeId);
-    this.validateRecipeForBranch(recipe.branchScope, session.branch.type);
 
     const adjustmentMap = new Map(
-      (createProductionRunDto.ingredientAdjustments || []).map((item) => [item.recipeIngredientId, item.actualQuantity]),
+      (createProductionRunDto.ingredientAdjustments || []).map((item) => [
+        item.recipeIngredientId,
+        item.actualQuantity,
+      ]),
     );
 
     const ingredientSnapshots: IngredientSnapshot[] = [];
@@ -100,17 +75,43 @@ export class ProductionService {
         recipeIngredientId: ingredient.id,
         productId: ingredient.productId,
         ingredientName: ingredient.ingredientName,
-        estimatedQuantity: ingredient.estimatedQuantity,
+        estimatedQuantity: Number(ingredient.estimatedQuantity),
         actualQuantity,
         unit: ingredient.unit,
       });
+    }
+
+    for (const adHoc of createProductionRunDto.adHocIngredients || []) {
+      const product = await this.productsService.findOne(adHoc.productId);
+      if (product.category === ProductCategory.PRODUCTION_ITEM) {
+        throw new BadRequestException(`Cannot use production item "${product.name}" as an ingredient`);
+      }
+      const qty = Number(adHoc.actualQuantity);
+      if (qty < 0) {
+        throw new BadRequestException(`Invalid quantity for ${product.name}`);
+      }
+      const existing = ingredientSnapshots.find((s) => s.productId === adHoc.productId);
+      if (existing) {
+        existing.actualQuantity += qty;
+      } else {
+        ingredientSnapshots.push({
+          recipeIngredientId: null,
+          productId: product.id,
+          ingredientName: product.name,
+          estimatedQuantity: 0,
+          actualQuantity: qty,
+          unit: product.unit,
+        });
+      }
+      stockUsageByProduct.set(product.id, (stockUsageByProduct.get(product.id) || 0) + qty);
     }
 
     for (const [productId, requiredQuantity] of stockUsageByProduct.entries()) {
       const available = await this.salesService.getAvailableStock(session.id, productId);
       if (available < requiredQuantity) {
         const ingredientName =
-          ingredientSnapshots.find((ingredient) => ingredient.productId === productId)?.ingredientName || 'ingredient';
+          ingredientSnapshots.find((ingredient) => ingredient.productId === productId)?.ingredientName ||
+          'ingredient';
         throw new BadRequestException(
           `Insufficient stock for ${ingredientName}. Available: ${available}, required: ${requiredQuantity}`,
         );
@@ -123,7 +124,6 @@ export class ProductionService {
 
     try {
       const run = queryRunner.manager.create(ProductionRun, {
-        branchId: session.branchId,
         sessionId: session.id,
         recipeId: recipe.id,
         finishedProductId: recipe.finishedProductId,
@@ -142,19 +142,28 @@ export class ProductionService {
           productionRunId: savedRun.id,
         });
         await queryRunner.manager.save(ProductionRunIngredient, ingredientRow);
+      }
 
-        if (ingredient.productId) {
-          const stockEntry = queryRunner.manager.create(StockEntry, {
-            sessionId: session.id,
-            productId: ingredient.productId,
-            type: StockEntryType.PRODUCTION_USAGE,
-            quantity: ingredient.actualQuantity,
-            unit: ingredient.unit,
-            notes: `Production usage for ${recipe.name}`,
-            recordedById: user.userId,
-          });
-          await queryRunner.manager.save(StockEntry, stockEntry);
-        }
+      const stockUsageTotals = new Map<number, { quantity: number; unit: string }>();
+      for (const ingredient of ingredientSnapshots) {
+        if (!ingredient.productId) continue;
+        const prev = stockUsageTotals.get(ingredient.productId);
+        stockUsageTotals.set(ingredient.productId, {
+          quantity: (prev?.quantity || 0) + Number(ingredient.actualQuantity),
+          unit: ingredient.unit,
+        });
+      }
+      for (const [productId, usage] of stockUsageTotals.entries()) {
+        const stockEntry = queryRunner.manager.create(StockEntry, {
+          sessionId: session.id,
+          productId,
+          type: StockEntryType.PRODUCTION_USAGE,
+          quantity: usage.quantity,
+          unit: usage.unit,
+          notes: `Production usage for ${recipe.name}`,
+          recordedById: user.userId,
+        });
+        await queryRunner.manager.save(StockEntry, stockEntry);
       }
 
       await queryRunner.commitTransaction();
@@ -167,10 +176,9 @@ export class ProductionService {
     }
   }
 
-  async findAll(sessionId?: number, branchId?: number): Promise<ProductionRun[]> {
+  async findAll(sessionId?: number): Promise<ProductionRun[]> {
     const query = this.productionRunRepository
       .createQueryBuilder('run')
-      .leftJoinAndSelect('run.branch', 'branch')
       .leftJoinAndSelect('run.session', 'session')
       .leftJoinAndSelect('run.recipe', 'recipe')
       .leftJoinAndSelect('run.finishedProduct', 'finishedProduct')
@@ -183,17 +191,20 @@ export class ProductionService {
       query.andWhere('run.sessionId = :sessionId', { sessionId });
     }
 
-    if (branchId) {
-      query.andWhere('run.branchId = :branchId', { branchId });
-    }
-
     return query.getMany();
   }
 
   async findOne(id: number): Promise<ProductionRun> {
     const run = await this.productionRunRepository.findOne({
       where: { id },
-      relations: ['branch', 'session', 'recipe', 'finishedProduct', 'recordedBy', 'ingredients', 'ingredients.product'],
+      relations: [
+        'session',
+        'recipe',
+        'finishedProduct',
+        'recordedBy',
+        'ingredients',
+        'ingredients.product',
+      ],
     });
     if (!run) {
       throw new NotFoundException(`Production run with ID ${id} not found`);
@@ -218,5 +229,9 @@ export class ProductionService {
       .getRawOne();
 
     return Number(producedResult?.total || 0) - Number(soldResult?.total || 0);
+  }
+
+  async getIngredientStock(sessionId: number, productId: number): Promise<number> {
+    return this.salesService.getAvailableStock(sessionId, productId);
   }
 }

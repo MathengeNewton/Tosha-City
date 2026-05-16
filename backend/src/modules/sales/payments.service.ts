@@ -4,7 +4,11 @@ import { Repository, DataSource } from 'typeorm';
 import { SalePayment } from './entities/sale-payment.entity';
 import { Sale, PaymentStatus } from './entities/sale.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateSplitPaymentDto } from './dto/create-split-payment.dto';
+import { PaymentLineDto } from './dto/payment-line.dto';
 import { PaymentMethod } from './entities/payment.enums';
+
+const TOLERANCE = 0.01;
 
 @Injectable()
 export class PaymentsService {
@@ -16,82 +20,105 @@ export class PaymentsService {
     private dataSource: DataSource,
   ) {}
 
-  async createPayment(createPaymentDto: CreatePaymentDto, userId: number): Promise<SalePayment> {
-    // Find the sale
+  async createPayment(createPaymentDto: CreatePaymentDto, userId: number): Promise<SalePayment[]> {
+    return this.createSplitPayment(
+      {
+        saleId: createPaymentDto.saleId,
+        lines: [
+          {
+            method: createPaymentDto.method as PaymentMethod.CASH | PaymentMethod.MPESA,
+            amount: createPaymentDto.amount,
+            mpesaReference: createPaymentDto.mpesaReference,
+          },
+        ],
+      },
+      userId,
+    );
+  }
+
+  async createSplitPayment(dto: CreateSplitPaymentDto, userId: number): Promise<SalePayment[]> {
     const sale = await this.saleRepository.findOne({
-      where: { id: createPaymentDto.saleId },
-      relations: ['payment'],
+      where: { id: dto.saleId },
+      relations: ['payments'],
     });
 
     if (!sale) {
-      throw new NotFoundException(`Sale with ID ${createPaymentDto.saleId} not found`);
+      throw new NotFoundException(`Sale with ID ${dto.saleId} not found`);
     }
 
-    // Check if sale already has payment
-    if (sale.payment) {
-      throw new BadRequestException('Payment already recorded for this sale');
+    this.validateLines(dto.lines);
+
+    const existingTotal = this.sumPayments(sale.payments || []);
+    const saleTotal = Number(sale.totalAmount);
+    const newTotal = this.sumLineAmounts(dto.lines);
+
+    if (existingTotal >= saleTotal - TOLERANCE) {
+      throw new BadRequestException('Sale is already fully paid');
     }
 
-    // For credit sales, allow partial payments (for future enhancement)
-    // For now, validate payment amount matches sale total
+    const remaining = saleTotal - existingTotal;
+
     if (sale.paymentMethod !== PaymentMethod.CREDIT) {
-      if (Math.abs(createPaymentDto.amount - sale.totalAmount) > 0.01) {
+      if (Math.abs(newTotal - remaining) > TOLERANCE) {
         throw new BadRequestException(
-          `Payment amount (${createPaymentDto.amount}) does not match sale total (${sale.totalAmount})`,
+          `Payment total (${newTotal}) must equal amount due (${remaining.toFixed(2)})`,
         );
       }
-    } else {
-      // For credit, payment should match or be less (partial payment support in future)
-      if (createPaymentDto.amount > sale.totalAmount) {
-        throw new BadRequestException(
-          `Payment amount (${createPaymentDto.amount}) cannot exceed sale total (${sale.totalAmount})`,
-        );
-      }
+    } else if (newTotal > remaining + TOLERANCE) {
+      throw new BadRequestException(
+        `Payment total (${newTotal}) cannot exceed amount due (${remaining.toFixed(2)})`,
+      );
     }
 
-    // Validate MPESA reference if method is MPESA
-    if (createPaymentDto.method === PaymentMethod.MPESA && !createPaymentDto.mpesaReference) {
-      throw new BadRequestException('MPESA reference is required for MPESA payments');
-    }
-
-    // Create payment and update sale status in a transaction
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Create payment
-      const payment = queryRunner.manager.create(SalePayment, {
-        saleId: createPaymentDto.saleId,
-        amount: createPaymentDto.amount,
-        method: createPaymentDto.method,
-        mpesaReference: createPaymentDto.mpesaReference || null,
-        receivedById: userId,
-      });
+      const saved: SalePayment[] = [];
+      for (const line of dto.lines) {
+        const payment = queryRunner.manager.create(SalePayment, {
+          saleId: dto.saleId,
+          amount: line.amount,
+          method: line.method,
+          mpesaReference: line.mpesaReference || null,
+          receivedById: userId,
+        });
+        saved.push(await queryRunner.manager.save(SalePayment, payment));
+      }
 
-      const savedPayment = await queryRunner.manager.save(SalePayment, payment);
+      const paidTotal = existingTotal + newTotal;
+      let paymentStatus = PaymentStatus.PENDING;
+      if (paidTotal >= saleTotal - TOLERANCE) {
+        paymentStatus = PaymentStatus.PAID;
+      } else if (paidTotal > TOLERANCE) {
+        paymentStatus = PaymentStatus.PARTIAL;
+      }
 
-      // Update only paymentStatus so TypeORM does not touch the payment relation
-      // (saving the full Sale entity with payment=null would set payment.saleId to null)
+      const settlementMethods = new Set([
+        ...(sale.payments || []).map((p) => p.method),
+        ...dto.lines.map((l) => l.method),
+      ]);
+      let paymentMethod = sale.paymentMethod;
+      if (paymentStatus === PaymentStatus.PAID && settlementMethods.size > 1) {
+        paymentMethod = PaymentMethod.MIXED;
+      } else if (
+        paymentStatus === PaymentStatus.PAID &&
+        settlementMethods.size === 1 &&
+        sale.paymentMethod !== PaymentMethod.CREDIT
+      ) {
+        paymentMethod = [...settlementMethods][0];
+      }
+
       await queryRunner.manager.update(
         Sale,
-        { id: createPaymentDto.saleId },
-        { paymentStatus: PaymentStatus.PAID },
+        { id: dto.saleId },
+        { paymentStatus, paymentMethod },
       );
 
       await queryRunner.commitTransaction();
 
-      // Return payment with relations
-      const paymentWithRelations = await this.paymentRepository.findOne({
-        where: { id: savedPayment.id },
-        relations: ['sale', 'receivedBy'],
-      });
-
-      if (!paymentWithRelations) {
-        throw new NotFoundException('Payment was created but could not be retrieved');
-      }
-
-      return paymentWithRelations;
+      return this.findPaymentsBySaleId(dto.saleId);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -100,15 +127,42 @@ export class PaymentsService {
     }
   }
 
-  async findPaymentBySaleId(saleId: number): Promise<SalePayment | null> {
-    return await this.paymentRepository.findOne({
+  private validateLines(lines: PaymentLineDto[]): void {
+    for (const line of lines) {
+      if (line.method !== PaymentMethod.CASH && line.method !== PaymentMethod.MPESA) {
+        throw new BadRequestException('Settlement lines must be CASH or MPESA');
+      }
+      if (line.method === PaymentMethod.MPESA && !line.mpesaReference?.trim()) {
+        throw new BadRequestException('MPESA reference is required for MPESA payments');
+      }
+    }
+  }
+
+  private sumPayments(payments: SalePayment[]): number {
+    return payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  }
+
+  private sumLineAmounts(lines: PaymentLineDto[]): number {
+    return lines.reduce((sum, l) => sum + Number(l.amount), 0);
+  }
+
+  async findPaymentsBySaleId(saleId: number): Promise<SalePayment[]> {
+    return this.paymentRepository.find({
       where: { saleId },
       relations: ['sale', 'receivedBy'],
+      order: { receivedAt: 'ASC', id: 'ASC' },
     });
   }
 
+  /** @deprecated Use findPaymentsBySaleId */
+  async findPaymentBySaleId(saleId: number): Promise<SalePayment | null> {
+    const payments = await this.findPaymentsBySaleId(saleId);
+    return payments[0] ?? null;
+  }
+
   async findAll(filters?: { saleId?: number; method?: PaymentMethod; date?: string }): Promise<SalePayment[]> {
-    const query = this.paymentRepository.createQueryBuilder('payment')
+    const query = this.paymentRepository
+      .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.sale', 'sale')
       .leftJoinAndSelect('payment.receivedBy', 'receivedBy');
 
@@ -124,7 +178,7 @@ export class PaymentsService {
       query.andWhere('DATE(payment.receivedAt) = :date', { date: filters.date });
     }
 
-    return await query.orderBy('payment.receivedAt', 'DESC').getMany();
+    return query.orderBy('payment.receivedAt', 'DESC').getMany();
   }
 
   async findOne(id: number): Promise<SalePayment> {
@@ -140,4 +194,3 @@ export class PaymentsService {
     return payment;
   }
 }
-

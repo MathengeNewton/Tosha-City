@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Sale } from './entities/sale.entity';
@@ -14,6 +14,8 @@ import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { CustomersService } from '../customers/customers.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { ProductionService } from '../production/production.service';
+import { ProductCategory } from '../products/entities/product.entity';
 
 @Injectable()
 export class SalesService {
@@ -32,6 +34,8 @@ export class SalesService {
     private stockEntriesService: StockEntriesService,
     private customersService: CustomersService,
     private activityLog: ActivityLogService,
+    @Inject(forwardRef(() => ProductionService))
+    private productionService: ProductionService,
   ) {}
 
   async create(createSaleDto: CreateSaleDto, userId: number): Promise<Sale> {
@@ -52,21 +56,16 @@ export class SalesService {
     }
 
     // Validate credit sales require customer
+    const isWholesaleSale = customer ? this.customersService.customerIsWholesale(customer) : false;
+
     if (createSaleDto.paymentMethod === PaymentMethod.CREDIT) {
       if (!createSaleDto.customerId || !customer) {
         throw new BadRequestException('Customer is required for credit sales');
       }
-      if (customer.type !== 'CREDIT') {
-        throw new BadRequestException('Customer must be a credit customer for credit sales');
-      }
-      // Check credit limit
-      const outstandingBalance = await this.customersService.getOutstandingBalance(customer.id);
-      if (customer.creditLimit && outstandingBalance >= customer.creditLimit) {
-        throw new BadRequestException(`Customer has reached credit limit of ${customer.creditLimit}`);
+      if (!this.customersService.customerHasCredit(customer)) {
+        throw new BadRequestException('Customer must have credit enabled for credit sales');
       }
     }
-
-    const isWholesaleSale = customer?.type === 'WHOLESALE';
 
     // Calculate totals and validate stock
     let totalAmount = 0;
@@ -87,11 +86,16 @@ export class SalesService {
         ? await this.productsService.findOne(product.parentProductId)
         : product;
 
-      // Check available stock (from parent if byproduct)
-      const availableStock = await this.getAvailableStock(createSaleDto.sessionId, stockProductId);
+      const availableStock = await this.resolveAvailableQuantity(
+        createSaleDto.sessionId,
+        stockProductId,
+        stockProduct.category,
+      );
       if (availableStock < itemDto.quantity) {
+        const stockLabel =
+          stockProduct.category === ProductCategory.PRODUCTION_ITEM ? 'produced' : 'available';
         throw new BadRequestException(
-          `Insufficient stock for ${product.name}. Available: ${availableStock} ${stockProduct.unit}, Requested: ${itemDto.quantity} ${stockProduct.unit}`,
+          `Insufficient ${stockLabel} stock for ${product.name}. Available: ${availableStock} ${stockProduct.unit}, Requested: ${itemDto.quantity} ${stockProduct.unit}`,
         );
       }
 
@@ -109,6 +113,19 @@ export class SalesService {
           quantity: itemDto.quantity,
           unit: stockProduct.unit,
         });
+      }
+    }
+
+
+    if (createSaleDto.paymentMethod === PaymentMethod.CREDIT && customer) {
+      const outstandingBalance = await this.customersService.getOutstandingBalance(customer.id);
+      if (
+        customer.creditLimit != null &&
+        outstandingBalance + totalAmount > Number(customer.creditLimit) + 0.01
+      ) {
+        throw new BadRequestException(
+          `Credit limit exceeded. Outstanding: ${outstandingBalance}, sale: ${totalAmount}, limit: ${customer.creditLimit}`,
+        );
       }
     }
 
@@ -219,7 +236,8 @@ export class SalesService {
       .leftJoinAndSelect('sale.items', 'items')
       .leftJoinAndSelect('items.product', 'product')
       .leftJoinAndSelect('sale.soldBy', 'soldBy')
-      .leftJoinAndSelect('sale.session', 'session');
+      .leftJoinAndSelect('sale.session', 'session')
+      .leftJoinAndSelect('sale.customer', 'customer');
 
     if (sessionId) {
       query.where('sale.sessionId = :sessionId', { sessionId });
@@ -245,7 +263,7 @@ export class SalesService {
   async findOne(id: number): Promise<Sale> {
     const sale = await this.saleRepository.findOne({
       where: { id },
-      relations: ['items', 'items.product', 'soldBy', 'session', 'payment', 'payment.receivedBy'],
+      relations: ['items', 'items.product', 'soldBy', 'session', 'customer', 'payments', 'payments.receivedBy'],
     });
 
     if (!sale) {
@@ -255,9 +273,14 @@ export class SalesService {
     return sale;
   }
 
-  async getPaymentForSale(saleId: number): Promise<SalePayment | null> {
+  async getPaymentsForSale(saleId: number): Promise<SalePayment[]> {
     const sale = await this.findOne(saleId);
-    return sale.payment || null;
+    return sale.payments || [];
+  }
+
+  async getPaymentForSale(saleId: number): Promise<SalePayment | null> {
+    const payments = await this.getPaymentsForSale(saleId);
+    return payments[0] ?? null;
   }
 
   async generatePlainTextReceipt(saleId: number): Promise<string> {
@@ -320,13 +343,23 @@ export class SalesService {
     const totalPadding = ' '.repeat(28 - totalLabel.length - totalPriceStr.length);
     lines.push(`${totalLabel}${totalPadding}${totalPriceStr}`);
 
-    // Payment method
-    const paymentMethod = sale.paymentMethod || 'CASH';
-    lines.push(`PAYMENT: ${paymentMethod}`);
-
-    // MPESA reference if applicable
-    if (sale.payment && sale.payment.method === 'MPESA' && sale.payment.mpesaReference) {
-      lines.push(`MPESA REF: ${sale.payment.mpesaReference}`);
+    const payments = sale.payments || [];
+    if (payments.length === 0) {
+      lines.push(`PAYMENT: ${sale.paymentMethod || 'CASH'}`);
+    } else if (payments.length === 1) {
+      lines.push(`PAYMENT: ${payments[0].method}`);
+      if (payments[0].method === 'MPESA' && payments[0].mpesaReference) {
+        lines.push(`MPESA REF: ${payments[0].mpesaReference}`);
+      }
+    } else {
+      lines.push('PAYMENT:');
+      for (const p of payments) {
+        const amt = Number(p.amount).toFixed(2);
+        lines.push(`  ${p.method} ${amt}`);
+        if (p.method === 'MPESA' && p.mpesaReference) {
+          lines.push(`    REF: ${p.mpesaReference}`);
+        }
+      }
     }
 
     // Footer
@@ -452,6 +485,39 @@ export class SalesService {
 
     const sequence = String(nextSequence).padStart(4, '0');
     return `${yearPrefix}${sequence}`;
+  }
+
+  async resolveAvailableQuantity(
+    sessionId: number,
+    productId: number,
+    category?: ProductCategory,
+  ): Promise<number> {
+    if (category === ProductCategory.PRODUCTION_ITEM) {
+      return this.productionService.getProducedAvailability(sessionId, productId);
+    }
+    return this.getAvailableStock(sessionId, productId);
+  }
+
+  async getProductAvailability(
+    sessionId: number,
+    productId: number,
+  ): Promise<{ available: number; unit: string; source: 'produced' | 'stock' }> {
+    const product = await this.productsService.findOne(productId);
+    const stockProductId = product.parentProductId || productId;
+    const stockProduct = product.parentProductId
+      ? await this.productsService.findOne(product.parentProductId)
+      : product;
+    const available = await this.resolveAvailableQuantity(
+      sessionId,
+      stockProductId,
+      stockProduct.category,
+    );
+    return {
+      available,
+      unit: stockProduct.unit,
+      source:
+        stockProduct.category === ProductCategory.PRODUCTION_ITEM ? 'produced' : 'stock',
+    };
   }
 
   async getAvailableStock(sessionId: number, productId: number): Promise<number> {

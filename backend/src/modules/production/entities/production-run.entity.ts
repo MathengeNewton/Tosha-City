@@ -8,7 +8,6 @@ import {
   OneToMany,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { Branch } from '../../branches/entities/branch.entity';
 import { StockSession } from '../../stock-sessions/entities/stock-session.entity';
 import { Recipe } from '../../recipes/entities/recipe.entity';
 import { Product } from '../../products/entities/product.entity';
@@ -20,13 +19,6 @@ export class ProductionRun {
   @ApiProperty({ example: 1 })
   @PrimaryGeneratedColumn()
   id: number;
-
-  @ManyToOne(() => Branch, { eager: true })
-  @JoinColumn({ name: 'branchId' })
-  branch: Branch;
-
-  @Column()
-  branchId: number;
 
   @ManyToOne(() => StockSession, { eager: true })
   @JoinColumn({ name: 'sessionId' })

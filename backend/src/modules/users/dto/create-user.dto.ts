@@ -20,9 +20,4 @@ export class CreateUserDto {
   @IsOptional()
   @IsArray()
   roleIds?: number[];
-
-  @ApiProperty({ example: 1, description: 'Assigned branch ID', required: false })
-  @IsOptional()
-  @IsNumber()
-  branchId?: number;
 }

@@ -102,7 +102,7 @@ export default function ForgotPasswordPage() {
                           setError("");
                         }}
                         disabled={isLoading}
-                        placeholder="e.g. member@pcea.or.ke"
+                        placeholder="e.g. admin@toshacity.co.ke"
                         className={`w-full pl-11 pr-4 py-3.5 rounded-lg border transition-all outline-none text-sm lg:text-base ${
                           error
                             ? "border-red-500 focus:border-red-500 focus:ring-4 focus:ring-red-100"
@@ -201,8 +201,8 @@ export default function ForgotPasswordPage() {
                 <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
                   <p className="font-bold">Dev Tip:</p>
                   <p>
-                    Use: <strong>admin@pcea.or.ke</strong> or{" "}
-                    <strong>member@pcea.or.ke</strong>
+                    Contact your administrator if you need help resetting
+                    access.
                   </p>
                 </div>
               )}

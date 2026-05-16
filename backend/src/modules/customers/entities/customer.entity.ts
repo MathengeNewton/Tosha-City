@@ -45,6 +45,14 @@ export class Customer {
   })
   type: CustomerType;
 
+  @ApiProperty({ description: 'Wholesale pricing tier', example: false })
+  @Column({ default: false })
+  isWholesale: boolean;
+
+  @ApiProperty({ description: 'Can purchase on credit', example: false })
+  @Column({ default: false })
+  creditEnabled: boolean;
+
   @ApiProperty({ description: 'Credit limit (for credit customers)', required: false })
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   creditLimit: number | null;
