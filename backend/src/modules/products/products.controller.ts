@@ -48,6 +48,12 @@ export class ProductsController {
     return this.productsService.findActive();
   }
 
+  @Get('production-items')
+  @ApiOperation({ summary: 'Get active production items (finished goods for recipes)' })
+  findProductionItems() {
+    return this.productsService.findProductionItems(true);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a product by ID' })
   findOne(@Param('id') id: string) {

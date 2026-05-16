@@ -41,8 +41,38 @@ export const PRODUCT_TYPES = {
 };
 
 export function productTypeKey(product) {
-  if (product?.category === "PRODUCTION_ITEM") return "PRODUCTION_ITEM";
+  if (isProductionItem(product)) return "PRODUCTION_ITEM";
   return "RAW_STOCK";
+}
+
+const PIECE_UNITS = new Set([
+  "piece",
+  "pieces",
+  "portion",
+  "portions",
+  "serving",
+  "servings",
+  "plate",
+  "plates",
+]);
+
+export function isPieceLikeUnit(unit) {
+  if (!unit) return false;
+  return PIECE_UNITS.has(String(unit).trim().toLowerCase());
+}
+
+/** Finished goods for recipes / production runs (category, segment, or per-piece catalog). */
+export function isProductionItem(product) {
+  if (!product) return false;
+  if (product.category === "PRODUCTION_ITEM") return true;
+  if (product.segment === "PREPARED") return true;
+  if (product.saleMode === "UNIT" && isPieceLikeUnit(product.unit)) return true;
+  return false;
+}
+
+export function isRawStockProduct(product) {
+  if (!product) return false;
+  return !isProductionItem(product);
 }
 
 export function configForProductType(typeKey) {

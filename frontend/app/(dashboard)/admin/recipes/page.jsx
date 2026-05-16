@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
+import { isProductionItem, isRawStockProduct } from "../../../../lib/productCatalog";
+import Link from "next/link";
 
 const emptyIngredient = () => ({
   productId: "",
@@ -18,6 +20,7 @@ export default function RecipesPage() {
   const [loading, setLoading] = useState(true);
   const [recipes, setRecipes] = useState([]);
   const [products, setProducts] = useState([]);
+  const [productionProducts, setProductionProducts] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(null);
   const [formData, setFormData] = useState({
@@ -30,13 +33,19 @@ export default function RecipesPage() {
     ingredients: [emptyIngredient()],
   });
 
-  const finishedProducts = useMemo(
-    () => products.filter((p) => p.category === "PRODUCTION_ITEM" && p.isActive !== false),
-    [products]
-  );
+  const finishedProducts = useMemo(() => {
+    const active = productionProducts.filter((p) => p.isActive !== false);
+    if (editingRecipe?.finishedProductId) {
+      const current = products.find((p) => p.id === editingRecipe.finishedProductId);
+      if (current && !active.some((p) => p.id === current.id)) {
+        return [...active, current].sort((a, b) => a.name.localeCompare(b.name));
+      }
+    }
+    return active.sort((a, b) => a.name.localeCompare(b.name));
+  }, [productionProducts, products, editingRecipe]);
 
   const stockProducts = useMemo(
-    () => products.filter((p) => p.category !== "PRODUCTION_ITEM" && p.isActive !== false),
+    () => products.filter((p) => isRawStockProduct(p) && p.isActive !== false),
     [products]
   );
 
@@ -48,12 +57,22 @@ export default function RecipesPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [recipesRes, productsRes] = await Promise.all([
+      const [recipesRes, productsRes, productionRes] = await Promise.all([
         apiClient.recipes.getAll(),
         apiClient.products.getAll(),
+        apiClient.products.getProductionItems(),
       ]);
       setRecipes(recipesRes.data || []);
-      setProducts(productsRes.data || []);
+      const allProducts = productsRes.data || [];
+      setProducts(allProducts);
+      const fromApi = productionRes.data || [];
+      const merged = [...fromApi];
+      for (const p of allProducts) {
+        if (isProductionItem(p) && !merged.some((m) => m.id === p.id)) {
+          merged.push(p);
+        }
+      }
+      setProductionProducts(merged);
     } catch {
       toast.error("Failed to load recipes");
     } finally {
@@ -281,14 +300,30 @@ export default function RecipesPage() {
                     className="w-full border border-gray-300 rounded-md px-3 py-2"
                     required
                   >
-                    <option value="">Select production item</option>
+                    <option value="">
+                      {finishedProducts.length === 0
+                        ? "No production items — create one first"
+                        : "Select production item"}
+                    </option>
                     {finishedProducts.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.unit})
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Product category must be PRODUCTION_ITEM.</p>
+                  {finishedProducts.length === 0 ? (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-2 mt-2">
+                      Add a product under{" "}
+                      <Link href="/admin/products" className="font-medium underline">
+                        Admin → Products
+                      </Link>{" "}
+                      and choose type <strong>Production item</strong> (e.g. Mutura, per piece).
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Only production items appear here (prepared goods you make on-site).
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Expected output *</label>

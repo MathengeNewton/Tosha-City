@@ -14,6 +14,7 @@ export class ProductsService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.syncSegmentsFromCategories();
+    await this.backfillProductionCategories();
   }
 
   private async syncSegmentsFromCategories(): Promise<void> {
@@ -114,6 +115,66 @@ export class ProductsService implements OnModuleInit {
       relations: ['parentProduct'],
       order: { name: 'ASC' },
     });
+  }
+
+  /** Finished goods for recipes (production category, PREPARED segment, or per-piece legacy rows). */
+  async findProductionItems(activeOnly = true): Promise<Product[]> {
+    const pieceUnits = ['piece', 'pieces', 'portion', 'portions', 'serving', 'servings', 'plate', 'plates'];
+    const qb = this.productRepository
+      .createQueryBuilder('product')
+      .where(
+        `(product.category = :production OR product.segment = :prepared OR (
+          product."saleMode" = :unitMode AND LOWER(TRIM(product.unit)) IN (:...pieceUnits)
+        ))`,
+        {
+          production: ProductCategory.PRODUCTION_ITEM,
+          prepared: ProductSegment.PREPARED,
+          unitMode: ProductSaleMode.UNIT,
+          pieceUnits,
+        },
+      )
+      .orderBy('product.name', 'ASC');
+
+    if (activeOnly) {
+      qb.andWhere('product.isActive = :isActive', { isActive: true });
+    }
+
+    return qb.getMany();
+  }
+
+  private async backfillProductionCategories(): Promise<void> {
+    try {
+      const pieceUnits = ['piece', 'pieces', 'portion', 'portions', 'serving', 'servings', 'plate', 'plates'];
+      const fromSegment = await this.productRepository
+        .createQueryBuilder()
+        .update(Product)
+        .set({
+          category: ProductCategory.PRODUCTION_ITEM,
+          saleMode: ProductSaleMode.UNIT,
+        })
+        .where('segment = :prepared', { prepared: ProductSegment.PREPARED })
+        .andWhere('category != :production', { production: ProductCategory.PRODUCTION_ITEM })
+        .execute();
+
+      const fromPieceUnit = await this.productRepository
+        .createQueryBuilder()
+        .update(Product)
+        .set({
+          category: ProductCategory.PRODUCTION_ITEM,
+          segment: ProductSegment.PREPARED,
+          saleMode: ProductSaleMode.UNIT,
+        })
+        .where('category = :raw', { raw: ProductCategory.RAW_STOCK })
+        .andWhere('LOWER(TRIM(unit)) IN (:...pieceUnits)', { pieceUnits })
+        .execute();
+
+      const total = (fromSegment.affected ?? 0) + (fromPieceUnit.affected ?? 0);
+      if (total > 0) {
+        console.log(`Backfilled ${total} product(s) to PRODUCTION_ITEM`);
+      }
+    } catch (e) {
+      console.warn('Production category backfill skipped:', (e as Error)?.message);
+    }
   }
 
   async findOne(id: number): Promise<Product> {

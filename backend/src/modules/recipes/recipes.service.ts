@@ -5,7 +5,7 @@ import { Recipe } from './entities/recipe.entity';
 import { RecipeIngredient } from './entities/recipe-ingredient.entity';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
-import { Product, ProductCategory } from '../products/entities/product.entity';
+import { Product, ProductCategory, ProductSegment, ProductSaleMode } from '../products/entities/product.entity';
 
 @Injectable()
 export class RecipesService {
@@ -23,8 +23,16 @@ export class RecipesService {
     if (!product) {
       throw new NotFoundException('Finished product not found');
     }
-    if (product.category !== ProductCategory.PRODUCTION_ITEM) {
-      throw new BadRequestException('Finished product must be a production item');
+    const pieceUnits = ['piece', 'pieces', 'portion', 'portions', 'serving', 'servings', 'plate', 'plates'];
+    const unitKey = (product.unit || '').trim().toLowerCase();
+    const isProduction =
+      product.category === ProductCategory.PRODUCTION_ITEM ||
+      product.segment === ProductSegment.PREPARED ||
+      (product.saleMode === ProductSaleMode.UNIT && pieceUnits.includes(unitKey));
+    if (!isProduction) {
+      throw new BadRequestException(
+        'Finished product must be a production item (Admin → Products → Production item)',
+      );
     }
     return product;
   }

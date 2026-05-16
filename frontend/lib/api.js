@@ -73,6 +73,7 @@ export const apiClient = {
   products: {
     getAll: () => api.get('/products'),
     getActive: () => api.get('/products/active'),
+    getProductionItems: () => api.get('/products/production-items'),
     getById: (id) => api.get(`/products/${id}`),
     create: (data) => api.post('/products', data),
     update: (id, data) => api.patch(`/products/${id}`, data),
