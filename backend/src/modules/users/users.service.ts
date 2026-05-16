@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import { User } from './entities/user.entity';
 import { UserRole } from '../roles/entities/role.entity';
 import { CreateUserDto } from './dto/create-user.dto';
+import { Branch } from '../branches/entities/branch.entity';
 
 @Injectable()
 export class UsersService {
@@ -13,18 +14,19 @@ export class UsersService {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Role) private readonly roleRepo: Repository<Role>,
+    @InjectRepository(Branch) private readonly branchRepo: Repository<Branch>,
   ) {}
 
   async findAll(): Promise<User[]> {
     return this.userRepo.find({
-      relations: ['roles'],
+      relations: ['roles', 'branch'],
     });
   }
 
   async findOne(id: number): Promise<User> {
     const user = await this.userRepo.findOne({
       where: { id },
-      relations: ['roles'],
+      relations: ['roles', 'branch'],
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
@@ -40,6 +42,18 @@ export class UsersService {
       if (roles.length !== createDto.roleIds.length) {
         throw new BadRequestException('One or more roleIds are invalid');
       }
+    }
+
+    const hasAdminRole = roles.some((role) => role.name === UserRole.ADMIN);
+    let branch: Branch | null = null;
+    if (createDto.branchId != null) {
+      branch = await this.branchRepo.findOne({ where: { id: createDto.branchId } });
+      if (!branch) {
+        throw new BadRequestException('Assigned branch not found');
+      }
+    }
+    if (!hasAdminRole && !branch) {
+      throw new BadRequestException('Branch is required for non-admin users');
     }
     
     // Generate unique email if not provided
@@ -60,6 +74,7 @@ export class UsersService {
       email: finalEmail,
       password: hashedPassword,
       roles,
+      branchId: branch?.id ?? null,
     });
     
     this.logger.log(`[CreateUser] User entity before save: ${JSON.stringify(user)}`);
@@ -69,7 +84,7 @@ export class UsersService {
     // Return the full user entity with relations
     const fullUser = await this.userRepo.findOne({
       where: { id: savedUser.id },
-      relations: ['roles'],
+      relations: ['roles', 'branch'],
     });
     if (!fullUser) throw new Error('User not found after creation');
     return fullUser;
@@ -77,26 +92,45 @@ export class UsersService {
 
   async update(
     id: number,
-    data: Partial<Pick<User, 'username' | 'email' | 'password'>> & { roleIds?: number[] },
+    data: Partial<Pick<User, 'username' | 'email' | 'password' | 'branchId'>> & { roleIds?: number[] },
   ): Promise<User> {
     const { roleIds, ...rest } = data;
     const updateData = { ...rest } as Partial<User>;
+    const user = await this.findOne(id);
+
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     }
-    if (Object.keys(updateData).length > 0) {
-      await this.userRepo.update(id, updateData);
-    }
+
     if (roleIds !== undefined) {
       const roles = await this.roleRepo.findBy({ id: In(roleIds) });
       if (roles.length !== roleIds.length) {
         throw new BadRequestException('One or more roleIds are invalid');
       }
-      const user = await this.findOne(id);
       user.roles = roles;
-      await this.userRepo.save(user);
     }
-    return await this.findOne(id);
+
+    if (updateData.branchId !== undefined) {
+      if (updateData.branchId === null) {
+        user.branchId = null;
+      } else {
+        const branch = await this.branchRepo.findOne({ where: { id: updateData.branchId } });
+        if (!branch) {
+          throw new BadRequestException('Assigned branch not found');
+        }
+        user.branchId = branch.id;
+      }
+    }
+
+    const rolesToCheck = user.roles || [];
+    const hasAdminRole = rolesToCheck.some((role) => role.name === UserRole.ADMIN);
+    if (!hasAdminRole && !user.branchId) {
+      throw new BadRequestException('Branch is required for non-admin users');
+    }
+
+    Object.assign(user, updateData);
+    await this.userRepo.save(user);
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
@@ -105,11 +139,8 @@ export class UsersService {
 
   async assignRoles(userId: number, roles:UserRole[]): Promise<User> {
     const user = await this.findOne(userId);
-    // You must fetch Role entities from the database, e.g.:
-// const foundRoles = await this.roleRepository.findBy({ name: In(roles) });
-// user.roles = foundRoles;
-// For now, set to empty array to avoid type error:
-user.roles = [];
+    const foundRoles = await this.roleRepo.findBy({ name: In(roles) });
+    user.roles = foundRoles;
     return this.userRepo.save(user);
   }
 
@@ -128,11 +159,21 @@ user.roles = [];
         { username: Like(searchTerm) },
         { email: Like(searchTerm) },
       ],
-      relations: ['roles'],
+      relations: ['roles', 'branch'],
+      loadEagerRelations: true,
       take: limit,
       order: {
         username: 'ASC',
       },
     });
+  }
+
+  /** Users assigned to a branch (for table order staff pickers, etc.) */
+  async findStaffByBranch(branchId: number): Promise<Array<{ id: number; username: string; email: string | null }>> {
+    const users = await this.userRepo.find({
+      where: { branchId },
+      order: { username: 'ASC' },
+    });
+    return users.map((u) => ({ id: u.id, username: u.username, email: u.email }));
   }
 }
