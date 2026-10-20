@@ -179,6 +179,9 @@ export const apiClient = {
     create: (data) => api.post('/customers', data),
     update: (id, data) => api.patch(`/customers/${id}`, data),
     delete: (id) => api.delete(`/customers/${id}`),
+    getPrices: (id) => api.get(`/customers/${id}/prices`),
+    setPrice: (id, productId, price) => api.put(`/customers/${id}/prices/${productId}`, { price }),
+    removePrice: (id, productId) => api.delete(`/customers/${id}/prices/${productId}`),
   },
 
   // Settings / Profile
@@ -208,9 +211,10 @@ export const apiClient = {
   },
 
   stockShare: {
-    getAll: (params) => api.get('/stock-share', { params }), // params: partnerId, paid, sessionId
+    getAll: (params) => api.get('/stock-share', { params }), // params: partnerId, paid, sessionId, direction (OUTGOING|INCOMING)
     getById: (id) => api.get(`/stock-share/${id}`),
     create: (data) => api.post('/stock-share', data),
+    update: (id, data) => api.patch(`/stock-share/${id}`, data),
     markPaid: (id) => api.post(`/stock-share/${id}/mark-paid`),
   },
 

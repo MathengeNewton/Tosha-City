@@ -1,7 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsString, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsString, IsOptional, IsEnum, Min } from 'class-validator';
+import { ShareDirection } from '../entities/stock-share.entity';
 
 export class CreateStockShareDto {
+  @ApiProperty({
+    description: 'OUTGOING = we gave meat to the partner, INCOMING = we received meat from the partner',
+    enum: ShareDirection,
+    required: false,
+    default: ShareDirection.OUTGOING,
+  })
+  @IsOptional()
+  @IsEnum(ShareDirection)
+  direction?: ShareDirection;
+
   @ApiProperty({ description: 'Partner ID', example: 1 })
   @IsNumber()
   partnerId: number;
@@ -10,7 +21,11 @@ export class CreateStockShareDto {
   @IsNumber()
   productId: number;
 
-  @ApiProperty({ description: 'Stock session ID (optional)', example: 1, required: false })
+  @ApiProperty({
+    description: 'Stock session ID (optional for OUTGOING, required for INCOMING)',
+    example: 1,
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   sessionId?: number;

@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
 import { PageShell, PageHeader } from "../../components/shell";
 import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
+import { shareDirectionLabel, shareDirectionBadgeClass, sharePaymentLabel } from "../../../../lib/stockShare";
 
 const defaultReportFilters = () => {
   const { dateFrom, dateTo } = defaultDateRangeYmd(7);
@@ -189,6 +190,7 @@ export default function ReportsPage() {
                   } else if (activeTab === 'stock-share' && stockShareReport?.entries) {
                     const rows = stockShareReport.entries.map((e) => ({
                       date: e.recordedAt ? new Date(e.recordedAt).toLocaleDateString() : '',
+                      direction: shareDirectionLabel(e),
                       partner: e.partner,
                       product: e.product,
                       quantity: parseFloat(e.quantity || 0),
@@ -197,7 +199,7 @@ export default function ReportsPage() {
                       notes: e.notes || '',
                     }));
                     exportToExcel(rows, [
-                      { key: 'date', label: 'Date' }, { key: 'partner', label: 'Partner' }, { key: 'product', label: 'Product' },
+                      { key: 'date', label: 'Date' }, { key: 'direction', label: 'Direction' }, { key: 'partner', label: 'Partner' }, { key: 'product', label: 'Product' },
                       { key: 'quantity', label: 'Quantity' }, { key: 'unit', label: 'Unit' }, { key: 'paid', label: 'Paid' }, { key: 'notes', label: 'Notes' },
                     ], `stock-share-report-${range || dateStr}`);
                     toast.success('Excel exported');
@@ -612,11 +614,17 @@ function StockShareReportView({ data }) {
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Shared (kg)</p>
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Given Out (kg)</p>
           <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">
-            {Number(summary.totalQuantity || 0).toFixed(2)}
+            {Number(summary.totalOutgoing || 0).toFixed(2)}
+          </p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Received (kg)</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">
+            {Number(summary.totalIncoming || 0).toFixed(2)}
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
@@ -641,19 +649,21 @@ function StockShareReportView({ data }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity (kg)</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Given Out (kg)</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received (kg)</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Paid / Unpaid</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {byPartner.length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No data</td></tr>
+                  <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No data</td></tr>
                 ) : (
                   byPartner.map((row) => (
                     <tr key={row.partner} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.partner}</td>
-                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.quantity || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.outgoingQuantity || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.incomingQuantity || 0).toFixed(2)}</td>
                       <td className="px-4 py-3 text-sm text-right tabular-nums">{row.entries ?? 0}</td>
                       <td className="px-4 py-3 text-sm text-right text-gray-600">{row.paid ?? 0} / {row.unpaid ?? 0}</td>
                     </tr>
@@ -670,18 +680,20 @@ function StockShareReportView({ data }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity (kg)</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Given Out (kg)</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received (kg)</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {byProduct.length === 0 ? (
-                  <tr><td colSpan={3} className="px-4 py-6 text-center text-gray-500">No data</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No data</td></tr>
                 ) : (
                   byProduct.map((row) => (
                     <tr key={row.product} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.product}</td>
-                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.quantity || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.outgoingQuantity || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(row.incomingQuantity || 0).toFixed(2)}</td>
                       <td className="px-4 py-3 text-sm text-right tabular-nums">{row.entries ?? 0}</td>
                     </tr>
                   ))
@@ -699,23 +711,29 @@ function StockShareReportView({ data }) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Direction</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {entries.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-500">No entries in this period</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No entries in this period</td></tr>
               ) : (
                 entries.map((e) => (
                   <tr key={e.id} className="hover:bg-gray-50/50">
                     <td className="px-4 py-3 text-sm text-gray-900">{e.recordedAt ? new Date(e.recordedAt).toLocaleDateString() : '–'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${shareDirectionBadgeClass(e)}`}>
+                        {shareDirectionLabel(e)}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{e.partner || '–'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{e.product || '–'}</td>
                     <td className="px-4 py-3 text-sm text-right tabular-nums">{Number(e.quantity || 0).toFixed(2)} {e.unit || 'kg'}</td>
-                    <td className="px-4 py-3"><span className={e.paid ? 'text-green-600 font-medium' : 'text-amber-600'}>{e.paid ? 'Yes' : 'No'}</span></td>
+                    <td className="px-4 py-3"><span className={e.paid ? 'text-green-600 font-medium' : 'text-amber-600'}>{sharePaymentLabel(e)}</span></td>
                   </tr>
                 ))
               )}

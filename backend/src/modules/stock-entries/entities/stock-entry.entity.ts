@@ -11,6 +11,7 @@ import { StockSession } from '../../stock-sessions/entities/stock-session.entity
 import { Product } from '../../products/entities/product.entity';
 import { User } from '../../users/entities/user.entity';
 import { Supplier } from '../../suppliers/entities/supplier.entity';
+import { Partner } from '../../partners/entities/partner.entity';
 
 export enum StockEntryType {
   OPENING = 'OPENING',
@@ -54,6 +55,15 @@ export class StockEntry {
   @ApiProperty({ description: 'Supplier ID (for incoming stock)', required: false, example: 1 })
   @Column({ nullable: true })
   supplierId: number | null;
+
+  @ApiProperty({ description: 'Partner the stock came from (incoming stock share)', required: false })
+  @ManyToOne(() => Partner, { nullable: true, eager: true })
+  @JoinColumn({ name: 'partnerId' })
+  partner: Partner | null;
+
+  @ApiProperty({ description: 'Partner ID (incoming stock share)', required: false, example: 1 })
+  @Column({ type: 'int', nullable: true })
+  partnerId: number | null;
 
   @ApiProperty({ description: 'Type of stock entry', enum: StockEntryType, example: StockEntryType.OPENING })
   @Column({

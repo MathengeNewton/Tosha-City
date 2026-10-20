@@ -16,6 +16,7 @@ import { SaleItem } from './modules/sales/entities/sale-item.entity';
 import { SalePayment } from './modules/sales/entities/sale-payment.entity';
 import { Supplier } from './modules/suppliers/entities/supplier.entity';
 import { Customer } from './modules/customers/entities/customer.entity';
+import { CustomerProductPrice } from './modules/customers/entities/customer-product-price.entity';
 import { ActivityLog } from './modules/activity-log/entities/activity-log.entity';
 import { Partner } from './modules/partners/entities/partner.entity';
 import { StockShare } from './modules/stock-share/entities/stock-share.entity';
@@ -66,6 +67,7 @@ import AppConfig from './core/config/app.config';
       SalePayment,
       Supplier,
       Customer,
+      CustomerProductPrice,
       ActivityLog,
       Partner,
       StockShare,

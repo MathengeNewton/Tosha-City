@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
-import { customerIsWholesale } from "../../../../../lib/customerFlags";
+import { customerIsWholesale, customerUnitPrice } from "../../../../../lib/customerFlags";
 
 export default function NewSalePage() {
   const router = useRouter();
@@ -15,6 +15,8 @@ export default function NewSalePage() {
   const [availableStock, setAvailableStock] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const [customerPrices, setCustomerPrices] = useState({}); // productId -> special price for selected customer
+  const latestCustomerIdRef = useRef('');
 
   useEffect(() => {
     loadData();
@@ -95,11 +97,8 @@ export default function NewSalePage() {
       const product = products.find(p => p.id === parseInt(value));
       if (product) {
         item.productId = value;
-        // Use wholesale price when wholesale customer selected (fallback to retail if wholesale not set)
         const selectedCustomer = customerId ? customers.find(c => c.id === parseInt(customerId)) : null;
-        const useWholesale = customerIsWholesale(selectedCustomer);
-        const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-        item.price = useWholesale ? (product.wholesalePrice ?? retail) : retail;
+        item.price = customerUnitPrice(selectedCustomer, product, customerPrices);
         // Recalculate quantity if amount exists
         if (item.amount) {
           const amount = parseFloat(item.amount || 0);
@@ -226,16 +225,28 @@ export default function NewSalePage() {
               </label>
               <select
                 value={customerId}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const newId = e.target.value;
                   setCustomerId(newId);
                   const selectedCustomer = newId ? customers.find(c => c.id === parseInt(newId)) : null;
-                  const useWholesale = customerIsWholesale(selectedCustomer);
+                  latestCustomerIdRef.current = newId;
+                  let prices = {};
+                  if (customerIsWholesale(selectedCustomer)) {
+                    try {
+                      const res = await apiClient.customers.getPrices(selectedCustomer.id);
+                      (res.data || []).forEach((p) => {
+                        prices[p.productId] = parseFloat(p.price);
+                      });
+                    } catch {
+                      toast.error("Could not load this customer's special prices; using standard wholesale prices.");
+                    }
+                  }
+                  if (latestCustomerIdRef.current !== newId) return;
+                  setCustomerPrices(prices);
                   setSaleItems(prev => prev.map(item => {
                     const product = products.find(p => p.id === parseInt(item.productId));
                     if (!product) return item;
-                    const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-                    const newPrice = useWholesale ? (product.wholesalePrice ?? retail) : retail;
+                    const newPrice = customerUnitPrice(selectedCustomer, product, prices);
                     const amount = parseFloat(item.amount || 0);
                     const quantity = newPrice > 0 && amount > 0 ? (amount / newPrice).toFixed(3) : item.quantity;
                     return { ...item, price: newPrice, quantity };
@@ -257,7 +268,10 @@ export default function NewSalePage() {
             </div>
             {customerId && customerIsWholesale(customers.find(c => c.id === parseInt(customerId))) && (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800">
-                <span className="font-medium">Wholesale sale</span> – line prices use wholesale rates.
+                <span className="font-medium">Wholesale sale</span> – line prices use wholesale rates
+                {Object.keys(customerPrices).length > 0
+                  ? `, including ${Object.keys(customerPrices).length} special price${Object.keys(customerPrices).length === 1 ? "" : "s"} for this customer.`
+                  : "."}
               </div>
             )}
           </div>
@@ -301,6 +315,12 @@ export default function NewSalePage() {
                           </option>
                         ))}
                       </select>
+                      {item.productId && customerPrices[parseInt(item.productId, 10)] != null && (
+                        <p className="text-xs mt-1 text-purple-700">
+                          Special price for this customer: KES{" "}
+                          {customerPrices[parseInt(item.productId, 10)].toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                        </p>
+                      )}
                       {item.productId && availableStock[parseInt(item.productId, 10)] != null && (
                         <p className="text-xs mt-1 text-emerald-700">
                           {availableStock[parseInt(item.productId, 10)].source === "produced"

@@ -56,8 +56,6 @@ export class SalesService {
     }
 
     // Validate credit sales require customer
-    const isWholesaleSale = customer ? this.customersService.customerIsWholesale(customer) : false;
-
     if (createSaleDto.paymentMethod === PaymentMethod.CREDIT) {
       if (!createSaleDto.customerId || !customer) {
         throw new BadRequestException('Customer is required for credit sales');
@@ -74,9 +72,7 @@ export class SalesService {
 
     for (const itemDto of createSaleDto.items) {
       const product = await this.productsService.findOne(itemDto.productId);
-      const unitPrice =
-        itemDto.unitPrice ??
-        (isWholesaleSale ? Number(product.wholesalePrice ?? product.defaultPrice) : Number(product.defaultPrice));
+      const unitPrice = itemDto.unitPrice ?? (await this.customersService.resolveUnitPrice(customer, product));
       const itemTotal = itemDto.quantity * unitPrice;
       totalAmount += itemTotal;
 

@@ -22,7 +22,11 @@ export class StockEntriesService {
     private activityLog: ActivityLogService,
   ) {}
 
-  async create(createEntryDto: CreateStockEntryDto, userId: number): Promise<StockEntry> {
+  async create(
+    createEntryDto: CreateStockEntryDto,
+    userId: number,
+    options: { partnerId?: number } = {},
+  ): Promise<StockEntry> {
     if (createEntryDto.type === StockEntryType.BYPRODUCT_SALE) {
       throw new BadRequestException('BYPRODUCT_SALE entries are created automatically by the system.');
     }
@@ -45,8 +49,8 @@ export class StockEntriesService {
     }
     // WASTAGE: allowed on OPEN or CLOSED (record after session close when needed).
 
-    // Validate supplier for incoming stock
-    if (createEntryDto.type === StockEntryType.INCOMING) {
+    // Validate supplier for incoming stock (stock received from a partner carries the partner instead)
+    if (createEntryDto.type === StockEntryType.INCOMING && !options.partnerId) {
       if (!createEntryDto.supplierId) {
         throw new BadRequestException('Supplier is required for incoming stock');
       }
@@ -56,6 +60,7 @@ export class StockEntriesService {
     try {
       const entry = this.entryRepository.create({
         ...createEntryDto,
+        partnerId: options.partnerId ?? null,
         recordedById: userId,
       });
 
@@ -88,7 +93,8 @@ export class StockEntriesService {
       .leftJoinAndSelect('entry.product', 'product')
       .leftJoinAndSelect('entry.recordedBy', 'recordedBy')
       .leftJoinAndSelect('entry.session', 'session')
-      .leftJoinAndSelect('entry.supplier', 'supplier');
+      .leftJoinAndSelect('entry.supplier', 'supplier')
+      .leftJoinAndSelect('entry.partner', 'partner');
 
     if (sessionId) {
       query.where('entry.sessionId = :sessionId', { sessionId });
@@ -108,7 +114,7 @@ export class StockEntriesService {
   async findOne(id: number): Promise<StockEntry> {
     const entry = await this.entryRepository.findOne({
       where: { id },
-      relations: ['product', 'session', 'recordedBy', 'supplier'],
+      relations: ['product', 'session', 'recordedBy', 'supplier', 'partner'],
     });
 
     if (!entry) {
@@ -124,6 +130,10 @@ export class StockEntriesService {
 
       if (updateEntryDto.type != null && updateEntryDto.type !== entry.type) {
         throw new BadRequestException('Cannot change stock entry type');
+      }
+
+      if (entry.partnerId != null) {
+        throw new BadRequestException('This entry was recorded through Stock Share and cannot be edited here.');
       }
 
       const session = await this.stockSessionsService.findOne(entry.sessionId);
@@ -165,9 +175,32 @@ export class StockEntriesService {
     }
   }
 
+  /** Only StockShareService may call this; it has already validated session status and stock levels. */
+  async syncStockShareEntry(
+    id: number,
+    changes: Pick<StockEntry, 'type' | 'productId' | 'quantity' | 'unit' | 'notes' | 'partnerId'>,
+    userId: number,
+  ): Promise<StockEntry> {
+    const entry = await this.findOne(id);
+    await this.entryRepository.update(id, changes);
+    await this.activityLog.log({
+      userId,
+      action: 'STOCK_ENTRY_UPDATED',
+      entityType: 'stock_entry',
+      entityId: id,
+      details: { sessionId: entry.sessionId, source: 'stock_share', from: entry.type, ...changes },
+      success: true,
+    });
+    return this.findOne(id);
+  }
+
   async remove(id: number, userId?: number): Promise<void> {
     try {
       const entry = await this.findOne(id);
+
+      if (entry.partnerId != null) {
+        throw new BadRequestException('This entry was recorded through Stock Share and cannot be deleted here.');
+      }
 
       const session = await this.stockSessionsService.findOne(entry.sessionId);
       const isWastage = entry.type === StockEntryType.WASTAGE;

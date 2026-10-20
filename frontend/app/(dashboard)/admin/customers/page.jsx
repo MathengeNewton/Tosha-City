@@ -11,6 +11,7 @@ import {
 } from "../../../../lib/customerFlags";
 
 import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
+import CustomerPricesModal from "./CustomerPricesModal";
 
 const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(365);
 
@@ -45,6 +46,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [pricesCustomer, setPricesCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState("regular");
   const [filters, setFilters] = useState({
     dateFrom: defaultDateFrom,
@@ -269,7 +271,7 @@ export default function CustomersPage() {
           </nav>
           <p className="text-xs text-gray-500 pb-3 px-1">
             {activeTab === "wholesale"
-              ? "Wholesale pricing. Enable credit below when adding or editing a customer."
+              ? "Wholesale pricing. Use Prices to give a customer their own price per product; enable credit when adding or editing."
               : "Walk-in and retail accounts. Enable credit for trusted regular customers."}
           </p>
         </div>
@@ -368,6 +370,15 @@ export default function CustomersPage() {
                             >
                               Edit
                             </button>
+                            {wholesale && (
+                              <button
+                                type="button"
+                                onClick={() => setPricesCustomer(customer)}
+                                className="text-purple-700 hover:text-purple-900 mr-4"
+                              >
+                                Prices
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleDelete(customer.id)}
@@ -558,6 +569,10 @@ export default function CustomersPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {pricesCustomer && (
+        <CustomerPricesModal customer={pricesCustomer} onClose={() => setPricesCustomer(null)} />
       )}
     </div>
   );

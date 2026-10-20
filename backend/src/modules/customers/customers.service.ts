@@ -2,10 +2,12 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Customer, CustomerType } from './entities/customer.entity';
+import { CustomerProductPrice } from './entities/customer-product-price.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Sale } from '../sales/entities/sale.entity';
 import { PaymentMethod, PaymentStatus } from '../sales/entities/payment.enums';
+import { Product } from '../products/entities/product.entity';
 
 @Injectable()
 export class CustomersService {
@@ -14,6 +16,10 @@ export class CustomersService {
     private customerRepository: Repository<Customer>,
     @InjectRepository(Sale)
     private saleRepository: Repository<Sale>,
+    @InjectRepository(CustomerProductPrice)
+    private priceRepository: Repository<CustomerProductPrice>,
+    @InjectRepository(Product)
+    private productRepository: Repository<Product>,
   ) {}
   /** Wholesale vs regular is the category; credit is an optional add-on for either. */
   private applyCustomerFlags(dto: { type?: CustomerType; isWholesale?: boolean; creditEnabled?: boolean }) {
@@ -86,6 +92,55 @@ export class CustomersService {
   async remove(id: number): Promise<void> {
     const customer = await this.findOne(id);
     await this.customerRepository.remove(customer);
+  }
+
+  async getPrices(customerId: number): Promise<CustomerProductPrice[]> {
+    await this.findOne(customerId);
+    return this.priceRepository.find({
+      where: { customerId },
+      order: { productId: 'ASC' },
+    });
+  }
+
+  async setPrice(customerId: number, productId: number, price: number): Promise<CustomerProductPrice> {
+    const customer = await this.findOne(customerId);
+    if (!this.customerIsWholesale(customer)) {
+      throw new BadRequestException('Special prices can only be set for wholesale customers');
+    }
+    const product = await this.productRepository.findOne({ where: { id: productId } });
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${productId} not found`);
+    }
+
+    const existing = await this.priceRepository.findOne({ where: { customerId, productId } });
+    if (existing) {
+      existing.price = price;
+      return this.priceRepository.save(existing);
+    }
+    return this.priceRepository.save(this.priceRepository.create({ customerId, productId, price }));
+  }
+
+  async removePrice(customerId: number, productId: number): Promise<void> {
+    await this.findOne(customerId);
+    await this.priceRepository.delete({ customerId, productId });
+  }
+
+  /**
+   * Unit price a customer pays for a product when none is entered on the sale line:
+   * special customer price → product wholesale price → retail. Special prices apply only while
+   * the customer is wholesale.
+   */
+  async resolveUnitPrice(customer: Customer | null, product: Product): Promise<number> {
+    if (!customer || !this.customerIsWholesale(customer)) {
+      return Number(product.defaultPrice);
+    }
+    const special = await this.priceRepository.findOne({
+      where: { customerId: customer.id, productId: product.id },
+    });
+    if (special) {
+      return Number(special.price);
+    }
+    return Number(product.wholesalePrice ?? product.defaultPrice);
   }
 
   async getOutstandingBalance(customerId: number): Promise<number> {

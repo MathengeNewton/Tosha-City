@@ -11,12 +11,22 @@ import { Partner } from '../../partners/entities/partner.entity';
 import { Product } from '../../products/entities/product.entity';
 import { StockSession } from '../../stock-sessions/entities/stock-session.entity';
 import { User } from '../../users/entities/user.entity';
+import { StockEntry } from '../../stock-entries/entities/stock-entry.entity';
+
+export enum ShareDirection {
+  OUTGOING = 'OUTGOING',
+  INCOMING = 'INCOMING',
+}
 
 @Entity()
 export class StockShare {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
   @PrimaryGeneratedColumn()
   id: number;
+
+  @ApiProperty({ description: 'Which way the meat moved', enum: ShareDirection, example: ShareDirection.OUTGOING })
+  @Column({ type: 'enum', enum: ShareDirection, default: ShareDirection.OUTGOING })
+  direction: ShareDirection;
 
   @ApiProperty({ description: 'Partner this share is for' })
   @ManyToOne(() => Partner, { eager: true })
@@ -43,6 +53,14 @@ export class StockShare {
   @Column({ nullable: true })
   sessionId: number | null;
 
+  @ApiProperty({ description: 'Stock entry created for this share (when a session was used)', required: false })
+  @ManyToOne(() => StockEntry, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'stockEntryId' })
+  stockEntry: StockEntry | null;
+
+  @Column({ type: 'int', nullable: true })
+  stockEntryId: number | null;
+
   @ApiProperty({ description: 'Quantity shared', example: 50.5 })
   @Column('decimal', { precision: 10, scale: 2 })
   quantity: number;
@@ -51,7 +69,10 @@ export class StockShare {
   @Column()
   unit: string;
 
-  @ApiProperty({ description: 'Whether partner has paid for this share', example: false })
+  @ApiProperty({
+    description: 'Whether this share is settled (OUTGOING: partner paid us; INCOMING: we paid partner)',
+    example: false,
+  })
   @Column({ default: false })
   paid: boolean;
 

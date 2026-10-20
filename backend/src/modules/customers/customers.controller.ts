@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Put,
   Param,
   Delete,
   Query,
@@ -15,6 +16,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { SetCustomerPriceDto } from './dto/set-customer-price.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -75,6 +77,29 @@ export class CustomersController {
   @ApiOperation({ summary: 'Get outstanding balance for a credit customer' })
   getOutstandingBalance(@Param('id') id: string) {
     return this.customersService.getBalanceSummary(+id);
+  }
+
+  @Get(':id/prices')
+  @ApiOperation({ summary: 'Special per-product prices for a wholesale customer' })
+  getPrices(@Param('id') id: string) {
+    return this.customersService.getPrices(+id);
+  }
+
+  @Put(':id/prices/:productId')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Set a special price for a product for this wholesale customer (Admin only)' })
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  setPrice(@Param('id') id: string, @Param('productId') productId: string, @Body() dto: SetCustomerPriceDto) {
+    return this.customersService.setPrice(+id, +productId, dto.price);
+  }
+
+  @Delete(':id/prices/:productId')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Remove a special price; the product wholesale price applies again (Admin only)' })
+  removePrice(@Param('id') id: string, @Param('productId') productId: string) {
+    return this.customersService.removePrice(+id, +productId);
   }
 
   @Patch(':id')

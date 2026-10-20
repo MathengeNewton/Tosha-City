@@ -3,6 +3,13 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../contexts/AuthContext";
+import {
+  SHARE_DIRECTION,
+  shareIsIncoming,
+  shareDirectionLabel,
+  shareDirectionBadgeClass,
+  sharePaymentLabel,
+} from "../../../../lib/stockShare";
 
 export default function PartnersPage() {
   const { hasRole } = useAuth();
@@ -27,9 +34,11 @@ export default function PartnersPage() {
   const [shares, setShares] = useState([]);
   const [loadingShares, setLoadingShares] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [editingShare, setEditingShare] = useState(null);
   const [currentSession, setCurrentSession] = useState(null);
   const [products, setProducts] = useState([]);
   const [shareForm, setShareForm] = useState({
+    direction: SHARE_DIRECTION.OUTGOING,
     partnerId: "",
     productId: "",
     sessionId: "",
@@ -38,6 +47,7 @@ export default function PartnersPage() {
     notes: "",
   });
   const [shareFilterPaid, setShareFilterPaid] = useState(""); // '' | 'true' | 'false'
+  const [shareFilterDirection, setShareFilterDirection] = useState(""); // '' | 'OUTGOING' | 'INCOMING'
 
   useEffect(() => {
     loadPartners();
@@ -48,7 +58,7 @@ export default function PartnersPage() {
       loadShares();
       loadShareFormData();
     }
-  }, [activeTab, shareFilterPaid]);
+  }, [activeTab, shareFilterPaid, shareFilterDirection]);
 
   const loadPartners = async () => {
     try {
@@ -68,6 +78,7 @@ export default function PartnersPage() {
       const params = {};
       if (shareFilterPaid === "true") params.paid = true;
       if (shareFilterPaid === "false") params.paid = false;
+      if (shareFilterDirection) params.direction = shareFilterDirection;
       const res = await apiClient.stockShare.getAll(params);
       setShares(res.data || []);
     } catch (e) {
@@ -143,15 +154,29 @@ export default function PartnersPage() {
     }
   };
 
-  const handleOpenShareModal = () => {
-    setShareForm({
-      partnerId: "",
-      productId: "",
-      sessionId: currentSession?.id?.toString() || "",
-      quantity: "",
-      unit: "kg",
-      notes: "",
-    });
+  const handleOpenShareModal = (share = null) => {
+    setEditingShare(share);
+    if (share) {
+      setShareForm({
+        direction: share.direction || SHARE_DIRECTION.OUTGOING,
+        partnerId: String(share.partnerId ?? share.partner?.id ?? ""),
+        productId: String(share.productId ?? share.product?.id ?? ""),
+        sessionId: share.sessionId ? String(share.sessionId) : "",
+        quantity: String(parseFloat(share.quantity)),
+        unit: share.unit || "kg",
+        notes: share.notes || "",
+      });
+    } else {
+      setShareForm({
+        direction: SHARE_DIRECTION.OUTGOING,
+        partnerId: "",
+        productId: "",
+        sessionId: currentSession?.id?.toString() || "",
+        quantity: "",
+        unit: "kg",
+        notes: "",
+      });
+    }
     setShowShareModal(true);
   };
 
@@ -162,13 +187,41 @@ export default function PartnersPage() {
       toast.error("Enter a valid quantity");
       return;
     }
-    const product = products.find((p) => p.id === parseInt(shareForm.productId));
+    const product = shareProductOptions.find((p) => p.id === parseInt(shareForm.productId));
     if (!product) {
       toast.error("Select a product");
       return;
     }
+    if (shareForm.direction === SHARE_DIRECTION.INCOMING && !shareForm.sessionId) {
+      toast.error(
+        editingShare
+          ? "This share has no stock session, so it cannot be changed to received."
+          : "Open a stock session first – received meat is logged as incoming stock.",
+      );
+      return;
+    }
+    if (editingShare) {
+      try {
+        await apiClient.stockShare.update(editingShare.id, {
+          direction: shareForm.direction,
+          partnerId: parseInt(shareForm.partnerId),
+          productId: parseInt(shareForm.productId),
+          quantity: qty,
+          unit: shareForm.unit || product.unit,
+          notes: shareForm.notes,
+        });
+        toast.success("Stock share updated");
+        setShowShareModal(false);
+        setEditingShare(null);
+        loadShares();
+      } catch (err) {
+        toast.error(err.response?.data?.message || "Failed to update share");
+      }
+      return;
+    }
     try {
       await apiClient.stockShare.create({
+        direction: shareForm.direction,
         partnerId: parseInt(shareForm.partnerId),
         productId: parseInt(shareForm.productId),
         sessionId: shareForm.sessionId ? parseInt(shareForm.sessionId) : undefined,
@@ -195,13 +248,26 @@ export default function PartnersPage() {
   };
 
   const activePartners = partners.filter((p) => p.isActive !== false);
+  // When editing, keep the share's current partner/product selectable even if since deactivated.
+  const sharePartnerOptions =
+    editingShare?.partner && !activePartners.some((p) => p.id === editingShare.partner.id)
+      ? [...activePartners, editingShare.partner]
+      : activePartners;
+  const shareProductOptions =
+    editingShare?.product && !products.some((p) => p.id === editingShare.product.id)
+      ? [...products, editingShare.product]
+      : products;
+  // Session-linked shares in a closed session (or recorded before stock links existed) only allow
+  // partner and notes edits; the API enforces the same rule.
+  const shareStockLocked =
+    !!editingShare?.sessionId && (editingShare?.session?.status !== "OPEN" || !editingShare?.stockEntryId);
 
   return (
     <div className="w-full lg:p-2 space-y-6 bg-gray-50 min-h-screen">
       <div>
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Partners</h1>
         <p className="text-gray-600 mt-1 text-sm sm:text-base">
-          People you share meat with – track what has been shared and what has been paid
+          People you share meat with – track meat given out, meat received, and what has been paid
         </p>
       </div>
 
@@ -314,6 +380,15 @@ export default function PartnersPage() {
             <div className="flex gap-2 items-center">
               <label className="text-sm text-gray-700">Filter:</label>
               <select
+                value={shareFilterDirection}
+                onChange={(e) => setShareFilterDirection(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              >
+                <option value="">All directions</option>
+                <option value={SHARE_DIRECTION.OUTGOING}>Given out</option>
+                <option value={SHARE_DIRECTION.INCOMING}>Received</option>
+              </select>
+              <select
                 value={shareFilterPaid}
                 onChange={(e) => setShareFilterPaid(e.target.value)}
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm"
@@ -325,7 +400,7 @@ export default function PartnersPage() {
             </div>
             <button
               type="button"
-              onClick={handleOpenShareModal}
+              onClick={() => handleOpenShareModal()}
               className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] text-sm"
             >
               Record Stock Share
@@ -340,17 +415,18 @@ export default function PartnersPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Direction</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partner</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {shares.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="px-4 py-6 text-center text-gray-500">
+                        <td colSpan="7" className="px-4 py-6 text-center text-gray-500">
                           No stock shares recorded yet.
                         </td>
                       </tr>
@@ -359,6 +435,13 @@ export default function PartnersPage() {
                         <tr key={s.id}>
                           <td className="px-4 py-3 text-sm text-gray-900">
                             {s.recordedAt ? new Date(s.recordedAt).toLocaleDateString() : "–"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${shareDirectionBadgeClass(s)}`}
+                            >
+                              {shareDirectionLabel(s)}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
                             {s.partner?.name || "–"}
@@ -370,13 +453,20 @@ export default function PartnersPage() {
                           <td className="px-4 py-3">
                             {s.paid ? (
                               <span className="text-green-600 text-sm font-medium">
-                                Yes {s.paidAt ? new Date(s.paidAt).toLocaleDateString() : ""}
+                                {sharePaymentLabel(s)} {s.paidAt ? new Date(s.paidAt).toLocaleDateString() : ""}
                               </span>
                             ) : (
-                              <span className="text-amber-600 text-sm">Unpaid</span>
+                              <span className="text-amber-600 text-sm">{sharePaymentLabel(s)}</span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenShareModal(s)}
+                              className="text-blue-600 hover:underline text-sm mr-3"
+                            >
+                              Edit
+                            </button>
                             {!s.paid && (
                               <button
                                 type="button"
@@ -481,17 +571,65 @@ export default function PartnersPage() {
         </div>
       )}
 
-      {/* Record share modal */}
+      {/* Record / edit share modal */}
       {showShareModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Record Stock Share</h2>
-            {!currentSession && (
+            <h2 className="text-lg font-bold text-gray-900 mb-4">
+              {editingShare ? "Edit Stock Share" : "Record Stock Share"}
+            </h2>
+            {editingShare && shareStockLocked && (
+              <p className="text-amber-700 text-sm mb-4 bg-amber-50 p-2 rounded">
+                {editingShare.session?.status !== "OPEN"
+                  ? "This share's stock session is closed."
+                  : "This share was recorded before stock links were tracked."}{" "}
+                Only the partner, unit and notes can be changed.
+              </p>
+            )}
+            {editingShare && !editingShare.sessionId && (
+              <p className="text-gray-600 text-sm mb-4 bg-gray-50 p-2 rounded">
+                This share is not tied to a stock session, so editing it does not change stock.
+              </p>
+            )}
+            {!editingShare && !currentSession && !shareIsIncoming(shareForm) && (
               <p className="text-amber-700 text-sm mb-4 bg-amber-50 p-2 rounded">
                 No open stock session. You can still record the share; it will not deduct from session stock.
               </p>
             )}
+            {!editingShare && !currentSession && shareIsIncoming(shareForm) && (
+              <p className="text-red-700 text-sm mb-4 bg-red-50 p-2 rounded">
+                No open stock session. Open today&apos;s session first – meat received from a partner is logged as
+                incoming stock.
+              </p>
+            )}
             <form onSubmit={handleShareSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Direction *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: SHARE_DIRECTION.OUTGOING, label: "Given out", hint: "We gave meat to the partner" },
+                    { value: SHARE_DIRECTION.INCOMING, label: "Received", hint: "Partner gave meat to us" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      disabled={
+                        shareStockLocked ||
+                        (!!editingShare && !editingShare.sessionId && opt.value === SHARE_DIRECTION.INCOMING)
+                      }
+                      onClick={() => setShareForm({ ...shareForm, direction: opt.value })}
+                      className={`rounded-md border px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50 ${
+                        shareForm.direction === opt.value
+                          ? "border-blue-900 bg-blue-50 text-blue-900"
+                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="block font-medium">{opt.label}</span>
+                      <span className="block text-xs text-gray-500">{opt.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Partner *</label>
                 <select
@@ -501,7 +639,7 @@ export default function PartnersPage() {
                   required
                 >
                   <option value="">Select partner</option>
-                  {activePartners.map((p) => (
+                  {sharePartnerOptions.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -513,30 +651,33 @@ export default function PartnersPage() {
                 <select
                   value={shareForm.productId}
                   onChange={(e) => {
-                    const p = products.find((x) => x.id === parseInt(e.target.value));
+                    const p = shareProductOptions.find((x) => x.id === parseInt(e.target.value));
                     setShareForm({
                       ...shareForm,
                       productId: e.target.value,
                       unit: p?.unit || "kg",
                     });
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  disabled={shareStockLocked}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-50 disabled:text-gray-500"
                   required
                 >
                   <option value="">Select product</option>
-                  {products.map((p) => (
+                  {shareProductOptions.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({p.unit})
                     </option>
                   ))}
                 </select>
               </div>
-              {currentSession && (
+              {(editingShare ? !!editingShare.sessionId : !!currentSession) && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Session (deduct from stock)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {shareIsIncoming(shareForm) ? "Session (add to incoming stock)" : "Session (deduct from stock)"}
+                  </label>
                   <input
                     type="text"
-                    value={currentSession.id}
+                    value={editingShare ? editingShare.sessionId : currentSession.id}
                     readOnly
                     className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50"
                   />
@@ -552,7 +693,8 @@ export default function PartnersPage() {
                     min="0.01"
                     value={shareForm.quantity}
                     onChange={(e) => setShareForm({ ...shareForm, quantity: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    disabled={shareStockLocked}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-50 disabled:text-gray-500"
                     required
                   />
                 </div>
@@ -578,13 +720,20 @@ export default function PartnersPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowShareModal(false)}
+                  onClick={() => {
+                    setShowShareModal(false);
+                    setEditingShare(null);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-[#1e88b5]">
-                  Record Share
+                <button
+                  type="submit"
+                  disabled={shareIsIncoming(shareForm) && !(editingShare ? editingShare.sessionId : currentSession)}
+                  className="flex-1 px-4 py-2 bg-blue-900 text-white rounded-md hover:bg-[#1e88b5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {editingShare ? "Save changes" : "Record Share"}
                 </button>
               </div>
             </form>

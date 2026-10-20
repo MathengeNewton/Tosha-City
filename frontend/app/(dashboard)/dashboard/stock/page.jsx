@@ -15,6 +15,13 @@ import {
 } from "@heroicons/react/24/outline";
 import { segmentOfProduct } from "../../../../lib/productSegment";
 import {
+  SHARE_DIRECTION,
+  shareIsIncoming,
+  shareDirectionLabel,
+  shareDirectionBadgeClass,
+  sharePaymentLabel,
+} from "../../../../lib/stockShare";
+import {
   defaultDateRangeYmd,
   formatDate,
   formatDateTime,
@@ -1440,6 +1447,9 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                 <tr key={entry.id}>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {entry.product?.name || 'N/A'}
+                    {entry.partner?.name && (
+                      <span className="block text-xs text-emerald-700">From partner: {entry.partner.name}</span>
+                    )}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -1458,7 +1468,12 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDateTime(entry.recordedAt)}
                   </td>
-                  {canEdit && (
+                  {canEdit && entry.partnerId != null && (
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                      Managed in Stock Share
+                    </td>
+                  )}
+                  {canEdit && entry.partnerId == null && (
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex gap-2">
                         <button
@@ -1578,13 +1593,22 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
 const stockShareInputClass =
   "w-full min-h-[44px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#0D47A1] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/25";
 
-// Stock Share tab: record and list shares for this session (from incoming stock)
+const emptyStockShareForm = {
+  direction: SHARE_DIRECTION.OUTGOING,
+  partnerId: "",
+  productId: "",
+  quantity: "",
+  unit: "kg",
+  notes: "",
+};
+
+// Stock Share tab: record and list shares for this session (given out or received in)
 function StockShareTab({ session, products, canManage, onRefresh }) {
   const [shares, setShares] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
+  const [form, setForm] = useState(emptyStockShareForm);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -1623,6 +1647,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
     setSubmitting(true);
     try {
       await apiClient.stockShare.create({
+        direction: form.direction,
         partnerId: parseInt(form.partnerId, 10),
         productId: parseInt(form.productId, 10),
         sessionId: session.id,
@@ -1630,9 +1655,11 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
         unit: form.unit || product?.unit || "kg",
         notes: form.notes || undefined,
       });
-      toast.success("Stock share recorded");
+      toast.success(
+        shareIsIncoming(form) ? "Received meat recorded and added to incoming stock" : "Stock share recorded",
+      );
       setShowForm(false);
-      setForm({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
+      setForm(emptyStockShareForm);
       onRefresh?.();
       const res = await apiClient.stockShare.getAll({ sessionId: session.id });
       setShares(res.data || []);
@@ -1661,8 +1688,9 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
   return (
     <div className="space-y-6">
       <p className="text-sm text-gray-600">
-        Share part of today&apos;s incoming stock with partners. Recorded shares are{" "}
-        <strong className="text-gray-800">deducted</strong> from available session stock.
+        Record meat shared with partners. Meat <strong className="text-gray-800">given out</strong> is deducted from
+        available session stock; meat <strong className="text-gray-800">received</strong> is added to this
+        session&apos;s incoming stock.
       </p>
 
       <details className="group rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -1679,8 +1707,18 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
                 −
               </span>
               <span>
-                The quantity you record is removed from <strong className="text-gray-900">this session&apos;s</strong>{" "}
-                available stock for that product.
+                <strong className="text-gray-900">Given out:</strong> the quantity is removed from{" "}
+                <strong className="text-gray-900">this session&apos;s</strong> available stock for that product.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-800">
+                +
+              </span>
+              <span>
+                <strong className="text-gray-900">Received:</strong> the quantity is logged as{" "}
+                <strong className="text-gray-900">incoming stock</strong> for this session, marked with the partner&apos;s
+                name.
               </span>
             </li>
             <li className="flex gap-2">
@@ -1704,7 +1742,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Record stock share</h2>
-              <p className="text-sm text-gray-600">Log meat or product given to a partner from this session.</p>
+              <p className="text-sm text-gray-600">Log meat given to, or received from, a partner in this session.</p>
             </div>
           </div>
           {canManage && isOpen && !showForm && (
@@ -1740,6 +1778,31 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
                   No active partners found. Add partners under Admin → Partners first.
                 </div>
               )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Direction <span className="text-red-600">*</span>
+                </label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {[
+                    { value: SHARE_DIRECTION.OUTGOING, label: "Given out", hint: "We gave meat to the partner" },
+                    { value: SHARE_DIRECTION.INCOMING, label: "Received", hint: "Partner gave meat to us" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, direction: opt.value })}
+                      className={`min-h-[44px] rounded-md border px-3 py-2 text-left text-sm ${
+                        form.direction === opt.value
+                          ? "border-[#0D47A1] bg-[#0D47A1]/5 text-[#0D47A1]"
+                          : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="block font-medium">{opt.label}</span>
+                      <span className="block text-xs text-gray-500">{opt.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   Partner <span className="text-red-600">*</span>
@@ -1822,7 +1885,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
                   type="button"
                   onClick={() => {
                     setShowForm(false);
-                    setForm({ partnerId: "", productId: "", quantity: "", unit: "kg", notes: "" });
+                    setForm(emptyStockShareForm);
                   }}
                   className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                 >
@@ -1870,6 +1933,9 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Direction
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                     Partner
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -1879,7 +1945,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
                     Qty
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Paid
+                    Payment
                   </th>
                   {canManage && (
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -1891,6 +1957,13 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
               <tbody className="divide-y divide-gray-200 bg-white">
                 {shares.map((s) => (
                   <tr key={s.id} className="hover:bg-gray-50/80">
+                    <td className="px-4 py-3 text-sm">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${shareDirectionBadgeClass(s)}`}
+                      >
+                        {shareDirectionLabel(s)}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.partner?.name || "—"}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{s.product?.name || "—"}</td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-900">
@@ -1902,7 +1975,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
                           s.paid ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-900"
                         }`}
                       >
-                        {s.paid ? "Yes" : "No"}
+                        {sharePaymentLabel(s)}
                       </span>
                     </td>
                     {canManage && (

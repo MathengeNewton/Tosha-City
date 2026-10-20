@@ -6,7 +6,7 @@ import { SaleItem } from '../sales/entities/sale-item.entity';
 import { StockEntry } from '../stock-entries/entities/stock-entry.entity';
 import { StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { Product } from '../products/entities/product.entity';
-import { StockShare } from '../stock-share/entities/stock-share.entity';
+import { StockShare, ShareDirection } from '../stock-share/entities/stock-share.entity';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { PaymentStatus } from '../sales/entities/payment.enums';
 
@@ -359,31 +359,69 @@ export class ReportsService {
 
     const shares = await query.getMany();
 
+    const isIncoming = (s: StockShare) => s.direction === ShareDirection.INCOMING;
     const totalQuantity = shares.reduce((sum, s) => sum + Number(s.quantity), 0);
-    const byPartner: Record<string, { partnerId: number; quantity: number; entries: number; paid: number; unpaid: number }> = {};
-    const byProduct: Record<string, { productId: number; quantity: number; entries: number }> = {};
+    const totalOutgoing = shares.filter((s) => !isIncoming(s)).reduce((sum, s) => sum + Number(s.quantity), 0);
+    const totalIncoming = shares.filter(isIncoming).reduce((sum, s) => sum + Number(s.quantity), 0);
+    const byPartner: Record<
+      string,
+      {
+        partnerId: number;
+        quantity: number;
+        outgoingQuantity: number;
+        incomingQuantity: number;
+        entries: number;
+        paid: number;
+        unpaid: number;
+      }
+    > = {};
+    const byProduct: Record<
+      string,
+      { productId: number; quantity: number; outgoingQuantity: number; incomingQuantity: number; entries: number }
+    > = {};
 
     shares.forEach((s) => {
+      const qty = Number(s.quantity);
       const partnerName = s.partner?.name || 'Unknown';
       if (!byPartner[partnerName]) {
-        byPartner[partnerName] = { partnerId: s.partnerId, quantity: 0, entries: 0, paid: 0, unpaid: 0 };
+        byPartner[partnerName] = {
+          partnerId: s.partnerId,
+          quantity: 0,
+          outgoingQuantity: 0,
+          incomingQuantity: 0,
+          entries: 0,
+          paid: 0,
+          unpaid: 0,
+        };
       }
-      byPartner[partnerName].quantity += Number(s.quantity);
+      byPartner[partnerName].quantity += qty;
+      if (isIncoming(s)) byPartner[partnerName].incomingQuantity += qty;
+      else byPartner[partnerName].outgoingQuantity += qty;
       byPartner[partnerName].entries += 1;
       if (s.paid) byPartner[partnerName].paid += 1;
       else byPartner[partnerName].unpaid += 1;
 
       const productName = s.product?.name || 'Unknown';
       if (!byProduct[productName]) {
-        byProduct[productName] = { productId: s.productId, quantity: 0, entries: 0 };
+        byProduct[productName] = {
+          productId: s.productId,
+          quantity: 0,
+          outgoingQuantity: 0,
+          incomingQuantity: 0,
+          entries: 0,
+        };
       }
-      byProduct[productName].quantity += Number(s.quantity);
+      byProduct[productName].quantity += qty;
+      if (isIncoming(s)) byProduct[productName].incomingQuantity += qty;
+      else byProduct[productName].outgoingQuantity += qty;
       byProduct[productName].entries += 1;
     });
 
     return {
       summary: {
         totalQuantity,
+        totalOutgoing,
+        totalIncoming,
         totalEntries: shares.length,
         partnersCount: Object.keys(byPartner).length,
         productsCount: Object.keys(byProduct).length,
@@ -392,6 +430,7 @@ export class ReportsService {
       byProduct: Object.entries(byProduct).map(([name, data]) => ({ product: name, ...data })),
       entries: shares.map((s) => ({
         id: s.id,
+        direction: s.direction,
         partner: s.partner?.name,
         product: s.product?.name,
         quantity: s.quantity,
