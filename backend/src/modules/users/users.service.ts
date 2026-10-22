@@ -78,7 +78,12 @@ export class UsersService {
     });
     
     this.logger.log(`[CreateUser] User entity before save: ${JSON.stringify(user)}`);
-    const savedUser = await this.userRepo.save(user);
+    let savedUser: User;
+    try {
+      savedUser = await this.userRepo.save(user);
+    } catch (error) {
+      this.rethrowSaveError(error);
+    }
     this.logger.log(`[CreateUser] User saved: ${JSON.stringify(savedUser)}`);
     
     // Return the full user entity with relations
@@ -129,8 +134,27 @@ export class UsersService {
     }
 
     Object.assign(user, updateData);
-    await this.userRepo.save(user);
+    try {
+      await this.userRepo.save(user);
+    } catch (error) {
+      this.rethrowSaveError(error);
+    }
     return this.findOne(id);
+  }
+
+  private rethrowSaveError(error: unknown): never {
+    const driverError = (error as { driverError?: { code?: string; detail?: string } })?.driverError;
+    if (driverError?.code === '23505') {
+      const detail = driverError.detail ?? '';
+      if (detail.includes('username')) {
+        throw new BadRequestException('That username is already taken. Choose another one.');
+      }
+      if (detail.includes('email')) {
+        throw new BadRequestException('That email is already taken. Choose another one.');
+      }
+      throw new BadRequestException('A user with those details already exists.');
+    }
+    throw error;
   }
 
   async remove(id: number): Promise<void> {

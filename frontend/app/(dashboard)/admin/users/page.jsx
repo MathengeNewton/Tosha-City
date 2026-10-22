@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 const defaultEnd = new Date();
@@ -11,6 +12,50 @@ defaultStart.setDate(defaultStart.getDate() - 365);
 
 /** Only these roles can be assigned in the UI (matches product roles). */
 const ASSIGNABLE_ROLE_NAMES = new Set(["admin", "cashier"]);
+const MIN_PASSWORD_LENGTH = 6;
+
+function validateUserForm(formData, { isEdit, requiresBranch }) {
+  const errors = {};
+  if (!formData.username.trim()) {
+    errors.username = "Enter a username.";
+  }
+  if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+    errors.email = "Enter a valid email address.";
+  }
+  if (!isEdit && !formData.password) {
+    errors.password = `Enter a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
+  } else if (formData.password && formData.password.length < MIN_PASSWORD_LENGTH) {
+    errors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters. You entered ${formData.password.length}.`;
+  }
+  if (formData.roleIds.length === 0) {
+    errors.roles = "Select at least one role.";
+  }
+  if (requiresBranch && !formData.branchId) {
+    errors.branchId = "Select a branch. Non-admin users must belong to one branch.";
+  }
+  return errors;
+}
+
+function apiErrorText(error) {
+  const message = error?.response?.data?.message;
+  const parts = Array.isArray(message) ? message : message ? [String(message)] : [];
+  const text = parts
+    .map((part) => {
+      if (/password must be longer/i.test(part)) {
+        return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+      }
+      if (/email must be an email/i.test(part)) {
+        return "Enter a valid email address.";
+      }
+      if (/username should not be empty|username must be a string/i.test(part)) {
+        return "Enter a username.";
+      }
+      return part;
+    })
+    .filter((part) => part && part !== "Internal server error")
+    .join(" ");
+  return text || "Could not save this user. Check the form and try again.";
+}
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -42,6 +87,8 @@ const UsersPage = () => {
     dateFrom: defaultStart.toISOString().split("T")[0],
     dateTo: defaultEnd.toISOString().split("T")[0],
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -119,6 +166,8 @@ const UsersPage = () => {
       roleIds: cashierRole ? [cashierRole.id] : [],
       branchId: "",
     });
+    setShowPassword(false);
+    setFieldErrors({});
     setShowModal(true);
   };
 
@@ -134,6 +183,8 @@ const UsersPage = () => {
           .map((role) => role.id) || [],
       branchId: user.branchId ? String(user.branchId) : "",
     });
+    setShowPassword(false);
+    setFieldErrors({});
     setShowModal(true);
   };
 
@@ -154,14 +205,22 @@ const UsersPage = () => {
     e.preventDefault();
 
     if (!roles.length) {
-      toast.error("Roles are still loading. Please try again.");
+      const message = "Roles are still loading. Wait a moment and try again.";
+      setFieldErrors({ roles: message });
+      toast.error(message);
       return;
     }
 
-    if (formData.roleIds.length === 0) {
-      toast.error("Please select at least one role");
+    const errors = validateUserForm(formData, {
+      isEdit: Boolean(editingUser),
+      requiresBranch: !selectedRolesIncludeAdmin,
+    });
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      toast.error(Object.values(errors)[0]);
       return;
     }
+    setFieldErrors({});
 
     try {
       const userData = {
@@ -180,10 +239,6 @@ const UsersPage = () => {
         await apiClient.users.update(editingUser.id, userData);
         toast.success("User updated successfully");
       } else {
-        if (!userData.password) {
-          toast.error("Password is required for new users");
-          return;
-        }
         await apiClient.users.create(userData);
         toast.success("User created successfully");
       }
@@ -191,13 +246,29 @@ const UsersPage = () => {
       loadUsers();
     } catch (error) {
       console.error("Error saving user:", error);
-      toast.error(error.response?.data?.message || "Failed to save user");
+      const message = apiErrorText(error);
+      const nextErrors = {};
+      if (/password/i.test(message)) nextErrors.password = message;
+      if (/email/i.test(message)) nextErrors.email = message;
+      if (/username/i.test(message)) nextErrors.username = message;
+      if (/branch/i.test(message)) nextErrors.branchId = message;
+      if (/role/i.test(message)) nextErrors.roles = message;
+      if (Object.keys(nextErrors).length === 0) nextErrors.form = message;
+      setFieldErrors(nextErrors);
+      toast.error(message);
     }
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+    setFieldErrors((prev) => {
+      if (!prev[name] && !prev.form) return prev;
+      const next = { ...prev };
+      delete next[name];
+      delete next.form;
+      return next;
+    });
   };
 
   const handleRoleToggle = (roleId) => {
@@ -207,6 +278,13 @@ const UsersPage = () => {
         ? prev.roleIds.filter((id) => id !== roleId)
         : [...prev.roleIds, roleId],
     }));
+    setFieldErrors((prev) => {
+      if (!prev.roles && !prev.form) return prev;
+      const next = { ...prev };
+      delete next.roles;
+      delete next.form;
+      return next;
+    });
   };
 
   const getUserRoles = (user) => {
@@ -370,11 +448,16 @@ const UsersPage = () => {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
+          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">
               {editingUser ? "Edit User" : "Create User"}
             </h3>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
+              {fieldErrors.form && (
+                <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                  {fieldErrors.form}
+                </p>
+              )}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Username *
@@ -385,13 +468,18 @@ const UsersPage = () => {
                   value={formData.username}
                   onChange={handleChange}
                   placeholder="Username"
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-                  required
+                  aria-invalid={Boolean(fieldErrors.username)}
+                  className={`w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent ${
+                    fieldErrors.username ? "border-red-500" : ""
+                  }`}
                 />
+                {fieldErrors.username && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.username}</p>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
+                  Email
                 </label>
                 <input
                   type="email"
@@ -399,22 +487,47 @@ const UsersPage = () => {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="Email"
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  className={`w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent ${
+                    fieldErrors.email ? "border-red-500" : ""
+                  }`}
                 />
+                {fieldErrors.email && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password {editingUser ? "(leave blank to keep current)" : "*"}
                 </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Password"
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-                  required={!editingUser}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="At least 6 characters"
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    className={`w-full p-2 pr-10 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent ${
+                      fieldErrors.password ? "border-red-500" : ""
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeSlashIcon className="h-5 w-5" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+                <p className={`mt-1 text-sm ${fieldErrors.password ? "text-red-600" : "text-gray-500"}`}>
+                  {fieldErrors.password || "Use at least 6 characters."}
+                </p>
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -433,6 +546,9 @@ const UsersPage = () => {
                     </label>
                   ))}
                 </div>
+                {fieldErrors.roles && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.roles}</p>
+                )}
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -442,8 +558,10 @@ const UsersPage = () => {
                   name="branchId"
                   value={formData.branchId}
                   onChange={handleChange}
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent"
-                  required={!selectedRolesIncludeAdmin}
+                  aria-invalid={Boolean(fieldErrors.branchId)}
+                  className={`w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-900 focus:border-transparent ${
+                    fieldErrors.branchId ? "border-red-500" : ""
+                  }`}
                 >
                   <option value="">{selectedRolesIncludeAdmin ? "No branch (global)" : "Select branch"}</option>
                   {branches.map((branch) => (
@@ -452,9 +570,11 @@ const UsersPage = () => {
                     </option>
                   ))}
                 </select>
-                {!selectedRolesIncludeAdmin && (
+                {fieldErrors.branchId ? (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.branchId}</p>
+                ) : !selectedRolesIncludeAdmin ? (
                   <p className="mt-1 text-xs text-gray-500">Non-admin users must belong to one branch.</p>
-                )}
+                ) : null}
               </div>
               <div className="flex justify-end gap-2">
                 <button

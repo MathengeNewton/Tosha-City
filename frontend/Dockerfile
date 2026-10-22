@@ -21,8 +21,9 @@ ENV NODE_ENV=production
 ARG NEXT_PUBLIC_API_URL=http://localhost:4515/api
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
-# Build (next.config has webpackMemoryOptimizations + webpackBuildWorker)
-RUN npm run build
+# Next 16 defaults to Turbopack, which fails on next/font in this image.
+# next.config already tunes the webpack build.
+RUN npm run build -- --webpack
 
 # Production stage - use Node.js to run Next.js server
 FROM node:20-slim
