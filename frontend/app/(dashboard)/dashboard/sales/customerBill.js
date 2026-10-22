@@ -35,7 +35,7 @@ function formatMoney(value) {
   return amount.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function buildCustomerBillDocument(sale) {
+export function buildCustomerBillDocument(sale, kind = "customer") {
   const { datePart, timePart } = billWhen(sale?.soldAt);
   const branch = sale?.branch?.name || "LakeTown Butchery";
   const servedBy = sale?.soldBy?.username || sale?.soldBy?.email || "Cashier";
@@ -99,21 +99,15 @@ export function buildCustomerBillDocument(sale) {
       background: #fff;
       color: #000;
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 14px;
-      font-weight: 700;
-      line-height: 1.3;
-      -webkit-font-smoothing: none;
-      -webkit-text-stroke: 0.25px #000;
-      break-inside: avoid;
-      page-break-inside: avoid;
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.35;
     }
-    #kitchen { page: kitchen; break-after: page; page-break-after: always; }
-    #bill { page: customer; }
-    #kitchen .item { font-size: 16px; }
     .center { text-align: center; }
-    .title { font-size: 15px; letter-spacing: 0.5px; }
-    .house { font-size: 16px; margin-top: 4px; }
-    .rule { border: 0; border-top: 2px solid #000; margin: 6px 0; }
+    .title, .house { font-weight: 700; }
+    .title { font-size: 15px; }
+    .house { font-size: 14px; margin-top: 2px; }
+    .rule { border: 0; border-top: 1px solid #000; margin: 6px 0; }
     .row { display: flex; justify-content: space-between; gap: 8px; }
     .row span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
     .item { margin-bottom: 5px; }
@@ -122,7 +116,7 @@ export function buildCustomerBillDocument(sale) {
   </style>
 </head>
 <body>
-  <div id="kitchen" class="slip">
+  ${kind === "kitchen" ? `<div id="slip" class="slip">
     <div class="center title">KITCHEN</div>
     <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
     <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
@@ -130,8 +124,7 @@ export function buildCustomerBillDocument(sale) {
     <hr class="rule" />
     ${kitchenItems}
     ${orderNotes ? `<div class="item">${esc(orderNotes)}</div>` : ""}
-  </div>
-  <div id="bill" class="slip">
+  </div>` : `<div id="slip" class="slip">
     <div class="center title">CUSTOMER BILL</div>
     <div class="center house">LAKETOWN BUTCHERY</div>
     <div class="center">${esc(branch)}</div>
@@ -151,18 +144,15 @@ export function buildCustomerBillDocument(sale) {
     ${mpesa ? `<div class="row"><span>M-Pesa</span><span>${esc(mpesa)}</span></div>` : ""}
     <hr class="rule" />
     <div class="thanks">THANK YOU &amp; WELCOME AGAIN.</div>
-  </div>
+  </div>`}
   <script>
     window.onload = function () {
       function mm(el) {
         return Math.ceil(el.offsetHeight * 25.4 / 96) + 1;
       }
-      var kitchen = document.getElementById("kitchen");
-      var bill = document.getElementById("bill");
+      var slip = document.getElementById("slip");
       var style = document.createElement("style");
-      style.textContent =
-        "@page kitchen { size: 72mm " + mm(kitchen) + "mm; margin: 0; }" +
-        "@page customer { size: 72mm " + mm(bill) + "mm; margin: 0; }";
+      style.textContent = "@page { size: 72mm " + mm(slip) + "mm; margin: 0; }";
       document.head.appendChild(style);
       setTimeout(function () { window.print(); }, 80);
       window.onafterprint = function () {

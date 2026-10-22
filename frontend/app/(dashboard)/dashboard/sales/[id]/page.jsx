@@ -21,7 +21,6 @@ export default function SaleDetailsPage() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [mpesaReference, setMpesaReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [showPrintModal, setShowPrintModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
   const [submittingEdit, setSubmittingEdit] = useState(false);
@@ -130,7 +129,7 @@ export default function SaleDetailsPage() {
     }
   };
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = (kind) => {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
     iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:420px;height:800px;border:0;";
@@ -142,9 +141,8 @@ export default function SaleDetailsPage() {
       return;
     }
     doc.open();
-    doc.write(buildCustomerBillDocument(sale));
+    doc.write(buildCustomerBillDocument(sale, kind));
     doc.close();
-    setShowPrintModal(false);
   };
 
   if (loading) {
@@ -252,10 +250,17 @@ export default function SaleDetailsPage() {
       <div className="no-print flex flex-wrap gap-3">
         <button
           type="button"
-          onClick={() => setShowPrintModal(true)}
+          onClick={() => handlePrintReceipt("customer")}
           className="min-h-[52px] rounded-xl bg-blue-900 px-6 text-base font-bold text-white hover:bg-[#1e88b5]"
         >
-          Print receipt
+          Print customer receipt
+        </button>
+        <button
+          type="button"
+          onClick={() => handlePrintReceipt("kitchen")}
+          className="min-h-[52px] rounded-xl bg-blue-900 px-6 text-base font-bold text-white hover:bg-[#1e88b5]"
+        >
+          Print kitchen receipt
         </button>
         <Link
           href="/dashboard/sales"
@@ -264,33 +269,6 @@ export default function SaleDetailsPage() {
           Back to sales
         </Link>
       </div>
-
-      {showPrintModal && sale && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
-            <h2 className="text-lg sm:text-xl font-bold mb-2">Print two slips</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              A short kitchen slip prints first. After the printer cuts it, the customer bill prints.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPrintModal(false)}
-                className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handlePrintReceipt}
-                className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-blue-800 min-h-[44px] text-base"
-              >
-                Print both
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Edit Sale Modal (admin, unpaid only) */}
       {showEditModal && sale && (
