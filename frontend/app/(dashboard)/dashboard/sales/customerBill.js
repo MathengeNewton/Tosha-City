@@ -46,6 +46,7 @@ export function buildCustomerBillDocument(sale) {
   const mpesa = sale?.payment?.mpesaReference;
   const items = Array.isArray(sale?.items) ? sale.items : [];
 
+  const orderNotes = sale?.restaurantOrder?.notes;
   const itemHtml = items
     .map((item) => {
       const qty = formatQty(item.quantity);
@@ -60,57 +61,116 @@ export function buildCustomerBillDocument(sale) {
         </div>`;
     })
     .join("");
+  const kitchenItems = items
+    .map((item) => {
+      const qty = formatQty(item.quantity);
+      const unit = item.product?.unit || "";
+      const name = item.product?.name || "Item";
+      return `<div class="item">- ${esc(qty)} ${esc(name)} ${esc(unit)}</div>`;
+    })
+    .join("");
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Customer bill ${esc(sale?.saleNumber || "")}</title>
+  <title></title>
   <style>
-    @page { size: 80mm auto; margin: 4mm; }
-    * { box-sizing: border-box; }
-    body {
+    /* Chrome drops "80mm auto", then prints a full Letter page: long blank
+       paper, the URL over the title, and the date/page line at the bottom.
+       The real height is written in just before print. Zero margin removes
+       that header and footer slot. */
+    @page { margin: 0; }
+    * { box-sizing: border-box; color: #000; }
+    html, body {
       width: 72mm;
-      margin: 0 auto;
-      color: #000;
+      height: auto;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
       background: #fff;
-      font-family: "Courier New", ui-monospace, monospace;
-      font-size: 12px;
-      line-height: 1.45;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
+    .slip {
+      width: 72mm;
+      margin: 0;
+      padding: 2mm 2.5mm 3mm;
+      background: #fff;
+      color: #000;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.3;
+      -webkit-font-smoothing: none;
+      -webkit-text-stroke: 0.25px #000;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    #kitchen { page: kitchen; break-after: page; page-break-after: always; }
+    #bill { page: customer; }
+    #kitchen .item { font-size: 16px; }
     .center { text-align: center; }
-    .title { font-weight: 700; letter-spacing: 2px; }
-    .house { font-weight: 700; font-size: 14px; margin-top: 8px; }
-    .rule { border: 0; border-top: 1px dashed #000; margin: 8px 0; }
-    .row { display: flex; justify-content: space-between; gap: 12px; }
-    .row span:last-child { font-variant-numeric: tabular-nums; }
-    .item { margin-bottom: 6px; }
-    .prices { display: flex; justify-content: flex-end; gap: 16px; font-variant-numeric: tabular-nums; }
-    .total { font-weight: 700; }
-    .thanks { text-align: center; font-weight: 700; letter-spacing: 1px; margin-top: 4px; }
+    .title { font-size: 15px; letter-spacing: 0.5px; }
+    .house { font-size: 16px; margin-top: 4px; }
+    .rule { border: 0; border-top: 2px solid #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; gap: 8px; }
+    .row span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+    .item { margin-bottom: 5px; }
+    .prices { display: flex; justify-content: flex-end; gap: 12px; font-variant-numeric: tabular-nums; }
+    .thanks { text-align: center; margin-top: 2px; }
   </style>
 </head>
 <body>
-  <div class="center title">CUSTOMER BILL</div>
-  <div class="center house">LAKETOWN BUTCHERY</div>
-  <div class="center">${esc(branch)}</div>
-  <hr class="rule" />
-  <div class="row"><span>Date</span><span>${esc(datePart)}</span></div>
-  <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
-  <div class="row"><span>Served by</span><span>${esc(servedBy)}</span></div>
-  ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
-  <div class="row"><span>Customer</span><span>${esc(customer)}</span></div>
-  <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
-  <hr class="rule" />
-  ${itemHtml}
-  <hr class="rule" />
-  <div class="row total"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
-  <div class="row"><span>Payment</span><span>${esc(method)}</span></div>
-  <div class="row"><span>Status</span><span>${paid ? "PAID" : "UNPAID"}</span></div>
-  ${mpesa ? `<div class="row"><span>M-Pesa</span><span>${esc(mpesa)}</span></div>` : ""}
-  <hr class="rule" />
-  <div class="thanks">THANK YOU &amp; WELCOME AGAIN.</div>
-  <script>window.onload = function () { setTimeout(function () { window.print(); }, 150); };</script>
+  <div id="kitchen" class="slip">
+    <div class="center title">KITCHEN</div>
+    <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
+    <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
+    ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
+    <hr class="rule" />
+    ${kitchenItems}
+    ${orderNotes ? `<div class="item">${esc(orderNotes)}</div>` : ""}
+  </div>
+  <div id="bill" class="slip">
+    <div class="center title">CUSTOMER BILL</div>
+    <div class="center house">LAKETOWN BUTCHERY</div>
+    <div class="center">${esc(branch)}</div>
+    <hr class="rule" />
+    <div class="row"><span>Date</span><span>${esc(datePart)}</span></div>
+    <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
+    <div class="row"><span>Served by</span><span>${esc(servedBy)}</span></div>
+    ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
+    <div class="row"><span>Customer</span><span>${esc(customer)}</span></div>
+    <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
+    <hr class="rule" />
+    ${itemHtml}
+    <hr class="rule" />
+    <div class="row"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
+    <div class="row"><span>Payment</span><span>${esc(method)}</span></div>
+    <div class="row"><span>Status</span><span>${paid ? "PAID" : "UNPAID"}</span></div>
+    ${mpesa ? `<div class="row"><span>M-Pesa</span><span>${esc(mpesa)}</span></div>` : ""}
+    <hr class="rule" />
+    <div class="thanks">THANK YOU &amp; WELCOME AGAIN.</div>
+  </div>
+  <script>
+    window.onload = function () {
+      function mm(el) {
+        return Math.ceil(el.offsetHeight * 25.4 / 96) + 1;
+      }
+      var kitchen = document.getElementById("kitchen");
+      var bill = document.getElementById("bill");
+      var style = document.createElement("style");
+      style.textContent =
+        "@page kitchen { size: 72mm " + mm(kitchen) + "mm; margin: 0; }" +
+        "@page customer { size: 72mm " + mm(bill) + "mm; margin: 0; }";
+      document.head.appendChild(style);
+      setTimeout(function () { window.print(); }, 80);
+      window.onafterprint = function () {
+        var frame = window.frameElement;
+        if (frame && frame.parentNode) frame.parentNode.removeChild(frame);
+      };
+    };
+  </script>
 </body>
 </html>`;
 }
