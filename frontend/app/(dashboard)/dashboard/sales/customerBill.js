@@ -41,9 +41,6 @@ export function buildCustomerBillDocument(sale, kind = "customer") {
   const servedBy = sale?.soldBy?.username || sale?.soldBy?.email || "Cashier";
   const customer = sale?.customer?.name || "Walk-in";
   const table = sale?.restaurantOrder?.tableLabel;
-  const paid = sale?.paymentStatus === "PAID";
-  const method = sale?.paymentMethod || "CASH";
-  const mpesa = sale?.payment?.mpesaReference;
   const items = Array.isArray(sale?.items) ? sale.items : [];
 
   const orderNotes = sale?.restaurantOrder?.notes;
@@ -56,17 +53,9 @@ export function buildCustomerBillDocument(sale, kind = "customer") {
       const lineTotal = formatMoney(item.totalPrice ?? Number(item.quantity) * Number(item.unitPrice || 0));
       return `
         <div class="item">
-          <div>- ${esc(qty)} ${esc(name)} ${esc(unit)}</div>
-          <div class="prices"><span>@${esc(unitPrice)}</span><span>${esc(lineTotal)}</span></div>
+          <div>${esc(name)}</div>
+          <div class="prices"><span>${esc(qty)} ${esc(unit)}</span><span>@${esc(unitPrice)}</span><span>${esc(lineTotal)}</span></div>
         </div>`;
-    })
-    .join("");
-  const kitchenItems = items
-    .map((item) => {
-      const qty = formatQty(item.quantity);
-      const unit = item.product?.unit || "";
-      const name = item.product?.name || "Item";
-      return `<div class="item">- ${esc(qty)} ${esc(name)} ${esc(unit)}</div>`;
     })
     .join("");
 
@@ -113,17 +102,25 @@ export function buildCustomerBillDocument(sale, kind = "customer") {
     .item { margin-bottom: 5px; }
     .prices { display: flex; justify-content: flex-end; gap: 12px; font-variant-numeric: tabular-nums; }
     .thanks { text-align: center; margin-top: 2px; }
+    .credit { text-align: center; margin-top: 6px; font-size: 11px; }
   </style>
 </head>
 <body>
   ${kind === "kitchen" ? `<div id="slip" class="slip">
     <div class="center title">KITCHEN</div>
-    <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
-    <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
-    ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
+    <div class="center house">LAKETOWN BUTCHERY</div>
+    <div class="center">${esc(branch)}</div>
     <hr class="rule" />
-    ${kitchenItems}
+    <div class="row"><span>Date</span><span>${esc(datePart)}</span></div>
+    <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
+    <div class="row"><span>Served by</span><span>${esc(servedBy)}</span></div>
+    ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
+    <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
+    <hr class="rule" />
+    ${itemHtml}
     ${orderNotes ? `<div class="item">${esc(orderNotes)}</div>` : ""}
+    <hr class="rule" />
+    <div class="row"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
   </div>` : `<div id="slip" class="slip">
     <div class="center title">CUSTOMER BILL</div>
     <div class="center house">LAKETOWN BUTCHERY</div>
@@ -139,16 +136,17 @@ export function buildCustomerBillDocument(sale, kind = "customer") {
     ${itemHtml}
     <hr class="rule" />
     <div class="row"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
-    <div class="row"><span>Payment</span><span>${esc(method)}</span></div>
-    <div class="row"><span>Status</span><span>${paid ? "PAID" : "UNPAID"}</span></div>
-    ${mpesa ? `<div class="row"><span>M-Pesa</span><span>${esc(mpesa)}</span></div>` : ""}
+    <div class="row"><span>Till</span><span>6967914</span></div>
     <hr class="rule" />
     <div class="thanks">THANK YOU &amp; WELCOME AGAIN.</div>
+    <div class="credit">Built by mangoseasonlabs.co.ke</div>
   </div>`}
   <script>
     window.onload = function () {
       function mm(el) {
-        return Math.ceil(el.offsetHeight * 25.4 / 96) + 1;
+        var contentMm = Math.ceil(el.offsetHeight * 25.4 / 96) + 2;
+        // Wider than tall makes Chrome pick landscape and the slip prints sideways.
+        return Math.max(contentMm, 74);
       }
       var slip = document.getElementById("slip");
       var style = document.createElement("style");
