@@ -71,13 +71,13 @@ async function bootstrap() {
 
   // In development, allow all localhost origins
   const isDevelopment = process.env.NODE_ENV !== 'production';
-  // LAN clients (for example a Windows PC opening the VM at http://192.168.x.x:3015)
-  // are not localhost. Allow those origins only when this flag is set.
-  const allowLan = process.env.CORS_ALLOW_LAN === 'true';
+  // Shop tills open the dashboard by LAN IP (http://192.168.x.x:3015). That is
+  // not localhost. Always allow it. A production deploy used to pass
+  // CORS_ALLOW_LAN=false and the till failed again after every release.
 
   console.log('CORS Configuration:', {
     isDevelopment,
-    allowLan,
+    allowLan: true,
     allowedOrigins,
     frontendUrl: process.env.FRONTEND_URL,
   });
@@ -96,7 +96,7 @@ async function bootstrap() {
         return callback(null, true);
       }
 
-      if (allowLan && isPrivateLanOrigin(origin)) {
+      if (isPrivateLanOrigin(origin)) {
         console.log(`CORS: Allowing LAN origin: ${origin}`);
         return callback(null, true);
       }

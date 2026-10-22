@@ -42,7 +42,8 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       FRONTEND_URL: ${FRONTEND_URL:-https://admin.laketown.co.ke}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
-      CORS_ALLOW_LAN: ${CORS_ALLOW_LAN:-false}
+      # Shop tills open the dashboard at http://192.168.x.x:3015. Leave this on.
+      CORS_ALLOW_LAN: ${CORS_ALLOW_LAN:-true}
     ports:
       - "${BACKEND_HOST_PORT:-4515}:3000"
     networks:
