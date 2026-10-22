@@ -5,6 +5,28 @@ import { config as dotenvConfig } from 'dotenv';
 
 dotenvConfig();
 
+/** True for browser origins on RFC1918 addresses, any port. */
+function isPrivateLanOrigin(origin: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (!match) return false;
+
+  const octets = match.slice(1).map(Number);
+  if (octets.some((n) => n > 255)) return false;
+
+  const [a, b] = octets;
+  if (a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'error', 'warn', 'debug', 'verbose'],
@@ -49,9 +71,13 @@ async function bootstrap() {
 
   // In development, allow all localhost origins
   const isDevelopment = process.env.NODE_ENV !== 'production';
+  // LAN clients (for example a Windows PC opening the VM at http://192.168.x.x:3015)
+  // are not localhost. Allow those origins only when this flag is set.
+  const allowLan = process.env.CORS_ALLOW_LAN === 'true';
 
   console.log('CORS Configuration:', {
     isDevelopment,
+    allowLan,
     allowedOrigins,
     frontendUrl: process.env.FRONTEND_URL,
   });
@@ -67,6 +93,11 @@ async function bootstrap() {
       // In development, allow any localhost origin
       if (isDevelopment && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
         console.log(`CORS: Allowing development origin: ${origin}`);
+        return callback(null, true);
+      }
+
+      if (allowLan && isPrivateLanOrigin(origin)) {
+        console.log(`CORS: Allowing LAN origin: ${origin}`);
         return callback(null, true);
       }
       

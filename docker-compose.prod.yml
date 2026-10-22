@@ -41,6 +41,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       FRONTEND_URL: ${FRONTEND_URL:-https://admin.laketown.co.ke}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      CORS_ALLOW_LAN: ${CORS_ALLOW_LAN:-false}
     ports:
       - "${BACKEND_HOST_PORT:-4515}:3000"
     networks:
