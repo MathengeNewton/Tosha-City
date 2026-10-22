@@ -17,7 +17,7 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { ProductsService } from '../products/products.service';
 import { StockEntriesService } from '../stock-entries/stock-entries.service';
-import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
+import { StockSession, SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entry.entity';
 import { CustomersService } from '../customers/customers.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -163,6 +163,9 @@ export class SalesService {
     const isWholesaleSale = customer?.type === 'WHOLESALE';
 
     const branchType = session.branch.type;
+    const openSessionIds = await this.openSessionIds();
+    const pooledSessions = openSessionIds.includes(session.id) ? openSessionIds : [...openSessionIds, session.id];
+    const pooledStock = await this.loadStockSnapshot(pooledSessions);
 
     // Calculate totals and validate stock
     let totalAmount = 0;
@@ -187,8 +190,9 @@ export class SalesService {
         ? await this.productsService.findOne(product.parentProductId)
         : product;
 
-      const availableStock =
-        product.category === ProductCategory.PRODUCTION_ITEM
+      const availableStock = this.isUniversal(product)
+        ? this.universalOnHand(product, pooledStock)
+        : product.category === ProductCategory.PRODUCTION_ITEM
           ? await this.getProducedAvailableStock(createSaleDto.sessionId, itemDto.productId)
           : await this.getAvailableStock(createSaleDto.sessionId, stockProductId);
       if (availableStock < itemDto.quantity) {
@@ -618,11 +622,94 @@ export class SalesService {
     );
   }
 
+  /** All-branches products can be sold from any till. Stock is the pool of every open session. */
+  private isUniversal(product: Product): boolean {
+    return (product.branchScope ?? BranchCatalogScope.ALL) === BranchCatalogScope.ALL;
+  }
+
+  private async openSessionIds(): Promise<number[]> {
+    const rows = await this.dataSource.getRepository(StockSession).find({
+      where: { status: SessionStatus.OPEN },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  private async loadStockSnapshot(sessionIds: number[]): Promise<{
+    entryQty: (productId: number, type: StockEntryType) => number;
+    sold: Map<number, number>;
+    produced: Map<number, number>;
+  }> {
+    const empty = {
+      entryQty: () => 0,
+      sold: new Map<number, number>(),
+      produced: new Map<number, number>(),
+    };
+    if (sessionIds.length === 0) return empty;
+
+    const [entryRows, soldRows, producedRows] = await Promise.all([
+      this.stockEntryRepository
+        .createQueryBuilder('entry')
+        .select('entry.productId', 'productId')
+        .addSelect('entry.type', 'type')
+        .addSelect('COALESCE(SUM(entry.quantity), 0)', 'total')
+        .where('entry.sessionId IN (:...sessionIds)', { sessionIds })
+        .groupBy('entry.productId')
+        .addGroupBy('entry.type')
+        .getRawMany(),
+      this.saleItemRepository
+        .createQueryBuilder('item')
+        .select('item.productId', 'productId')
+        .addSelect('COALESCE(SUM(item.quantity), 0)', 'total')
+        .innerJoin('item.sale', 'sale')
+        .where('sale.sessionId IN (:...sessionIds)', { sessionIds })
+        .groupBy('item.productId')
+        .getRawMany(),
+      this.productionRunRepository
+        .createQueryBuilder('run')
+        .select('run.finishedProductId', 'productId')
+        .addSelect('COALESCE(SUM(run.actualOutputQuantity - run.wastedQuantity), 0)', 'total')
+        .where('run.sessionId IN (:...sessionIds)', { sessionIds })
+        .groupBy('run.finishedProductId')
+        .getRawMany(),
+    ]);
+
+    const entryTotals = new Map<string, number>();
+    for (const row of entryRows) {
+      const productId = Number(row.productId ?? row.productid);
+      const type = String(row.type ?? '');
+      const total = Number(row.total ?? 0);
+      if (Number.isFinite(productId)) entryTotals.set(`${productId}:${type}`, Number.isFinite(total) ? total : 0);
+    }
+
+    return {
+      entryQty: (productId, type) => entryTotals.get(`${productId}:${type}`) || 0,
+      sold: this.rawQtyMap(soldRows),
+      produced: this.rawQtyMap(producedRows),
+    };
+  }
+
+  /** On-hand for an all-branches product, summed across the open sessions in the snapshot. */
+  private universalOnHand(
+    product: Product,
+    snapshot: {
+      entryQty: (productId: number, type: StockEntryType) => number;
+      sold: Map<number, number>;
+      produced: Map<number, number>;
+    },
+  ): number {
+    const recorded = this.sessionStockOnHand(product.id, snapshot.entryQty, snapshot.sold);
+    const produced = (snapshot.produced.get(product.id) || 0) - (snapshot.sold.get(product.id) || 0);
+    return product.category === ProductCategory.PRODUCTION_ITEM ? Math.max(recorded, produced) : recorded;
+  }
+
   /**
-   * Products the till can sell right now: active for this branch, not kitchen inputs,
-   * with quantity still on hand in the session. Prepared items use production output
-   * minus sales. Everything else uses opening + incoming, minus sales, wastage,
-   * byproduct sales, partner shares, kitchen issues, and production use.
+   * Products the till can sell right now. Branch-specific items must have quantity
+   * in this session. All-branches items use stock from every open session, so a
+   * cashier can sell soda recorded on the shop session.
+   * Prepared branch items use production output minus sales. Everything else uses
+   * opening + incoming, minus sales, wastage, byproduct sales, partner shares,
+   * kitchen issues, and production use.
    */
   async getTillAvailability(sessionId: number, user: RequestUser) {
     const session = await this.stockSessionsService.findOne(sessionId);
@@ -632,12 +719,26 @@ export class SalesService {
       }
     }
 
-    const products = await this.productsService.findActiveForBranch(session.branchId);
-    const sellable = products.filter((product) => product.segment !== ProductSegment.KITCHEN_SUPPLY);
+    const products = await this.productsService.findActive();
+    const sellable = products.filter((product) => {
+      if (product.segment === ProductSegment.KITCHEN_SUPPLY) return false;
+      if (this.isUniversal(product)) return true;
+      const scope = product.branchScope;
+      if (scope === BranchCatalogScope.GENERAL_BUTCHERY) {
+        return session.branch?.type === BranchType.GENERAL_BUTCHERY;
+      }
+      if (scope === BranchCatalogScope.PORK_BUTCHERY) {
+        return session.branch?.type === BranchType.PORK_BUTCHERY;
+      }
+      return false;
+    });
 
     const entries = await this.stockEntriesService.findAll(sessionId);
     const soldByProduct = await this.sumSaleQuantities(sessionId);
     const producedByProduct = await this.sumProducedQuantities(sessionId);
+    const openSessionIds = await this.openSessionIds();
+    const pooledSessions = openSessionIds.includes(sessionId) ? openSessionIds : [...openSessionIds, sessionId];
+    const pooledStock = await this.loadStockSnapshot(pooledSessions);
 
     const entryQty = (productId: number, type: StockEntryType) =>
       entries
@@ -646,8 +747,9 @@ export class SalesService {
 
     const rows = sellable
       .map((product) => {
-        const available =
-          product.category === ProductCategory.PRODUCTION_ITEM
+        const available = this.isUniversal(product)
+          ? this.universalOnHand(product, pooledStock)
+          : product.category === ProductCategory.PRODUCTION_ITEM
             ? (producedByProduct.get(product.id) || 0) - (soldByProduct.get(product.id) || 0)
             : this.sessionStockOnHand(product.parentProductId || product.id, entryQty, soldByProduct);
         return { product, available: Math.round(available * 1000) / 1000 };
