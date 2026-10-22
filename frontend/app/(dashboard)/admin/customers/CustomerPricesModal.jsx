@@ -87,7 +87,7 @@ export default function CustomerPricesModal({ customer, onClose }) {
   const specialCount = Object.keys(saved).length;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div className="mb-4">
           <h2 className="text-xl font-bold text-gray-900">Prices for {customer.name}</h2>
@@ -105,7 +105,7 @@ export default function CustomerPricesModal({ customer, onClose }) {
           className="mb-3 w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
         />
 
-        <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+        <div className="flex-1 overflow-auto border border-gray-200 rounded-lg">
           {loading ? (
             <p className="p-6 text-center text-gray-500">Loading prices…</p>
           ) : (

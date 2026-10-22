@@ -478,6 +478,27 @@ export default function CustomersPage() {
                 </div>
               </div>
 
+              {formData.isWholesale && (
+                <div className="rounded-lg border border-purple-200 bg-purple-50/60 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    <span className="text-sm font-medium text-gray-900 block">Special prices</span>
+                    <span className="text-xs text-gray-600">
+                      {editingCustomer && customerIsWholesale(editingCustomer)
+                        ? "Give this customer their own price per product. Products without one use the standard wholesale price."
+                        : "Save this customer as wholesale first, then set their own price per product here."}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!editingCustomer || !customerIsWholesale(editingCustomer)}
+                    onClick={() => setPricesCustomer(editingCustomer)}
+                    className="shrink-0 rounded-md border border-purple-300 bg-white px-4 py-2 text-sm font-medium text-purple-800 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Set prices
+                  </button>
+                </div>
+              )}
+
               <div className="rounded-lg border border-gray-200 p-4 space-y-3 bg-gray-50/80">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
