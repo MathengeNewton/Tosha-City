@@ -1,11 +1,16 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
-import { isKitchenSupplyProduct } from "../../../../../lib/productSegment";
+
+function formatOnHand(product) {
+  const qty = Number(product?.available || 0);
+  const shown = qty.toLocaleString("en-KE", { maximumFractionDigits: 3 });
+  return `${shown} ${product?.unit || ""} left`.trim();
+}
 
 function getPromptLabel(product) {
   if (!product) return "Quantity";
@@ -14,6 +19,243 @@ function getPromptLabel(product) {
   if (product.saleMode === "PORTION") return "Number of portions";
   if (product.saleMode === "PIECE") return "Number of pieces";
   return `Quantity (${product.unit || "kg"})`;
+}
+
+const PAYMENT_METHODS = [
+  { id: "CASH", label: "Cash" },
+  { id: "MPESA", label: "M-Pesa" },
+  { id: "CREDIT", label: "Credit" },
+];
+
+function CashierTill({
+  user,
+  currentSession,
+  products,
+  filteredProducts,
+  productSearch,
+  setProductSearch,
+  saleItems,
+  quickAddProduct,
+  removeItem,
+  updateItem,
+  paymentMethod,
+  setPaymentMethod,
+  customerId,
+  onCustomerChange,
+  customers,
+  calculateTotal,
+  onSubmit,
+  onClear,
+  submitting,
+}) {
+  const branchName = currentSession.branch?.name || user?.branch?.name || "This branch";
+  const selectedCustomer = customerId
+    ? customers.find((c) => c.id === parseInt(customerId, 10))
+    : null;
+  const wholesale = selectedCustomer?.type === "WHOLESALE";
+  const total = calculateTotal();
+
+  return (
+    <form onSubmit={onSubmit} className="flex h-full min-h-0 flex-col gap-2 lg:flex-row">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <div className="flex items-center gap-3 border-b border-gray-200 px-3 py-3">
+          <input
+            type="search"
+            placeholder="Search products"
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-base min-h-[52px] focus:border-blue-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20"
+            autoComplete="off"
+            autoFocus
+          />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {filteredProducts.length === 0 ? (
+            <p className="py-16 text-center text-base text-gray-500">
+              {productSearch.trim() ? "No products match." : "Nothing left to sell in this session."}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+              {filteredProducts.map((product) => {
+                const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
+                const showPrice = wholesale && product.wholesalePrice != null ? product.wholesalePrice : retail;
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => quickAddProduct(product)}
+                    className="flex min-h-[112px] flex-col items-start justify-between rounded-2xl border-2 border-gray-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.98] hover:border-blue-900"
+                  >
+                    <span className="line-clamp-2 text-base font-bold leading-snug text-gray-900">
+                      {product.name}
+                    </span>
+                    <span className="mt-1 text-sm font-semibold text-gray-600">{formatOnHand(product)}</span>
+                    <span className="mt-2 text-lg font-bold tabular-nums text-blue-900">
+                      KES {Number(showPrice).toLocaleString("en-KE", { maximumFractionDigits: 0 })}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <aside className="flex max-h-[46%] min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white lg:max-h-none lg:w-[400px]">
+        <div className="border-b border-gray-200 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{branchName}</p>
+          <h1 className="text-xl font-bold text-gray-900">Current sale</h1>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 px-3 pt-3">
+          {PAYMENT_METHODS.map((method) => (
+            <button
+              key={method.id}
+              type="button"
+              onClick={() => setPaymentMethod(method.id)}
+              className={`min-h-[48px] rounded-xl text-sm font-bold ${
+                paymentMethod === method.id
+                  ? "bg-blue-900 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {method.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="px-3 pt-3">
+          <select
+            value={customerId}
+            onChange={(e) => onCustomerChange(e.target.value)}
+            required={paymentMethod === "CREDIT"}
+            className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-base min-h-[48px] focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
+          >
+            <option value="">{paymentMethod === "CREDIT" ? "Select customer" : "Walk-in"}</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name}
+                {customer.type === "WHOLESALE" ? " · Wholesale" : ""}
+                {customer.type === "CREDIT" ? " · Credit" : ""}
+              </option>
+            ))}
+          </select>
+          {wholesale && (
+            <p className="mt-2 text-xs font-semibold text-green-800">Wholesale prices on new taps.</p>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+          {saleItems.length === 0 ? (
+            <div className="flex h-full min-h-[120px] items-center justify-center rounded-xl border-2 border-dashed border-gray-200 px-4 text-center text-sm text-gray-500">
+              Tap a product to start the sale.
+            </div>
+          ) : (
+            saleItems.map((item, index) => {
+              const selectedProduct = products.find((product) => product.id === parseInt(item.productId, 10));
+              const saleMode = selectedProduct?.saleMode || "WEIGHT";
+              const isWeightSale = saleMode === "WEIGHT";
+              return (
+                <div key={`${index}-${item.productId || "x"}`} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    {selectedProduct ? (
+                      <p className="text-sm font-bold leading-snug text-gray-900">{selectedProduct.name}</p>
+                    ) : (
+                      <select
+                        value={item.productId}
+                        onChange={(e) => updateItem(index, "productId", e.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm"
+                        required
+                      >
+                        <option value="">Select product</option>
+                        {products.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeItem(index)}
+                      className="shrink-0 rounded-lg px-2 py-1 text-sm font-semibold text-red-700 hover:bg-red-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        KES
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.amount}
+                        onChange={(e) => updateItem(index, "amount", e.target.value)}
+                        readOnly={!isWeightSale}
+                        required={isWeightSale}
+                        className={`w-full rounded-lg border border-gray-300 px-2 py-2 text-sm min-h-[44px] ${
+                          isWeightSale ? "bg-white" : "bg-gray-100 text-gray-600"
+                        }`}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        {isWeightSale ? selectedProduct?.unit || "kg" : "Qty"}
+                      </span>
+                      <input
+                        type="number"
+                        step={isWeightSale ? "0.001" : "0.01"}
+                        min="0"
+                        value={item.quantity || ""}
+                        onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm min-h-[44px]"
+                      />
+                    </label>
+                    <div>
+                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        Price
+                      </span>
+                      <p className="flex min-h-[44px] items-center rounded-lg bg-gray-100 px-2 text-sm font-semibold tabular-nums text-gray-800">
+                        {Number(item.price || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="border-t border-gray-200 p-3">
+          <div className="mb-3 flex items-end justify-between">
+            <span className="text-sm font-semibold text-gray-600">Total</span>
+            <span className="text-3xl font-bold tabular-nums text-gray-900">
+              {total.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={saleItems.length === 0}
+              className="min-h-[60px] rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            >
+              Clear
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || saleItems.length === 0}
+              className="min-h-[60px] flex-1 rounded-xl bg-green-600 text-lg font-bold text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-50"
+            >
+              {submitting ? "Charging…" : "Charge"}
+            </button>
+          </div>
+        </div>
+      </aside>
+    </form>
+  );
 }
 
 export default function NewSalePage() {
@@ -29,10 +271,11 @@ export default function NewSalePage() {
   const [branches, setBranches] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [saleItems, setSaleItems] = useState([]);
-  const [availableStock, setAvailableStock] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [customerId, setCustomerId] = useState('');
   const [productSearch, setProductSearch] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
@@ -98,32 +341,13 @@ export default function NewSalePage() {
 
       setCurrentSession(session);
 
-      // Get products
-      const productsRes = await apiClient.products.getActive({ branchId });
-      const productsList = (productsRes.data || []).filter((p) => !isKitchenSupplyProduct(p));
-      setProducts(productsList);
+      const productsRes = await apiClient.sales.getTillAvailability({ sessionId: session.id });
+      const productsList = Array.isArray(productsRes.data) ? productsRes.data : [];
+      setProducts(productsList.filter((product) => Number(product.available) > 0));
 
       // Get credit and wholesale customers (for credit sales and wholesale pricing)
       const customersRes = await apiClient.customers.getAll({ activeOnly: true });
       setCustomers(customersRes.data || []);
-
-      // Get available stock for each product
-      const stockPromises = productsList.map(async (product) => {
-        try {
-          // We'll need to calculate available stock from stock entries and sales
-          // For now, we'll just set a placeholder
-          return { productId: product.id, available: 0 };
-        } catch (error) {
-          return { productId: product.id, available: 0 };
-        }
-      });
-
-      const stockData = await Promise.all(stockPromises);
-      const stockMap = {};
-      stockData.forEach(s => {
-        stockMap[s.productId] = s.available;
-      });
-      setAvailableStock(stockMap);
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -252,9 +476,40 @@ export default function NewSalePage() {
     }, 0);
   };
 
+  const handleCustomerChange = (newId) => {
+    setCustomerId(newId);
+    const selectedCustomer = newId ? customers.find((c) => c.id === parseInt(newId, 10)) : null;
+    const useWholesale = selectedCustomer?.type === "WHOLESALE";
+    setSaleItems((prev) =>
+      prev.map((item) => {
+        const product = products.find((p) => p.id === parseInt(item.productId, 10));
+        if (!product) return item;
+        const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
+        const newPrice = useWholesale ? product.wholesalePrice ?? retail : retail;
+        if ((product.saleMode || "WEIGHT") === "WEIGHT") {
+          const amountNum = parseFloat(item.amount || 0);
+          const qtyNum = parseFloat(item.quantity || 0);
+          if (item.amount !== "" && item.amount != null && amountNum > 0 && newPrice > 0) {
+            const quantity = (amountNum / newPrice).toFixed(3);
+            return { ...item, price: String(newPrice), quantity };
+          }
+          if (item.quantity !== "" && item.quantity != null && qtyNum > 0 && newPrice > 0) {
+            const amount = (qtyNum * newPrice).toFixed(2);
+            return { ...item, price: String(newPrice), amount };
+          }
+          return { ...item, price: String(newPrice) };
+        }
+        const quantity = parseFloat(item.quantity || 0);
+        const amount = quantity > 0 ? (quantity * newPrice).toFixed(2) : item.amount;
+        return { ...item, price: String(newPrice), amount };
+      }),
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    if (submittingRef.current) return;
+
     if (saleItems.length === 0) {
       toast.error("Please add at least one item to the sale");
       return;
@@ -274,9 +529,13 @@ export default function NewSalePage() {
     }
 
     try {
+      submittingRef.current = true;
+      setSubmitting(true);
       // Validate credit sales require customer
       if (paymentMethod === 'CREDIT' && !customerId) {
         toast.error("Please select a customer for credit sales");
+        submittingRef.current = false;
+        setSubmitting(false);
         return;
       }
 
@@ -304,6 +563,8 @@ export default function NewSalePage() {
       router.push(`/dashboard/sales/${response.data.id}`);
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to create sale");
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -349,6 +610,32 @@ export default function NewSalePage() {
           </button>
         </div>
       </PageShell>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <CashierTill
+        user={user}
+        currentSession={currentSession}
+        products={products}
+        filteredProducts={filteredProducts}
+        productSearch={productSearch}
+        setProductSearch={setProductSearch}
+        saleItems={saleItems}
+        quickAddProduct={quickAddProduct}
+        removeItem={removeItem}
+        updateItem={updateItem}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
+        customerId={customerId}
+        onCustomerChange={handleCustomerChange}
+        customers={customers}
+        calculateTotal={calculateTotal}
+        onSubmit={handleSubmit}
+        onClear={() => setSaleItems([])}
+        submitting={submitting}
+      />
     );
   }
 
@@ -482,7 +769,7 @@ export default function NewSalePage() {
                 <p className="py-10 text-center text-sm text-gray-500">
                   {productSearch.trim()
                     ? "No products match this search."
-                    : "No products available for this branch."}
+                    : "Nothing left to sell in this session."}
                 </p>
               ) : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -504,8 +791,8 @@ export default function NewSalePage() {
                         <span className="line-clamp-2 text-sm font-bold leading-snug text-gray-900 sm:text-base">
                           {product.name}
                         </span>
-                        <span className="mt-1 text-xs text-gray-500">
-                          {product.unit} · {product.saleMode || "WEIGHT"}
+                        <span className="mt-1 text-xs font-semibold text-gray-600">
+                          {formatOnHand(product)}
                         </span>
                         <span className="mt-2 text-base font-bold tabular-nums text-blue-900 sm:text-lg">
                           KES{" "}
@@ -686,9 +973,10 @@ export default function NewSalePage() {
               </button>
               <button
                 type="submit"
-                className="flex-[2] rounded-xl bg-green-600 px-6 py-4 text-center text-lg font-bold text-white shadow-md hover:bg-green-700 active:bg-green-800 min-h-[56px] touch-manipulation sm:min-h-[60px] sm:text-xl"
+                disabled={submitting}
+                className="flex-[2] rounded-xl bg-green-600 px-6 py-4 text-center text-lg font-bold text-white shadow-md hover:bg-green-700 active:bg-green-800 min-h-[56px] touch-manipulation sm:min-h-[60px] sm:text-xl disabled:opacity-50"
               >
-                Create sale
+                {submitting ? "Creating…" : "Create sale"}
               </button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import ProtectedRoute from "../../components/ProtectedRoute";
 import { useAuth, isKitchenOnlyAccount } from "../../contexts/AuthContext";
 
 import SideBar from "./SideBar";
+import CashierRail, { CashierStatusBar } from "./CashierRail";
 import DashBoardHeader from "./DashboardHeader";
 import DashboardFooter from "./DashboardFooter";
 import {
@@ -51,13 +52,13 @@ export default function DashboardLayout({ children }) {
       ]
     : [];
 
-  const cashierMenu = [
-    { name: "Dashboard", href: "/dashboard", icon: HomeIcon },
-    { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
+  const cashierPos = !loading && !!user && !isAdmin && !kitchenOnly;
+  const isTill =
+    pathname === "/dashboard/sales/new" || pathname?.startsWith("/dashboard/sales/new/");
+  const cashierMore = [
+    { name: "Stock", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     ...restaurantItems,
     { name: "Production", href: "/dashboard/production", icon: CpuChipIcon },
-    { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
-    { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
   ];
 
   const kitchenOnlyMenu = [{ name: "Kitchen", href: "/dashboard/kitchen", icon: FireIcon }];
@@ -79,7 +80,7 @@ export default function DashboardLayout({ children }) {
     { name: "Settings", href: "/admin/settings", icon: CogIcon },
   ];
 
-  const menuItems = isAdmin ? adminMenu : kitchenOnly ? kitchenOnlyMenu : cashierMenu;
+  const menuItems = isAdmin ? adminMenu : kitchenOnlyMenu;
   const cashierAllowedAdminPaths = ["/admin/settings"];
   const isCashierAllowedPath =
     pathname && cashierAllowedAdminPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -108,22 +109,34 @@ export default function DashboardLayout({ children }) {
   return (
     <ProtectedRoute>
       <div className="flex h-screen overflow-hidden bg-gray-50 relative">
-        <SideBar
-          isCollapsed={isCollapsed}
-          setIsCollapsed={setIsCollapsed}
-          isMobileOpen={isMobileOpen}
-          setIsMobileOpen={setIsMobileOpen}
-          pathname={pathname}
-          menuItems={menuItems}
-          brandHref={kitchenOnly ? "/dashboard/kitchen" : "/"}
-        />
+        {cashierPos ? (
+          <CashierRail pathname={pathname} moreItems={cashierMore} />
+        ) : (
+          <SideBar
+            isCollapsed={isCollapsed}
+            setIsCollapsed={setIsCollapsed}
+            isMobileOpen={isMobileOpen}
+            setIsMobileOpen={setIsMobileOpen}
+            pathname={pathname}
+            menuItems={menuItems}
+            brandHref={kitchenOnly ? "/dashboard/kitchen" : "/"}
+          />
+        )}
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <DashBoardHeader />
-          <main className="flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-gradient-to-b from-white/70 via-gray-50/40 to-gray-100/60">
-            {children}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {cashierPos ? <CashierStatusBar /> : <DashBoardHeader />}
+          <main
+            className={
+              cashierPos
+                ? isTill
+                  ? "min-h-0 flex-1 overflow-hidden bg-gray-100 p-2"
+                  : "min-h-0 flex-1 overflow-y-auto bg-gray-100 p-3 sm:p-4"
+                : "flex-1 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-gradient-to-b from-white/70 via-gray-50/40 to-gray-100/60"
+            }
+          >
+            {cashierPos && isTill ? <div className="h-full min-h-0">{children}</div> : children}
           </main>
-          <DashboardFooter />
+          {cashierPos ? null : <DashboardFooter />}
           <ToastContainer
             position="top-right"
             autoClose={3000}
@@ -138,7 +151,7 @@ export default function DashboardLayout({ children }) {
         </div>
 
         {/* Mobile Backdrop */}
-        {isMobileOpen && (
+        {!cashierPos && isMobileOpen && (
           <div
             className="fixed inset-0 bg-black/50 z-40 md:hidden"
             onClick={() => setIsMobileOpen(false)}
@@ -146,6 +159,7 @@ export default function DashboardLayout({ children }) {
         )}
 
         {/* Mobile Toggle Button */}
+        {!cashierPos && (
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           className="cursor-pointer md:hidden fixed bottom-4 right-4 z-50 bg-blue-900 hover:bg-[#1e88b5] text-white p-3 rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -157,6 +171,7 @@ export default function DashboardLayout({ children }) {
             <Bars3Icon className="h-6 w-6" />
           )}
         </button>
+        )}
       </div>
     </ProtectedRoute>
   );

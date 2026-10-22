@@ -13,7 +13,7 @@ export class CreateSaleItemDto {
   @Min(0.01)
   quantity: number;
 
-  @ApiProperty({ description: 'Unit price (optional, uses product default if not provided)', example: 800.0, required: false })
+  @ApiProperty({ description: 'Unit price. Cashiers cannot override this; the catalog price is used.', example: 800.0, required: false })
   @IsNumber()
   @Min(0)
   unitPrice?: number;

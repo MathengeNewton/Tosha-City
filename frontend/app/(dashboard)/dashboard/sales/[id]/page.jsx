@@ -4,8 +4,8 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
-import ReceiptView from "../ReceiptView";
 import { useAuth } from "../../../../../contexts/AuthContext";
+import { buildCustomerBillDocument } from "../customerBill";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
 
 export default function SaleDetailsPage() {
@@ -129,54 +129,15 @@ export default function SaleDetailsPage() {
     }
   };
 
-  const handlePrintReceipt = async () => {
-    try {
-      // Fetch plain text receipt from backend
-      const response = await apiClient.sales.getReceipt(saleId);
-      const receiptText = response.data;
-
-      // Create a new window with the plain text receipt
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        toast.error('Please allow popups to print receipt');
-        return;
-      }
-
-      // Write plain text with monospace font for proper formatting
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Receipt - ${sale.saleNumber}</title>
-          <style>
-            body {
-              font-family: 'Courier New', monospace;
-              font-size: 12pt;
-              margin: 20px;
-              white-space: pre;
-            }
-            @media print {
-              body { margin: 0; }
-            }
-          </style>
-        </head>
-        <body>${receiptText.replace(/\n/g, '<br>')}</body>
-        </html>
-      `);
-      printWindow.document.close();
-
-      // Wait for content to load, then print
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-          // Close window after printing (optional)
-          // printWindow.close();
-        }, 250);
-      };
-    } catch (error) {
-      console.error('Error printing receipt:', error);
-      toast.error(error.response?.data?.message || 'Failed to print receipt');
+  const handlePrintReceipt = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Please allow popups to print the bill");
+      return;
     }
+    printWindow.document.open();
+    printWindow.document.write(buildCustomerBillDocument(sale));
+    printWindow.document.close();
   };
 
   if (loading) {
@@ -200,14 +161,6 @@ export default function SaleDetailsPage() {
       {/* Header and actions - hidden when printing */}
       <PageHeader className="no-print" title="Sale Details" subtitle={`Sale #${sale.saleNumber}`}>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          {sale.paymentStatus === "PAID" && (
-            <button
-              onClick={handlePrintReceipt}
-              className="flex-1 sm:flex-none bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
-            >
-              Print Receipt
-            </button>
-          )}
           {sale.paymentStatus === "PENDING" && (
             <button
               onClick={openRecordPaymentModal}
@@ -235,40 +188,73 @@ export default function SaleDetailsPage() {
         </div>
       </PageHeader>
 
-      {/* Products in this sale – pill list, scrollable */}
-      {sale.items?.length > 0 && (
-        <div className="no-print bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">Products in this sale</p>
-          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto overflow-x-hidden rounded-md border border-gray-100 bg-gray-50/50 p-2">
-            {sale.items.map((item) => (
-              <span
-                key={item.id}
-                className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
-              >
-                {item.product?.name || "Unknown"}
-              </span>
-            ))}
-          </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">
+            KES {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+          </p>
         </div>
-      )}
-
-      {/* When PENDING: message only; when PAID: receipt + print button already in header */}
-      {sale.paymentStatus === "PENDING" && (
-        <div className="no-print bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
-          Complete payment above to print receipt.
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
+          <p className="mt-1 text-lg font-bold text-gray-900">{sale.paymentMethod || "—"}</p>
+          <p className={`mt-1 text-sm font-semibold ${sale.paymentStatus === "PAID" ? "text-green-700" : "text-amber-700"}`}>
+            {sale.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
+          </p>
         </div>
-      )}
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">When</p>
+          <p className="mt-1 text-lg font-bold text-gray-900">
+            {sale.soldAt ? new Date(sale.soldAt).toLocaleString() : "—"}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            {sale.customer?.name || "Walk-in"}
+            {sale.soldBy?.username ? ` · ${sale.soldBy.username}` : ""}
+          </p>
+        </div>
+      </div>
 
-      {sale.paymentStatus === "PAID" && (
-        <ReceiptView sale={sale} payment={payment} />
-      )}
+      <div className="space-y-3">
+        {(sale.items || []).map((item) => {
+          const qty = parseFloat(item.quantity || 0);
+          const unitPrice = parseFloat(item.unitPrice || 0);
+          const lineTotal = parseFloat(item.totalPrice || qty * unitPrice || 0);
+          return (
+            <div key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-lg font-bold text-gray-900">{item.product?.name || "Item"}</p>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {qty.toLocaleString("en-KE", { maximumFractionDigits: 3 })} {item.product?.unit || ""} × KES{" "}
+                    {unitPrice.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <p className="text-lg font-bold tabular-nums text-gray-900">
+                  {lineTotal.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      <div className="no-print flex gap-4">
+      {payment?.mpesaReference ? (
+        <p className="text-sm text-gray-600">M-Pesa ref {payment.mpesaReference}</p>
+      ) : null}
+
+      <div className="no-print flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handlePrintReceipt}
+          className="min-h-[52px] rounded-xl bg-blue-900 px-6 text-base font-bold text-white hover:bg-[#1e88b5]"
+        >
+          Print receipt
+        </button>
         <Link
           href="/dashboard/sales"
-          className="bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors min-h-[44px] flex items-center justify-center text-base"
+          className="inline-flex min-h-[52px] items-center rounded-xl bg-gray-200 px-6 text-base font-semibold text-gray-800 hover:bg-gray-300"
         >
-          Back to Sales
+          Back to sales
         </Link>
       </div>
 

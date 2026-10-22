@@ -103,7 +103,7 @@ export default function LoginForm() {
           ? "/admin/dashboard"
           : isKitchenOnlyAccount(result.user)
             ? "/dashboard/kitchen"
-            : "/dashboard";
+            : "/dashboard/sales/new";
 
         // Redirect after successful login
         setTimeout(() => {

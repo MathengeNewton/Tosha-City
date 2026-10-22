@@ -1,19 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
-import { useAuth } from "../../../../contexts/AuthContext";
 import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 
 export default function SalesListPage() {
-  const router = useRouter();
-  const { hasRole } = useAuth();
-  const isAdmin = hasRole("admin");
-  const canAdminEditSale = (sale) =>
-    isAdmin && sale.paymentStatus === "PENDING" && sale.session?.status === "OPEN";
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
@@ -22,14 +15,6 @@ export default function SalesListPage() {
     dateFrom: "",
     dateTo: "",
   });
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentModalSale, setPaymentModalSale] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [mpesaReference, setMpesaReference] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [saleToEdit, setSaleToEdit] = useState(null);
-  const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
-  const [submittingEdit, setSubmittingEdit] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -59,77 +44,6 @@ export default function SalesListPage() {
       toast.error("Failed to load sales");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openRecordPaymentModal = (sale) => {
-    setPaymentModalSale({ saleId: sale.id, totalAmount: sale.totalAmount });
-    setPaymentMethod('CASH');
-    setMpesaReference('');
-    setShowPaymentModal(true);
-  };
-
-  const closePaymentModal = () => {
-    setShowPaymentModal(false);
-    setPaymentModalSale(null);
-    setPaymentMethod('CASH');
-    setMpesaReference('');
-  };
-
-  const handleRecordPaymentSubmit = async (e) => {
-    e.preventDefault();
-    if (!paymentModalSale) return;
-    if (paymentMethod === 'MPESA' && !mpesaReference.trim()) {
-      toast.error("MPESA reference is required");
-      return;
-    }
-    try {
-      setSubmitting(true);
-      await apiClient.payments.create({
-        saleId: paymentModalSale.saleId,
-        amount: paymentModalSale.totalAmount,
-        method: paymentMethod,
-        mpesaReference: paymentMethod === 'MPESA' ? mpesaReference.trim() : undefined,
-      });
-      toast.success("Payment recorded successfully");
-      closePaymentModal();
-      loadData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to record payment");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleOpenEditSale = (sale) => {
-    setSaleToEdit(sale);
-    setEditPaymentMethod(sale.paymentMethod || 'CASH');
-  };
-
-  const handleSaveEditSale = async (e) => {
-    e.preventDefault();
-    if (!saleToEdit) return;
-    try {
-      setSubmittingEdit(true);
-      await apiClient.sales.update(saleToEdit.id, { paymentMethod: editPaymentMethod });
-      toast.success("Sale updated");
-      setSaleToEdit(null);
-      loadData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update sale");
-    } finally {
-      setSubmittingEdit(false);
-    }
-  };
-
-  const handleDeleteSale = async (sale) => {
-    if (!confirm(`Delete sale ${sale.saleNumber}? Only unpaid sales can be deleted.`)) return;
-    try {
-      await apiClient.sales.delete(sale.id);
-      toast.success("Sale deleted");
-      loadData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to delete sale");
     }
   };
 
@@ -237,200 +151,46 @@ export default function SalesListPage() {
         </div>
       </div>
 
-      {/* Sales Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale #</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-[180px] max-w-[220px]">Products</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {sales.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
-                    No sales found
-                  </td>
-                </tr>
-              ) : (
-                sales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-gray-50">
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {sale.saleNumber}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="sm:hidden">{new Date(sale.soldAt).toLocaleDateString()}</span>
-                      <span className="hidden sm:inline">{new Date(sale.soldAt).toLocaleString()}</span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 text-sm w-[180px] max-w-[220px]">
-                      <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto overflow-x-hidden border border-gray-100 rounded-md p-1.5 bg-gray-50/50">
-                        {(sale.items || []).map((item) => (
-                          <span
-                            key={item.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 whitespace-nowrap"
-                          >
-                            {item.product?.name || "Unknown"}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        sale.paymentStatus === 'PAID' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {sale.paymentStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <Link
-                          href={`/dashboard/sales/${sale.id}`}
-                          className="text-blue-600 hover:text-blue-800 min-h-[44px] flex items-center"
-                        >
-                          View
-                        </Link>
-                        {sale.paymentStatus === 'PENDING' && (
-                          <button
-                            onClick={() => openRecordPaymentModal(sale)}
-                            className="text-green-600 hover:text-green-800 min-h-[44px] text-left sm:text-left"
-                          >
-                            Record Payment
-                          </button>
-                        )}
-                        {canAdminEditSale(sale) && (
-                          <button
-                            onClick={() => handleOpenEditSale(sale)}
-                            className="text-gray-700 hover:text-gray-900 min-h-[44px] text-left sm:text-left"
-                          >
-                            Edit
-                          </button>
-                        )}
-                        {canAdminEditSale(sale) && (
-                          <button
-                            onClick={() => handleDeleteSale(sale)}
-                            className="text-red-600 hover:text-red-800 min-h-[44px] text-left sm:text-left"
-                            title="Only unpaid sales can be deleted"
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {sales.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-16 text-center text-gray-500">
+          No sales yet
         </div>
-      </div>
-
-      {/* Edit Sale Modal (admin only) */}
-      {saleToEdit && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Sale {saleToEdit.saleNumber}</h2>
-            <p className="text-sm text-gray-600 mb-4">Unpaid sales: change payment method only.</p>
-            <form onSubmit={handleSaveEditSale} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
-                <select
-                  value={editPaymentMethod}
-                  onChange={(e) => setEditPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="MPESA">MPESA</option>
-                  <option value="CREDIT">Credit</option>
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSaleToEdit(null)}
-                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingEdit}
-                  className="flex-1 bg-blue-900 text-white px-4 py-3 rounded-md hover:bg-blue-800 disabled:opacity-50 min-h-[44px] text-base"
-                >
-                  {submittingEdit ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Record Payment Modal */}
-      {showPaymentModal && paymentModalSale && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Record Payment</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Amount: KES {parseFloat(paymentModalSale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-            </p>
-            <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => {
-                    setPaymentMethod(e.target.value);
-                    if (e.target.value === 'CASH') setMpesaReference('');
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="MPESA">MPESA</option>
-                </select>
-              </div>
-              {paymentMethod === 'MPESA' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">MPESA Reference *</label>
-                  <input
-                    type="text"
-                    value={mpesaReference}
-                    onChange={(e) => setMpesaReference(e.target.value)}
-                    placeholder="e.g. ABC123XYZ"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    required={paymentMethod === 'MPESA'}
-                  />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {sales.map((sale) => {
+            const names = (sale.items || []).map((item) => item.product?.name).filter(Boolean);
+            const summary = names.length ? names.join(", ") : "No items";
+            return (
+              <Link
+                key={sale.id}
+                href={`/dashboard/sales/${sale.id}`}
+                className="flex min-h-[140px] flex-col rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-900"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-bold text-gray-900">{sale.saleNumber}</p>
+                  <p className="text-lg font-bold tabular-nums text-gray-900">
+                    {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                  </p>
                 </div>
-              )}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button
-                  type="button"
-                  onClick={closePaymentModal}
-                  className="flex-1 bg-gray-200 text-gray-800 px-4 py-3 rounded-md hover:bg-gray-300 min-h-[44px] text-base"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-700 disabled:opacity-50 min-h-[44px] text-base"
-                >
-                  {submitting ? 'Recording...' : 'Record Payment'}
-                </button>
-              </div>
-            </form>
-          </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  {sale.soldAt ? new Date(sale.soldAt).toLocaleString() : ""}
+                </p>
+                <p className="mt-3 line-clamp-2 flex-1 text-sm font-medium text-gray-800">{summary}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {sale.paymentMethod || ""}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                      sale.paymentStatus === "PAID" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {sale.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </PageShell>

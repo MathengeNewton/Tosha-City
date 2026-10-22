@@ -173,9 +173,11 @@ export class SalesService {
       const product = await this.productsService.findOne(itemDto.productId);
       this.assertProductSellableAtTill(product);
       this.assertProductAllowedForBranch(product, branchType);
+      const catalogPrice = isWholesaleSale
+        ? Number(product.wholesalePrice ?? product.defaultPrice)
+        : Number(product.defaultPrice);
       const unitPrice =
-        itemDto.unitPrice ??
-        (isWholesaleSale ? Number(product.wholesalePrice ?? product.defaultPrice) : Number(product.defaultPrice));
+        this.isAdmin(user) && itemDto.unitPrice != null ? Number(itemDto.unitPrice) : catalogPrice;
       const itemTotal = itemDto.quantity * unitPrice;
       totalAmount += itemTotal;
 
@@ -360,7 +362,17 @@ export class SalesService {
   async findOne(id: number, user?: RequestUser): Promise<Sale> {
     const sale = await this.saleRepository.findOne({
       where: { id },
-      relations: ['items', 'items.product', 'soldBy', 'session', 'payment', 'payment.receivedBy', 'branch'],
+      relations: [
+        'items',
+        'items.product',
+        'soldBy',
+        'session',
+        'payment',
+        'payment.receivedBy',
+        'branch',
+        'customer',
+        'restaurantOrder',
+      ],
     });
 
     if (!sale) {
@@ -378,77 +390,60 @@ export class SalesService {
 
   async generatePlainTextReceipt(saleId: number, user?: RequestUser): Promise<string> {
     const sale = await this.findOne(saleId, user);
-
-    if (sale.paymentStatus !== PaymentStatus.PAID) {
-      throw new BadRequestException('Receipt can only be generated for paid sales');
-    }
-
-    // Extract sale number (remove SALE-YYYY- prefix to get just the number)
-    // Example: "SALE-2026-0001" -> "00001"
-    const saleNumberMatch = sale.saleNumber.match(/(\d+)$/);
-    const saleNumber = saleNumberMatch ? saleNumberMatch[1].padStart(5, '0') : sale.saleNumber;
-
-    // Format date as DD/MM/YYYY HH:MM (24-hour format)
+    const width = 32;
+    const center = (value: string) => {
+      const text = value.slice(0, width);
+      const pad = Math.max(0, Math.floor((width - text.length) / 2));
+      return `${' '.repeat(pad)}${text}`;
+    };
+    const pair = (left: string, right: string) => {
+      const gap = Math.max(1, width - left.length - right.length);
+      return `${left}${' '.repeat(gap)}${right}`;
+    };
     const soldAt = new Date(sale.soldAt);
-    const day = String(soldAt.getDate()).padStart(2, '0');
-    const month = String(soldAt.getMonth() + 1).padStart(2, '0');
-    const year = soldAt.getFullYear();
-    const hours = String(soldAt.getHours()).padStart(2, '0');
-    const minutes = String(soldAt.getMinutes()).padStart(2, '0');
-    const dateTimeStr = `${day}/${month}/${year} ${hours}:${minutes}`;
-
-    // Build receipt lines
-    const lines: string[] = [];
-    
-    // Header
-    lines.push('LAKE TOWN BUTCHERY');
-    lines.push('----------------------------');
-    lines.push(`SALE #${saleNumber}`);
-    lines.push(dateTimeStr);
-    lines.push('');
-
-    // Items
-    if (sale.items && sale.items.length > 0) {
-      sale.items.forEach((item) => {
-        const productName = item.product?.name || 'N/A';
-        const quantity = parseFloat(item.quantity.toString());
-        const unit = item.product?.unit || 'kg';
-        const unitPrice = parseFloat(item.unitPrice?.toString() || '0');
-        const totalPrice = parseFloat(item.totalPrice?.toString() || (quantity * unitPrice).toString());
-        
-        // Format: "Beef 0.10kg      152.00"
-        // Target width: 28 characters total
-        const namePart = `${productName} ${quantity.toFixed(2)}${unit}`;
-        const pricePart = totalPrice.toFixed(2);
-        const targetWidth = 28;
-        const padding = ' '.repeat(Math.max(1, targetWidth - namePart.length - pricePart.length));
-        lines.push(`${namePart}${padding}${pricePart}`);
-      });
+    const datePart = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Africa/Nairobi',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(soldAt);
+    const timePart = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Africa/Nairobi',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(soldAt);
+    const rule = '-'.repeat(width);
+    const lines = [
+      center('CUSTOMER BILL'),
+      center('LAKETOWN BUTCHERY'),
+      center((sale.branch?.name || 'LakeTown').toUpperCase()),
+    ];
+    lines.push(rule);
+    lines.push(pair('Date', datePart));
+    lines.push(pair('Time', timePart));
+    lines.push(pair('Served by', sale.soldBy?.username || 'Cashier'));
+    if (sale.restaurantOrder?.tableLabel) lines.push(pair('Table', sale.restaurantOrder.tableLabel));
+    lines.push(pair('Customer', sale.customer?.name || 'Walk-in'));
+    lines.push(pair('Ticket', sale.saleNumber));
+    lines.push(rule);
+    for (const item of sale.items || []) {
+      const quantity = Number(item.quantity);
+      const unitPrice = Number(item.unitPrice || 0);
+      const totalPrice = Number(item.totalPrice || quantity * unitPrice);
+      const unit = item.product?.unit || '';
+      lines.push(`- ${quantity} ${item.product?.name || 'Item'} ${unit}`.slice(0, width));
+      lines.push(pair('', `@${unitPrice.toFixed(2)}  ${totalPrice.toFixed(2)}`).trimEnd());
     }
-
-    // Separator
-    lines.push('----------------------------');
-
-    // Total - format: "TOTAL            152.00"
-    const totalAmount = parseFloat(sale.totalAmount.toString());
-    const totalLabel = 'TOTAL';
-    const totalPriceStr = totalAmount.toFixed(2);
-    const totalPadding = ' '.repeat(28 - totalLabel.length - totalPriceStr.length);
-    lines.push(`${totalLabel}${totalPadding}${totalPriceStr}`);
-
-    // Payment method
-    const paymentMethod = sale.paymentMethod || 'CASH';
-    lines.push(`PAYMENT: ${paymentMethod}`);
-
-    // MPESA reference if applicable
-    if (sale.payment && sale.payment.method === 'MPESA' && sale.payment.mpesaReference) {
-      lines.push(`MPESA REF: ${sale.payment.mpesaReference}`);
+    lines.push(rule);
+    lines.push(pair('Total', Number(sale.totalAmount).toFixed(2)));
+    lines.push(pair('Payment', sale.paymentMethod || 'CASH'));
+    lines.push(pair('Status', sale.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID'));
+    if (sale.payment?.method === 'MPESA' && sale.payment.mpesaReference) {
+      lines.push(pair('M-Pesa', sale.payment.mpesaReference));
     }
-
-    // Footer
-    lines.push('');
-    lines.push('THANK YOU');
-
+    lines.push(rule);
+    lines.push(center('THANK YOU & WELCOME AGAIN.'));
     return lines.join('\n');
   }
 
@@ -621,6 +616,108 @@ export class SalesService {
       partnerShareQty -
       kitchenIssueQty
     );
+  }
+
+  /**
+   * Products the till can sell right now: active for this branch, not kitchen inputs,
+   * with quantity still on hand in the session. Prepared items use production output
+   * minus sales. Everything else uses opening + incoming, minus sales, wastage,
+   * byproduct sales, partner shares, kitchen issues, and production use.
+   */
+  async getTillAvailability(sessionId: number, user: RequestUser) {
+    const session = await this.stockSessionsService.findOne(sessionId);
+    if (!this.isAdmin(user)) {
+      if (!user.branchId || session.branchId !== user.branchId) {
+        throw new ForbiddenException('You can only view stock for your branch');
+      }
+    }
+
+    const products = await this.productsService.findActiveForBranch(session.branchId);
+    const sellable = products.filter((product) => product.segment !== ProductSegment.KITCHEN_SUPPLY);
+
+    const entries = await this.stockEntriesService.findAll(sessionId);
+    const soldByProduct = await this.sumSaleQuantities(sessionId);
+    const producedByProduct = await this.sumProducedQuantities(sessionId);
+
+    const entryQty = (productId: number, type: StockEntryType) =>
+      entries
+        .filter((entry) => entry.productId === productId && entry.type === type)
+        .reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
+    const rows = sellable
+      .map((product) => {
+        const available =
+          product.category === ProductCategory.PRODUCTION_ITEM
+            ? (producedByProduct.get(product.id) || 0) - (soldByProduct.get(product.id) || 0)
+            : this.sessionStockOnHand(product.parentProductId || product.id, entryQty, soldByProduct);
+        return { product, available: Math.round(available * 1000) / 1000 };
+      })
+      .filter((row) => row.available > 0.0005)
+      .sort((a, b) => a.product.name.localeCompare(b.product.name));
+
+    return rows.map(({ product, available }) => ({
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      defaultPrice: Number(product.defaultPrice),
+      wholesalePrice: product.wholesalePrice != null ? Number(product.wholesalePrice) : null,
+      saleMode: product.saleMode,
+      category: product.category,
+      segment: product.segment,
+      salesPrompt: product.salesPrompt,
+      parentProductId: product.parentProductId,
+      available,
+    }));
+  }
+
+  private sessionStockOnHand(
+    productId: number,
+    entryQty: (productId: number, type: StockEntryType) => number,
+    soldByProduct: Map<number, number>,
+  ): number {
+    return (
+      entryQty(productId, StockEntryType.OPENING) +
+      entryQty(productId, StockEntryType.INCOMING) -
+      (soldByProduct.get(productId) || 0) -
+      entryQty(productId, StockEntryType.WASTAGE) -
+      entryQty(productId, StockEntryType.BYPRODUCT_SALE) -
+      entryQty(productId, StockEntryType.PARTNER_SHARE) -
+      entryQty(productId, StockEntryType.KITCHEN_ISSUE) -
+      entryQty(productId, StockEntryType.PRODUCTION_USAGE)
+    );
+  }
+
+  private async sumSaleQuantities(sessionId: number): Promise<Map<number, number>> {
+    const rows = await this.saleItemRepository
+      .createQueryBuilder('item')
+      .select('item.productId', 'productId')
+      .addSelect('COALESCE(SUM(item.quantity), 0)', 'total')
+      .innerJoin('item.sale', 'sale')
+      .where('sale.sessionId = :sessionId', { sessionId })
+      .groupBy('item.productId')
+      .getRawMany();
+    return this.rawQtyMap(rows);
+  }
+
+  private async sumProducedQuantities(sessionId: number): Promise<Map<number, number>> {
+    const rows = await this.productionRunRepository
+      .createQueryBuilder('run')
+      .select('run.finishedProductId', 'productId')
+      .addSelect('COALESCE(SUM(run.actualOutputQuantity - run.wastedQuantity), 0)', 'total')
+      .where('run.sessionId = :sessionId', { sessionId })
+      .groupBy('run.finishedProductId')
+      .getRawMany();
+    return this.rawQtyMap(rows);
+  }
+
+  private rawQtyMap(rows: Array<Record<string, unknown>>): Map<number, number> {
+    const map = new Map<number, number>();
+    for (const row of rows) {
+      const id = Number(row.productId ?? row.productid);
+      const total = Number(row.total ?? 0);
+      if (Number.isFinite(id)) map.set(id, Number.isFinite(total) ? total : 0);
+    }
+    return map;
   }
 
   /** Per-session available qty for each active KITCHEN_SUPPLY product (same formula as getAvailableStock). */

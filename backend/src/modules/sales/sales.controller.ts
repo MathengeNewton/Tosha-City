@@ -79,6 +79,15 @@ export class SalesController {
     return this.salesService.getKitchenSupplyBalances(+sessionId);
   }
 
+  @Get('till-availability')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Sellable products with quantity still available in this stock session' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  getTillAvailability(@Query('sessionId') sessionId: string, @Request() req) {
+    return this.salesService.getTillAvailability(+sessionId, req.user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a sale by ID (branch-scoped for non-admins)' })
   findOne(@Param('id') id: string, @Request() req) {
