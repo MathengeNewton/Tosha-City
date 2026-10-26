@@ -43,6 +43,7 @@ import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { StockShareModule } from './modules/stock-share/stock-share.module';
 import { RestaurantOrdersModule } from './modules/restaurant-orders/restaurant-orders.module';
+import { SaleSettingsModule } from './modules/sale-settings/sale-settings.module';
 import AppConfig from './core/config/app.config';
 
 @Module({
@@ -113,6 +114,7 @@ import AppConfig from './core/config/app.config';
     PartnersModule,
     StockShareModule,
     RestaurantOrdersModule,
+    SaleSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService, SeedService],

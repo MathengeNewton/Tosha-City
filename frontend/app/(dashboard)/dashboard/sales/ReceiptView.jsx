@@ -1,4 +1,5 @@
 "use client";
+import { formatKes } from "./saleLines";
 
 /**
  * Receipt view for a paid sale. Rendered inside a wrapper with class receipt-print-only
@@ -47,9 +48,7 @@ export default function ReceiptView({ sale, payment }) {
               </div>
               <span className="font-semibold">
                 KES{" "}
-                {(item.totalPrice ??
-                  item.quantity * (item.unitPrice ?? item.pricePerUnit ?? 0)
-                ).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                {formatKes(item.totalPrice ?? item.quantity * (item.unitPrice ?? item.pricePerUnit ?? 0))}
               </span>
             </div>
           ))}
@@ -60,9 +59,7 @@ export default function ReceiptView({ sale, payment }) {
         <span className="font-semibold text-gray-900">Total:</span>
         <span className="text-lg font-bold text-gray-900">
           KES{" "}
-          {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", {
-            minimumFractionDigits: 2,
-          })}
+          {formatKes(sale.totalAmount)}
         </span>
       </div>
 

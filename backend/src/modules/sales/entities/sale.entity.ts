@@ -78,6 +78,10 @@ export class Sale {
   @Column({ nullable: true })
   customerId: number | null;
 
+  @ApiProperty({ description: 'Table the order is served to', required: false, example: 'B1' })
+  @Column({ type: 'varchar', nullable: true })
+  tableLabel: string | null;
+
   @ApiProperty({ description: 'User who made the sale' })
   @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'soldById' })

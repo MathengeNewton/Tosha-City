@@ -123,8 +123,14 @@ export const apiClient = {
     getPayment: (id) => api.get(`/sales/${id}/payment`),
     getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),
     create: (data) => api.post('/sales', data),
+    addItems: (id, data) => api.post(`/sales/${id}/items`, data),
     update: (id, data) => api.patch(`/sales/${id}`, data),
     delete: (id) => api.delete(`/sales/${id}`),
+  },
+
+  saleSettings: {
+    get: () => api.get('/sale-settings'),
+    update: (data) => api.patch('/sale-settings', data),
   },
 
   // Payments

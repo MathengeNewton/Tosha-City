@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsEnum, IsString, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsEnum, IsString, IsOptional } from 'class-validator';
 import { StockEntryType } from '../entities/stock-entry.entity';
 
 export class CreateStockEntryDto {
@@ -20,9 +20,8 @@ export class CreateStockEntryDto {
   @IsEnum(StockEntryType)
   type: StockEntryType;
 
-  @ApiProperty({ description: 'Quantity', example: 50.5 })
+  @ApiProperty({ description: 'Quantity. Only ADJUSTMENT entries may be negative.', example: 50.5 })
   @IsNumber()
-  @Min(0)
   quantity: number;
 
   @ApiProperty({ description: 'Unit of measurement', example: 'kg' })

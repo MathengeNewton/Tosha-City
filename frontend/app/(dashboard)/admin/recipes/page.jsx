@@ -153,6 +153,7 @@ export default function RecipesPage() {
         notes: formData.notes.trim() || undefined,
         isActive: formData.isActive,
         ingredients: formData.ingredients.map((ingredient, index) => ({
+          id: ingredient.id ? Number(ingredient.id) : undefined,
           productId: ingredient.productId ? parseInt(ingredient.productId, 10) : undefined,
           ingredientName: ingredient.ingredientName.trim(),
           estimatedQuantity: parseFloat(ingredient.estimatedQuantity || 0),

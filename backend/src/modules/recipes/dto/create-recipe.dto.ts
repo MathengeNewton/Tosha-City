@@ -14,6 +14,11 @@ import { Type } from 'class-transformer';
 import { BranchCatalogScope } from '../../../common/enums/branch-catalog-scope.enum';
 
 export class CreateRecipeIngredientDto {
+  @ApiProperty({ required: false, description: 'Existing ingredient ID when editing a recipe', example: 1 })
+  @IsOptional()
+  @IsNumber()
+  id?: number;
+
   @ApiProperty({ required: false, example: 1 })
   @IsOptional()
   @IsNumber()

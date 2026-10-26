@@ -30,6 +30,7 @@ import {
   BuildingOffice2Icon,
   BookOpenIcon,
   CpuChipIcon,
+  AdjustmentsHorizontalIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
@@ -74,6 +75,7 @@ export default function DashboardLayout({ children }) {
     { name: "Recipes", href: "/admin/recipes", icon: BookOpenIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
     { name: "Customers", href: "/admin/customers", icon: UserIcon },
+    { name: "Sale configuration", href: "/admin/sale-settings", icon: AdjustmentsHorizontalIcon },
     { name: "Partners", href: "/admin/partners", icon: ShareIcon },
     { name: "Branches", href: "/admin/branches", icon: BuildingOffice2Icon },
     { name: "Users", href: "/admin/users", icon: UserGroupIcon },

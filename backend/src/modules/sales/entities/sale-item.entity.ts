@@ -42,9 +42,21 @@ export class SaleItem {
   @Column('decimal', { precision: 10, scale: 2 })
   unitPrice: number;
 
-  @ApiProperty({ description: 'Total price for this item', example: 2000.0 })
+  @ApiProperty({ description: 'Total price for this item, excluding any cooking fee', example: 2000.0 })
   @Column('decimal', { precision: 10, scale: 2 })
   totalPrice: number;
+
+  @ApiProperty({ description: 'Customer asked the kitchen to cook this meat', example: false })
+  @Column({ default: false })
+  cookInKitchen: boolean;
+
+  @ApiProperty({ description: 'Cooking fee rate per kg at time of sale', example: 100, required: false })
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  cookingFeePerKg: number | null;
+
+  @ApiProperty({ description: 'Cooking fee charged for this item', example: 450, required: false })
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  cookingFee: number;
 
   @ApiProperty({ description: 'Date created' })
   @CreateDateColumn()

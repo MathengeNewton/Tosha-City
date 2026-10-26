@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StockEntry, StockEntryType } from './entities/stock-entry.entity';
@@ -28,7 +35,7 @@ export class StockEntriesService {
     private salesService: SalesService,
   ) {}
 
-  async create(createEntryDto: CreateStockEntryDto, userId: number): Promise<StockEntry> {
+  async create(createEntryDto: CreateStockEntryDto, userId: number, isAdmin = false): Promise<StockEntry> {
     if (
       createEntryDto.type === StockEntryType.BYPRODUCT_SALE ||
       createEntryDto.type === StockEntryType.PRODUCTION_USAGE
@@ -37,6 +44,28 @@ export class StockEntriesService {
     }
     // Verify session exists and is open (for opening/incoming entries)
     const session = await this.stockSessionsService.findOne(createEntryDto.sessionId);
+
+    const quantity = Number(createEntryDto.quantity);
+    if (createEntryDto.type === StockEntryType.ADJUSTMENT) {
+      if (!isAdmin) {
+        throw new ForbiddenException('Only an admin can adjust stock');
+      }
+      if (session.status !== SessionStatus.OPEN) {
+        throw new BadRequestException('Cannot adjust stock in a closed session');
+      }
+      if (!Number.isFinite(quantity) || quantity === 0) {
+        throw new BadRequestException('Adjustment quantity must be a non-zero number');
+      }
+      if (!createEntryDto.notes?.trim()) {
+        throw new BadRequestException('Give a reason for the stock adjustment');
+      }
+    } else if (!Number.isFinite(quantity) || quantity < 0) {
+      throw new BadRequestException('Quantity cannot be negative');
+    }
+
+    if (createEntryDto.type === StockEntryType.WASTAGE && !isAdmin && !createEntryDto.photoUrl) {
+      throw new BadRequestException('Photo evidence is required for wastage entries');
+    }
 
     if (createEntryDto.type === StockEntryType.OPENING || createEntryDto.type === StockEntryType.INCOMING) {
       if (session.status !== SessionStatus.OPEN) {
@@ -84,7 +113,9 @@ export class StockEntriesService {
     try {
       const entry = this.entryRepository.create({
         ...createEntryDto,
+        notes: createEntryDto.notes?.trim() || null,
         recordedById: userId,
+        saleId: null,
       });
 
       const saved = await this.entryRepository.save(entry);

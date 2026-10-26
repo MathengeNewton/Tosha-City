@@ -20,6 +20,12 @@ import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
 import { StockEntryType } from './entities/stock-entry.entity';
 
+function isAdminUser(user: { roles?: Array<{ name?: string } | string> }) {
+  return (user?.roles || []).some((role) =>
+    typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
+  );
+}
+
 @ApiTags('Stock Entries')
 @Controller('stock-entries')
 @UseGuards(JwtAuthGuard)
@@ -32,7 +38,7 @@ export class StockEntriesController {
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
   @ApiOperation({ summary: 'Create a stock entry (Cashier/Admin)' })
   create(@Body() createEntryDto: CreateStockEntryDto, @Request() req) {
-    return this.stockEntriesService.create(createEntryDto, req.user.userId);
+    return this.stockEntriesService.create(createEntryDto, req.user.userId, isAdminUser(req.user));
   }
 
   @Get()

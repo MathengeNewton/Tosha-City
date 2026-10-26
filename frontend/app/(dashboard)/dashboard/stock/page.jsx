@@ -144,8 +144,8 @@ export default function StockManagementPage() {
         const branchesRes = await apiClient.branches.getAll({ activeOnly: true });
         const branchList = branchesRes.data || [];
         setBranches(branchList);
-        if (!selectedBranchId && branchList.length > 0) {
-          setSelectedBranchId(String(branchList[0].id));
+        if (branchList.length > 0) {
+          setSelectedBranchId((prev) => prev || String(branchList[0].id));
         }
       } else if (user?.branchId) {
         setSelectedBranchId(String(user.branchId));
@@ -250,6 +250,10 @@ export default function StockManagementPage() {
     try {
       const sessionRes = await apiClient.stockSessions.getById(sessionId);
       setSelectedSession(sessionRes.data);
+      // Product pickers in the session tabs must list the session's branch products.
+      if (isAdmin && sessionRes.data?.branchId) {
+        setSelectedBranchId(String(sessionRes.data.branchId));
+      }
       const entriesRes = await apiClient.stockEntries.getAll({ sessionId });
       setStockEntries(entriesRes.data || []);
       
@@ -407,6 +411,20 @@ export default function StockManagementPage() {
     const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
     const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
     const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
+    const adjustmentEntries = stockEntries.filter((e) => e.type === "ADJUSTMENT");
+    const sessionHasSales = selectedSession?.sales?.length > 0;
+    const lockedNotice = sessionHasSales && canManageEntries ? (
+      <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+        {isAdmin
+          ? "Entries can't be edited or deleted once the session has sales. Use the Adjustments tab to correct stock."
+          : "Edit/delete for entries is locked when the session has sales. Ask an admin to adjust stock."}
+      </p>
+    ) : null;
+    const sessionTabs = [
+      'overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages',
+      ...(isAdmin ? ['adjustments'] : []),
+      'stock-share', 'sales',
+    ];
 
     const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const productionUsageEntries = stockEntries.filter((e) => e.type === "PRODUCTION_USAGE");
@@ -643,7 +661,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
+              {sessionTabs.map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -660,6 +678,7 @@ export default function StockManagementPage() {
                    tab === 'kitchen' ? 'Kitchen supplies' :
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
+                   tab === 'adjustments' ? 'Adjustments' :
                    tab === 'stock-share' ? 'Stock Share' :
                    'Sales'}
                 </button>
@@ -696,11 +715,7 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && canManageEntries && (
-                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
-                    </p>
-                  )}
+                  {lockedNotice}
                   <StockEntriesTable stockEntries={openingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
@@ -717,11 +732,7 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && canManageEntries && (
-                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
-                    </p>
-                  )}
+                  {lockedNotice}
                   <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
@@ -781,11 +792,7 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={canManageEntries && selectedSession.status === "OPEN" ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && canManageEntries && (
-                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
-                    </p>
-                  )}
+                  {lockedNotice}
                   <StockEntriesTable
                     stockEntries={kitchenIssueEntries}
                     canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)}
@@ -808,11 +815,7 @@ export default function StockManagementPage() {
                   />
                 )}
                 <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && canManageEntries && (
-                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
-                    </p>
-                  )}
+                  {lockedNotice}
                   <StockEntriesTable stockEntries={closingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
@@ -824,16 +827,28 @@ export default function StockManagementPage() {
                     session={selectedSession} 
                     products={products} 
                     type="WASTAGE"
+                    photoRequired={!isAdmin}
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
                 <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
-                  {selectedSession?.sales?.length > 0 && canManageEntries && (
-                    <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Edit/delete for entries is locked when the session has sales. Adjust or remove sales first.
-                    </p>
-                  )}
+                  {lockedNotice}
                   <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
+                </div>
+              </div>
+            )}
+            {activeTab === 'adjustments' && isAdmin && (
+              <div>
+                {selectedSession.status === 'OPEN' && (
+                  <StockEntryForm
+                    session={selectedSession}
+                    products={products}
+                    type="ADJUSTMENT"
+                    onSuccess={() => loadSessionDetails(selectedSession.id)}
+                  />
+                )}
+                <div className={selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                  <StockEntriesTable stockEntries={adjustmentEntries} canEdit={false} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="ADJUSTMENT" />
                 </div>
               </div>
             )}
@@ -1496,6 +1511,9 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                 <tr key={entry.id}>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {entry.product?.name || 'N/A'}
+                    {entry.type === 'ADJUSTMENT' && entry.notes && (
+                      <p className="mt-1 whitespace-normal text-xs text-gray-500">{entry.notes}</p>
+                    )}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -1503,12 +1521,14 @@ function StockEntriesTable({ stockEntries, canEdit = false, onEdit, products = [
                       entry.type === 'INCOMING' ? 'bg-green-100 text-green-800' :
                       entry.type === 'CLOSING' ? 'bg-yellow-100 text-yellow-800' :
                       entry.type === 'KITCHEN_ISSUE' ? 'bg-amber-100 text-amber-900' :
+                      entry.type === 'ADJUSTMENT' ? 'bg-purple-100 text-purple-800' :
                       'bg-red-100 text-red-800'
                     }`}>
                       {entry.type}
                     </span>
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {entry.type === 'ADJUSTMENT' && Number(entry.quantity) > 0 ? '+' : ''}
                     {entry.quantity} {entry.unit}
                   </td>
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -2548,7 +2568,9 @@ function SalesTable({ sales }) {
 }
 
 // Stock Entry Form Component
-function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) {
+function StockEntryForm({ session, products, suppliers = [], type, onSuccess, photoRequired = true }) {
+  const isAdjustment = type === 'ADJUSTMENT';
+  const wastagePhotoRequired = type === 'WASTAGE' && photoRequired;
   const [formData, setFormData] = useState({
     productId: '',
     supplierId: '',
@@ -2579,13 +2601,24 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
       toast.error("Please fill in all required fields");
       return;
     }
+    if (isAdjustment) {
+      const qty = parseFloat(formData.quantity);
+      if (!Number.isFinite(qty) || qty === 0) {
+        toast.error("Enter how much to add (e.g. 16) or remove (e.g. -2)");
+        return;
+      }
+      if (!formData.notes.trim()) {
+        toast.error("Give a reason for the adjustment");
+        return;
+      }
+    }
 
     try {
       setSubmitting(true);
       
       let photoUrl = null;
-      // Upload photo if provided (required for wastage, optional for closing)
-      if (type === 'WASTAGE' && !selectedFile) {
+      // Upload photo if provided (required for cashier wastage, optional for admins and closing)
+      if (wastagePhotoRequired && !selectedFile) {
         toast.error("Photo evidence is required for wastage entries");
         setSubmitting(false);
         return;
@@ -2606,7 +2639,7 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
         notes: formData.notes || null,
         photoUrl: photoUrl,
       });
-      toast.success(`${type} stock entry recorded successfully`);
+      toast.success(isAdjustment ? "Stock adjusted" : `${type} stock entry recorded successfully`);
       setFormData({ productId: '', supplierId: '', quantity: '', unit: 'kg', notes: '', photoUrl: null });
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -2625,6 +2658,12 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
           Record stock taken from the store into the kitchen. Quantity cannot exceed on-hand for this session.
         </p>
       )}
+      {isAdjustment && (
+        <p className="text-sm text-purple-900 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+          Correct stock even after sales. Use a positive number to add stock (e.g. 16 portions that were
+          missed) or a negative number to remove it (e.g. -2 kg). The reason is kept in the activity log.
+        </p>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Product *
@@ -2637,7 +2676,7 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
             setFormData({
               ...formData,
               productId: id,
-              unit: type === "KITCHEN_ISSUE" && p?.unit ? p.unit : formData.unit,
+              unit: p?.unit || formData.unit,
             });
           }}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
@@ -2693,11 +2732,12 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Quantity *
+            {isAdjustment ? 'Change (+ add / − remove) *' : 'Quantity *'}
           </label>
           <input
             type="number"
             step="0.01"
+            min={isAdjustment ? undefined : "0"}
             value={formData.quantity}
             onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
@@ -2721,28 +2761,35 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Notes
+          {isAdjustment ? 'Reason *' : 'Notes'}
         </label>
         <textarea
           value={formData.notes}
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
           rows="3"
+          required={isAdjustment}
+          placeholder={isAdjustment ? 'e.g. Wet fry entered as 4 kg instead of 20 portions' : undefined}
         />
       </div>
 
       {type === 'WASTAGE' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Photo Evidence *
+            {wastagePhotoRequired ? 'Photo Evidence *' : 'Photo Evidence (Optional)'}
           </label>
-          <p className="text-xs text-gray-500 mb-2">Wastage entries require photo evidence</p>
+          <p className="text-xs text-gray-500 mb-2">
+            {wastagePhotoRequired
+              ? 'Wastage entries require photo evidence. On the tablet, tap below to take a photo.'
+              : 'Optional for admins. On the tablet, tap below to take a photo.'}
+          </p>
           <input
             type="file"
             accept="image/jpeg,image/jpg,image/png"
+            capture="environment"
             onChange={handleFileChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-            required
+            required={wastagePhotoRequired}
           />
           {previewUrl && (
             <div className="mt-2">
@@ -2782,6 +2829,7 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
             'CLOSING': 'Record Closing Stock',
             'WASTAGE': 'Record Wastage',
             'KITCHEN_ISSUE': 'Issue to kitchen',
+            'ADJUSTMENT': 'Adjust stock',
           };
           return typeLabels[type] || `Record ${type} Stock`;
         })()}

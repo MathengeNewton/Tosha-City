@@ -1,25 +1,23 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../../../../../lib/api";
 import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
-
-function formatOnHand(product) {
-  const qty = Number(product?.available || 0);
-  const shown = qty.toLocaleString("en-KE", { maximumFractionDigits: 3 });
-  return `${shown} ${product?.unit || ""} left`.trim();
-}
-
-function getPromptLabel(product) {
-  if (!product) return "Quantity";
-  if (product.salesPrompt) return product.salesPrompt;
-  if (product.saleMode === "CUP") return "Number of cups";
-  if (product.saleMode === "PORTION") return "Number of portions";
-  if (product.saleMode === "PIECE") return "Number of pieces";
-  return `Quantity (${product.unit || "kg"})`;
-}
+import ProductGrid from "../ProductGrid";
+import SaleLineCard from "../SaleLineCard";
+import {
+  buildLine,
+  changeLine,
+  emptyLine,
+  formatKes,
+  lineCookingFee,
+  lineToPayload,
+  linesTotal,
+  repriceLines,
+  validateLines,
+} from "../saleLines";
 
 const PAYMENT_METHODS = [
   { id: "CASH", label: "Cash" },
@@ -27,78 +25,130 @@ const PAYMENT_METHODS = [
   { id: "CREDIT", label: "Credit" },
 ];
 
-function CashierTill({
-  user,
-  currentSession,
-  products,
-  filteredProducts,
-  productSearch,
-  setProductSearch,
-  saleItems,
-  quickAddProduct,
-  removeItem,
-  updateItem,
+// The sale stays in the browser until the cashier confirms it on the review step.
+const DRAFT_KEY = "laketown-sale-draft";
+
+function readDraft() {
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft) {
+  try {
+    if (draft) window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    else window.sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Storage can be unavailable in private mode; the draft then lives in memory only.
+  }
+}
+
+function SaleOptions({
   paymentMethod,
-  setPaymentMethod,
+  onPaymentMethodChange,
   customerId,
   onCustomerChange,
   customers,
-  calculateTotal,
+  tableLabel,
+  setTableLabel,
+  tables,
+  compact = false,
+}) {
+  const selectedCustomer = customerId ? customers.find((c) => c.id === parseInt(customerId, 10)) : null;
+  const visibleCustomers =
+    paymentMethod === "CREDIT" ? customers.filter((customer) => customer.type === "CREDIT") : customers;
+  const selectClass = `w-full rounded-xl border border-gray-300 bg-white px-3 focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20 ${
+    compact ? "min-h-[44px] py-2 text-sm" : "min-h-[48px] py-3 text-base"
+  }`;
+
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2 px-3 pt-3">
+        {PAYMENT_METHODS.map((method) => (
+          <button
+            key={method.id}
+            type="button"
+            onClick={() => onPaymentMethodChange(method.id)}
+            className={`${compact ? "min-h-[44px] rounded-lg" : "min-h-[48px] rounded-xl"} text-sm font-bold ${
+              paymentMethod === method.id ? "bg-blue-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            {method.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 px-3 pt-3">
+        <select
+          value={customerId}
+          onChange={(e) => onCustomerChange(e.target.value)}
+          required={paymentMethod === "CREDIT"}
+          className={selectClass}
+        >
+          <option value="">{paymentMethod === "CREDIT" ? "Credit customer" : "Walk-in"}</option>
+          {visibleCustomers.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name}
+              {customer.type === "WHOLESALE" ? " · Wholesale" : ""}
+              {customer.type === "CREDIT" && paymentMethod !== "CREDIT" ? " · Credit" : ""}
+              {customer.type === "CREDIT" && paymentMethod === "CREDIT" && customer.outstandingBalance != null
+                ? ` · owes ${formatKes(customer.outstandingBalance)}`
+                : ""}
+              {customer.type === "CREDIT" && paymentMethod === "CREDIT" && customer.creditLimit
+                ? ` · limit ${formatKes(customer.creditLimit)}`
+                : ""}
+            </option>
+          ))}
+        </select>
+        <select
+          value={tableLabel}
+          onChange={(e) => setTableLabel(e.target.value)}
+          className={selectClass}
+        >
+          <option value="">No table</option>
+          {tables.map((table) => (
+            <option key={table} value={table}>
+              Table {table}
+            </option>
+          ))}
+        </select>
+      </div>
+      {paymentMethod === "CREDIT" && visibleCustomers.length === 0 && (
+        <p className="mx-3 mt-2 text-xs font-semibold text-red-700">
+          No credit customers yet. Set a customer&apos;s type to Credit under Customers.
+        </p>
+      )}
+      {selectedCustomer?.type === "WHOLESALE" && (
+        <p className="mx-3 mt-2 text-xs font-semibold text-green-800">Wholesale prices on new taps.</p>
+      )}
+    </>
+  );
+}
+
+function CashierTill({
+  branchName,
+  branchPicker,
+  products,
+  customer,
+  saleItems,
+  addProduct,
+  removeItem,
+  updateItem,
+  options,
+  total,
+  cookingFeePerKg,
+  allowPriceEdit,
   onSubmit,
   onClear,
-  submitting,
 }) {
-  const branchName = currentSession.branch?.name || user?.branch?.name || "This branch";
-  const selectedCustomer = customerId
-    ? customers.find((c) => c.id === parseInt(customerId, 10))
-    : null;
-  const wholesale = selectedCustomer?.type === "WHOLESALE";
-  const total = calculateTotal();
-
   return (
     <form onSubmit={onSubmit} className="flex h-full min-h-0 flex-col gap-2 lg:flex-row">
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white">
-        <div className="flex items-center gap-3 border-b border-gray-200 px-3 py-3">
-          <input
-            type="search"
-            placeholder="Search products"
-            value={productSearch}
-            onChange={(e) => setProductSearch(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-base min-h-[52px] focus:border-blue-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-            autoComplete="off"
-            autoFocus
-          />
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {filteredProducts.length === 0 ? (
-            <p className="py-16 text-center text-base text-gray-500">
-              {productSearch.trim() ? "No products match." : "Nothing left to sell in this session."}
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {filteredProducts.map((product) => {
-                const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-                const showPrice = wholesale && product.wholesalePrice != null ? product.wholesalePrice : retail;
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => quickAddProduct(product)}
-                    className="flex min-h-[112px] flex-col items-start justify-between rounded-2xl border-2 border-gray-200 bg-white p-4 text-left shadow-sm transition active:scale-[0.98] hover:border-blue-900"
-                  >
-                    <span className="line-clamp-2 text-base font-bold leading-snug text-gray-900">
-                      {product.name}
-                    </span>
-                    <span className="mt-1 text-sm font-semibold text-gray-600">{formatOnHand(product)}</span>
-                    <span className="mt-2 text-lg font-bold tabular-nums text-blue-900">
-                      KES {Number(showPrice).toLocaleString("en-KE", { maximumFractionDigits: 0 })}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {branchPicker}
+        <ProductGrid products={products} customer={customer} onPick={addProduct} autoFocus className="flex-1" />
       </section>
 
       <aside className="flex max-h-[46%] min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white lg:max-h-none lg:w-[400px]">
@@ -107,43 +157,7 @@ function CashierTill({
           <h1 className="text-xl font-bold text-gray-900">Current sale</h1>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 px-3 pt-3">
-          {PAYMENT_METHODS.map((method) => (
-            <button
-              key={method.id}
-              type="button"
-              onClick={() => setPaymentMethod(method.id)}
-              className={`min-h-[48px] rounded-xl text-sm font-bold ${
-                paymentMethod === method.id
-                  ? "bg-blue-900 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {method.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="px-3 pt-3">
-          <select
-            value={customerId}
-            onChange={(e) => onCustomerChange(e.target.value)}
-            required={paymentMethod === "CREDIT"}
-            className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-base min-h-[48px] focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-          >
-            <option value="">{paymentMethod === "CREDIT" ? "Select customer" : "Walk-in"}</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-                {customer.type === "WHOLESALE" ? " · Wholesale" : ""}
-                {customer.type === "CREDIT" ? " · Credit" : ""}
-              </option>
-            ))}
-          </select>
-          {wholesale && (
-            <p className="mt-2 text-xs font-semibold text-green-800">Wholesale prices on new taps.</p>
-          )}
-        </div>
+        {options}
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
           {saleItems.length === 0 ? (
@@ -151,89 +165,24 @@ function CashierTill({
               Tap a product to start the sale.
             </div>
           ) : (
-            saleItems.map((item, index) => {
-              const selectedProduct = products.find((product) => product.id === parseInt(item.productId, 10));
-              const saleMode = selectedProduct?.saleMode || "WEIGHT";
-              const isWeightSale = saleMode === "WEIGHT";
-              return (
-                <div key={`${index}-${item.productId || "x"}`} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    {selectedProduct ? (
-                      <p className="text-sm font-bold leading-snug text-gray-900">{selectedProduct.name}</p>
-                    ) : (
-                      <select
-                        value={item.productId}
-                        onChange={(e) => updateItem(index, "productId", e.target.value)}
-                        className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm"
-                        required
-                      >
-                        <option value="">Select product</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="shrink-0 rounded-lg px-2 py-1 text-sm font-semibold text-red-700 hover:bg-red-50"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                        KES
-                      </span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.amount}
-                        onChange={(e) => updateItem(index, "amount", e.target.value)}
-                        readOnly={!isWeightSale}
-                        required={isWeightSale}
-                        className={`w-full rounded-lg border border-gray-300 px-2 py-2 text-sm min-h-[44px] ${
-                          isWeightSale ? "bg-white" : "bg-gray-100 text-gray-600"
-                        }`}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                        {isWeightSale ? selectedProduct?.unit || "kg" : "Qty"}
-                      </span>
-                      <input
-                        type="number"
-                        step={isWeightSale ? "0.001" : "0.01"}
-                        min="0"
-                        value={item.quantity || ""}
-                        onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm min-h-[44px]"
-                      />
-                    </label>
-                    <div>
-                      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                        Price
-                      </span>
-                      <p className="flex min-h-[44px] items-center rounded-lg bg-gray-100 px-2 text-sm font-semibold tabular-nums text-gray-800">
-                        {Number(item.price || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+            saleItems.map((item, index) => (
+              <SaleLineCard
+                key={`${index}-${item.productId || "x"}`}
+                line={item}
+                products={products}
+                onChange={(field, value) => updateItem(index, field, value)}
+                onRemove={() => removeItem(index)}
+                cookingFeePerKg={cookingFeePerKg}
+                allowPriceEdit={allowPriceEdit}
+              />
+            ))
           )}
         </div>
 
         <div className="border-t border-gray-200 p-3">
           <div className="mb-3 flex items-end justify-between">
             <span className="text-sm font-semibold text-gray-600">Total</span>
-            <span className="text-3xl font-bold tabular-nums text-gray-900">
-              {total.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-            </span>
+            <span className="text-3xl font-bold tabular-nums text-gray-900">{formatKes(total)}</span>
           </div>
           <div className="flex gap-2">
             <button
@@ -246,15 +195,140 @@ function CashierTill({
             </button>
             <button
               type="submit"
-              disabled={submitting || saleItems.length === 0}
+              disabled={saleItems.length === 0}
               className="min-h-[60px] flex-1 rounded-xl bg-green-600 text-lg font-bold text-white hover:bg-green-700 active:bg-green-800 disabled:opacity-50"
             >
-              {submitting ? "Charging…" : "Charge"}
+              Create Sale
             </button>
           </div>
         </div>
       </aside>
     </form>
+  );
+}
+
+function ReviewSale({
+  branchName,
+  products,
+  customer,
+  saleItems,
+  addProduct,
+  removeItem,
+  updateItem,
+  options,
+  total,
+  cookingFeePerKg,
+  allowPriceEdit,
+  paymentMethod,
+  tableLabel,
+  submitting,
+  onConfirm,
+  onBack,
+  onDiscard,
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const cookingTotal = saleItems.reduce((sum, item) => {
+    const product = products.find((p) => p.id === parseInt(item.productId, 10));
+    return sum + lineCookingFee(item, product, cookingFeePerKg);
+  }, 0);
+
+  return (
+    <PageShell>
+      <div className="space-y-3">
+        <PageHeader title="Confirm sale" subtitle={`${branchName} · not saved yet. Add or remove items, then confirm.`} />
+
+        <div className="grid grid-cols-3 divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white">
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total</p>
+            <p className="text-xl font-bold tabular-nums text-gray-900">KES {formatKes(total)}</p>
+            {cookingTotal > 0 && (
+              <p className="text-xs text-orange-800">Incl. cooking KES {formatKes(cookingTotal)}</p>
+            )}
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
+            <p className="text-base font-bold text-gray-900">{paymentMethod}</p>
+            <p className="text-sm text-gray-600">{customer?.name || "Walk-in"}</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Table</p>
+            <p className="text-base font-bold text-gray-900">{tableLabel || "—"}</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white pb-3">{options}</div>
+
+        <div className="space-y-2">
+          {saleItems.length === 0 ? (
+            <div className="rounded-xl border-2 border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
+              No items. Add at least one item before confirming.
+            </div>
+          ) : (
+            saleItems.map((item, index) => (
+              <SaleLineCard
+                key={`${index}-${item.productId || "x"}`}
+                line={item}
+                products={products}
+                onChange={(field, value) => updateItem(index, field, value)}
+                onRemove={() => removeItem(index)}
+                cookingFeePerKg={cookingFeePerKg}
+                allowPriceEdit={allowPriceEdit}
+                compact
+              />
+            ))
+          )}
+        </div>
+
+        {showPicker ? (
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="flex items-center justify-between border-b border-gray-200 px-3 py-1.5">
+              <p className="text-sm font-bold text-gray-900">Add items</p>
+              <button
+                type="button"
+                onClick={() => setShowPicker(false)}
+                className="min-h-[36px] rounded-lg px-3 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+              >
+                Done
+              </button>
+            </div>
+            <ProductGrid products={products} customer={customer} onPick={addProduct} className="max-h-[60vh]" />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowPicker(true)}
+            className="min-h-[52px] w-full rounded-xl border-2 border-dashed border-blue-900/40 text-base font-bold text-blue-900 hover:bg-blue-50"
+          >
+            + Add items
+          </button>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={submitting || saleItems.length === 0}
+            className="min-h-[56px] flex-1 rounded-xl bg-green-600 px-6 text-lg font-bold text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {submitting ? "Saving…" : "Confirm sale"}
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="min-h-[56px] rounded-xl bg-gray-200 px-6 text-base font-semibold text-gray-800 hover:bg-gray-300"
+          >
+            Back to till
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="min-h-[56px] rounded-xl px-6 text-base font-semibold text-red-700 hover:bg-red-50"
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    </PageShell>
   );
 }
 
@@ -268,20 +342,20 @@ export default function NewSalePage() {
   const [currentSession, setCurrentSession] = useState(null);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [settings, setSettings] = useState({ cookingFeePerKg: 100, tables: [] });
   const [branches, setBranches] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [saleItems, setSaleItems] = useState([]);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [customerId, setCustomerId] = useState('');
-  const [productSearch, setProductSearch] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [customerId, setCustomerId] = useState("");
+  const [tableLabel, setTableLabel] = useState("");
+  const [step, setStep] = useState("build");
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const draftRestoredFor = useRef(null);
 
-  const filteredProducts = useMemo(() => {
-    const q = productSearch.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) => (p.name || "").toLowerCase().includes(q));
-  }, [products, productSearch]);
+  const selectedCustomer = customerId ? customers.find((c) => c.id === parseInt(customerId, 10)) : null;
+  const cookingFeePerKg = Number(settings.cookingFeePerKg || 0);
 
   useEffect(() => {
     initializeBranchContext();
@@ -295,6 +369,16 @@ export default function NewSalePage() {
       setLoading(false);
     }
   }, [selectedBranchId, user?.branchId, isAdmin, branchInitDone]);
+
+  useEffect(() => {
+    if (!currentSession || draftRestoredFor.current !== currentSession.id) return;
+    const hasContent = saleItems.length > 0 || step === "review";
+    writeDraft(
+      hasContent
+        ? { sessionId: currentSession.id, saleItems, paymentMethod, customerId, tableLabel, step }
+        : null,
+    );
+  }, [currentSession, saleItems, paymentMethod, customerId, tableLabel, step]);
 
   const initializeBranchContext = async () => {
     try {
@@ -325,30 +409,52 @@ export default function NewSalePage() {
         setLoading(false);
         return;
       }
-      
-      // Get current session
+
       const sessionRes = await apiClient.stockSessions.getCurrent({ branchId });
       const session = sessionRes.data;
-      
-      if (!session || session.status !== 'OPEN') {
+
+      if (!session || session.status !== "OPEN") {
         setCurrentSession(null);
         if (!isAdmin) {
           toast.error("No active stock session. Please open a session first.");
-          router.push('/dashboard/stock');
+          router.push("/dashboard/stock");
         }
         return;
       }
 
-      setCurrentSession(session);
-
-      const productsRes = await apiClient.sales.getTillAvailability({ sessionId: session.id });
+      const [productsRes, customersRes, settingsRes, balancesRes] = await Promise.all([
+        apiClient.sales.getTillAvailability({ sessionId: session.id }),
+        apiClient.customers.getAll({ activeOnly: true }),
+        apiClient.saleSettings.get().catch(() => ({ data: null })),
+        apiClient.customers.getCreditWithBalances().catch(() => ({ data: [] })),
+      ]);
       const productsList = Array.isArray(productsRes.data) ? productsRes.data : [];
       setProducts(productsList.filter((product) => Number(product.available) > 0));
+      const balances = new Map(
+        (balancesRes.data || []).map((customer) => [customer.id, Number(customer.outstandingBalance) || 0])
+      );
+      setCustomers(
+        (customersRes.data || []).map((customer) =>
+          balances.has(customer.id) ? { ...customer, outstandingBalance: balances.get(customer.id) } : customer
+        )
+      );
+      if (settingsRes.data) {
+        setSettings({
+          cookingFeePerKg: Number(settingsRes.data.cookingFeePerKg ?? 100),
+          tables: Array.isArray(settingsRes.data.tables) ? settingsRes.data.tables : [],
+        });
+      }
 
-      // Get credit and wholesale customers (for credit sales and wholesale pricing)
-      const customersRes = await apiClient.customers.getAll({ activeOnly: true });
-      setCustomers(customersRes.data || []);
-
+      const draft = readDraft();
+      if (draft && draft.sessionId === session.id && draftRestoredFor.current !== session.id) {
+        setSaleItems(Array.isArray(draft.saleItems) ? draft.saleItems : []);
+        setPaymentMethod(draft.paymentMethod || "CASH");
+        setCustomerId(draft.customerId || "");
+        setTableLabel(draft.tableLabel || "");
+        setStep(draft.step === "review" ? "review" : "build");
+      }
+      draftRestoredFor.current = session.id;
+      setCurrentSession(session);
     } catch (error) {
       console.error("Error loading data:", error);
       toast.error("Failed to load data");
@@ -357,215 +463,92 @@ export default function NewSalePage() {
     }
   };
 
-  const addItem = () => {
-    setSaleItems([...saleItems, { productId: '', amount: '', price: '', quantity: '' }]);
-  };
-
-  const buildItemFromProduct = (product) => {
-    const selectedCustomer = customerId ? customers.find((c) => c.id === parseInt(customerId, 10)) : null;
-    const useWholesale = selectedCustomer?.type === "WHOLESALE";
-    const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-    const price = useWholesale ? product.wholesalePrice ?? retail : retail;
-    const item = {
-      productId: String(product.id),
-      price: String(price),
-      amount: "",
-      quantity: "",
-    };
-    if ((product.saleMode || "WEIGHT") === "WEIGHT") {
-      return item;
-    }
-    item.quantity = "1";
-    item.amount = (parseFloat(item.quantity) * parseFloat(item.price || 0)).toFixed(2);
-    return item;
-  };
-
-  const quickAddProduct = (product) => {
-    setSaleItems((prev) => [...prev, buildItemFromProduct(product)]);
+  const addProduct = (product) => {
+    setSaleItems((prev) => [...prev, buildLine(product, selectedCustomer)]);
   };
 
   const removeItem = (index) => {
-    setSaleItems(saleItems.filter((_, i) => i !== index));
+    setSaleItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const updateItem = (index, field, value) => {
-    const updated = [...saleItems];
-    const item = updated[index];
-    const currentProduct = products.find(p => p.id === parseInt(item.productId));
-    
-    if (field === 'productId') {
-      const product = products.find(p => p.id === parseInt(value));
-      if (product) {
-        item.productId = value;
-        // Use wholesale price when wholesale customer selected (fallback to retail if wholesale not set)
-        const selectedCustomer = customerId ? customers.find(c => c.id === parseInt(customerId)) : null;
-        const useWholesale = selectedCustomer?.type === 'WHOLESALE';
-        const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-        item.price = useWholesale ? (product.wholesalePrice ?? retail) : retail;
-        if (product.saleMode === "WEIGHT") {
-          const unitPrice = parseFloat(item.price || 0);
-          if (item.amount != null && String(item.amount).trim() !== '') {
-            const amount = parseFloat(item.amount || 0);
-            item.quantity =
-              unitPrice > 0 && Number.isFinite(amount) && amount > 0
-                ? (amount / unitPrice).toFixed(3)
-                : '';
-          } else if (item.quantity != null && String(item.quantity).trim() !== '') {
-            const qty = parseFloat(item.quantity || 0);
-            item.amount =
-              qty > 0 && unitPrice > 0 ? (qty * unitPrice).toFixed(2) : '';
-          } else {
-            item.quantity = item.quantity || '';
-          }
-        } else {
-          const qty = parseFloat(item.quantity || 1);
-          item.quantity = qty > 0 ? String(qty) : '1';
-          item.amount = ((parseFloat(item.quantity || 1) || 1) * parseFloat(item.price || 0)).toFixed(2);
-        }
-      }
-    } else if (field === 'amount') {
-      item.amount = value;
-      if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
-        const amount = parseFloat(value || 0);
-        const unitPrice = parseFloat(item.price || 0);
-        if (value === '' || String(value).trim() === '' || !Number.isFinite(amount) || amount <= 0) {
-          item.quantity = '';
-        } else {
-          item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
-        }
-      }
-    } else if (field === 'price') {
-      item.price = value;
-      const unitPrice = parseFloat(value || 0);
-      if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
-        if (item.amount && String(item.amount).trim() !== '') {
-          const amount = parseFloat(item.amount || 0);
-          item.quantity = unitPrice > 0 ? (amount / unitPrice).toFixed(3) : '';
-        } else if (item.quantity && String(item.quantity).trim() !== '') {
-          const qty = parseFloat(item.quantity || 0);
-          item.amount = qty > 0 && unitPrice > 0 ? (qty * unitPrice).toFixed(2) : '';
-        }
-      } else {
-        const qty = parseFloat(item.quantity || 0);
-        item.amount = qty > 0 ? (qty * unitPrice).toFixed(2) : '';
-      }
-    } else if (field === 'quantity') {
-      item.quantity = value;
-      const qty = parseFloat(value || 0);
-      const unitPrice = parseFloat(item.price || 0);
-      if ((currentProduct?.saleMode || 'WEIGHT') === 'WEIGHT') {
-        if (value === '' || String(value).trim() === '' || !Number.isFinite(qty) || qty <= 0) {
-          item.amount = '';
-        } else {
-          item.amount = unitPrice > 0 ? (qty * unitPrice).toFixed(2) : '';
-        }
-      } else {
-        item.amount = qty > 0 && Number.isFinite(qty) ? (qty * unitPrice).toFixed(2) : '';
-      }
-    } else {
-      item[field] = value;
-    }
-    
-    setSaleItems(updated);
-  };
-
-  const calculateTotal = () => {
-    return saleItems.reduce((sum, item) => {
-      const amount = parseFloat(item.amount || 0);
-      return sum + amount;
-    }, 0);
+    setSaleItems((prev) =>
+      prev.map((item, i) => (i === index ? changeLine(item, field, value, products, selectedCustomer) : item)),
+    );
   };
 
   const handleCustomerChange = (newId) => {
     setCustomerId(newId);
-    const selectedCustomer = newId ? customers.find((c) => c.id === parseInt(newId, 10)) : null;
-    const useWholesale = selectedCustomer?.type === "WHOLESALE";
-    setSaleItems((prev) =>
-      prev.map((item) => {
-        const product = products.find((p) => p.id === parseInt(item.productId, 10));
-        if (!product) return item;
-        const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-        const newPrice = useWholesale ? product.wholesalePrice ?? retail : retail;
-        if ((product.saleMode || "WEIGHT") === "WEIGHT") {
-          const amountNum = parseFloat(item.amount || 0);
-          const qtyNum = parseFloat(item.quantity || 0);
-          if (item.amount !== "" && item.amount != null && amountNum > 0 && newPrice > 0) {
-            const quantity = (amountNum / newPrice).toFixed(3);
-            return { ...item, price: String(newPrice), quantity };
-          }
-          if (item.quantity !== "" && item.quantity != null && qtyNum > 0 && newPrice > 0) {
-            const amount = (qtyNum * newPrice).toFixed(2);
-            return { ...item, price: String(newPrice), amount };
-          }
-          return { ...item, price: String(newPrice) };
-        }
-        const quantity = parseFloat(item.quantity || 0);
-        const amount = quantity > 0 ? (quantity * newPrice).toFixed(2) : item.amount;
-        return { ...item, price: String(newPrice), amount };
-      }),
-    );
+    const customer = newId ? customers.find((c) => c.id === parseInt(newId, 10)) : null;
+    setSaleItems((prev) => repriceLines(prev, products, customer));
   };
 
-  const handleSubmit = async (e) => {
+  const handlePaymentMethodChange = (method) => {
+    setPaymentMethod(method);
+    if (method === "CREDIT" && selectedCustomer && selectedCustomer.type !== "CREDIT") {
+      handleCustomerChange("");
+    }
+  };
+
+  const clearSale = () => {
+    setSaleItems([]);
+    setCustomerId("");
+    setTableLabel("");
+    setPaymentMethod("CASH");
+    setStep("build");
+  };
+
+  const checkSale = () => {
+    const problem = validateLines(saleItems);
+    if (problem) {
+      toast.error(problem);
+      return false;
+    }
+    if (paymentMethod === "CREDIT" && !customerId) {
+      toast.error("Please select a credit customer for credit sales");
+      return false;
+    }
+    return true;
+  };
+
+  const handleCharge = (e) => {
     e.preventDefault();
-    if (submittingRef.current) return;
+    if (!checkSale()) return;
+    setStep("review");
+  };
 
-    if (saleItems.length === 0) {
-      toast.error("Please add at least one item to the sale");
-      return;
-    }
-
-    // Validate items
-    for (const item of saleItems) {
-      if (!item.productId || !item.amount || !item.price || !item.quantity) {
-        toast.error("Please fill in all fields for all items");
-        return;
-      }
-      const quantity = parseFloat(item.quantity);
-      if (quantity <= 0) {
-        toast.error("Invalid quantity calculated. Please check the amount and price.");
-        return;
-      }
-    }
-
+  const handleConfirm = async () => {
+    if (submittingRef.current || !checkSale()) return;
     try {
       submittingRef.current = true;
       setSubmitting(true);
-      // Validate credit sales require customer
-      if (paymentMethod === 'CREDIT' && !customerId) {
-        toast.error("Please select a customer for credit sales");
-        submittingRef.current = false;
-        setSubmitting(false);
-        return;
-      }
-
       const saleData = {
         sessionId: currentSession.id,
-        items: saleItems.map(item => {
-          const product = products.find(p => p.id === parseInt(item.productId));
-          const quantity = parseFloat(item.quantity || 0);
-          const unitPrice = parseFloat(item.price || 0);
-          const calculatedQuantity = product?.saleMode === 'WEIGHT'
-            ? (unitPrice > 0 ? (parseFloat(item.amount || 0) / unitPrice) : quantity)
-            : quantity;
-          return {
-            productId: parseInt(item.productId),
-            quantity: calculatedQuantity,
-            unitPrice: unitPrice,
-          };
-        }),
-        paymentMethod: paymentMethod,
-        customerId: customerId ? parseInt(customerId) : undefined,
+        items: saleItems.map((item) =>
+          lineToPayload(
+            item,
+            products.find((p) => p.id === parseInt(item.productId, 10)),
+          ),
+        ),
+        paymentMethod,
+        customerId: customerId ? parseInt(customerId, 10) : undefined,
+        tableLabel: tableLabel || undefined,
       };
-
       const response = await apiClient.sales.create(saleData);
-      toast.success("Sale created successfully!");
+      writeDraft(null);
+      draftRestoredFor.current = null;
+      toast.success("Sale confirmed");
       router.push(`/dashboard/sales/${response.data.id}`);
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to create sale");
       submittingRef.current = false;
       setSubmitting(false);
     }
+  };
+
+  const handleDiscard = () => {
+    if (!confirm("Discard this sale? Nothing has been saved yet.")) return;
+    clearSale();
   };
 
   if (loading) {
@@ -575,6 +558,24 @@ export default function NewSalePage() {
       </PageShell>
     );
   }
+
+  const branchSelect = isAdmin ? (
+    <select
+      value={selectedBranchId}
+      onChange={(e) => {
+        clearSale();
+        setSelectedBranchId(e.target.value);
+      }}
+      className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-base min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <option value="">Select branch</option>
+      {branches.map((branch) => (
+        <option key={branch.id} value={branch.id}>
+          {branch.name}
+        </option>
+      ))}
+    </select>
+  ) : null;
 
   if (!currentSession) {
     return (
@@ -587,18 +588,7 @@ export default function NewSalePage() {
           {isAdmin && (
             <div className="max-w-sm">
               <label className="block text-sm font-medium text-gray-700 mb-1">Branch *</label>
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select branch</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
+              {branchSelect}
             </div>
           )}
           <button
@@ -613,376 +603,81 @@ export default function NewSalePage() {
     );
   }
 
-  if (!isAdmin) {
+  const branchName = currentSession.branch?.name || user?.branch?.name || "This branch";
+  const total = linesTotal(saleItems, products, cookingFeePerKg);
+  const renderOptions = (compact = false) => (
+    <SaleOptions
+      paymentMethod={paymentMethod}
+      onPaymentMethodChange={handlePaymentMethodChange}
+      customerId={customerId}
+      onCustomerChange={handleCustomerChange}
+      customers={customers}
+      tableLabel={tableLabel}
+      setTableLabel={setTableLabel}
+      tables={settings.tables}
+      compact={compact}
+    />
+  );
+
+  if (step === "review") {
     return (
-      <CashierTill
-        user={user}
-        currentSession={currentSession}
-        products={products}
-        filteredProducts={filteredProducts}
-        productSearch={productSearch}
-        setProductSearch={setProductSearch}
-        saleItems={saleItems}
-        quickAddProduct={quickAddProduct}
-        removeItem={removeItem}
-        updateItem={updateItem}
-        paymentMethod={paymentMethod}
-        setPaymentMethod={setPaymentMethod}
-        customerId={customerId}
-        onCustomerChange={handleCustomerChange}
-        customers={customers}
-        calculateTotal={calculateTotal}
-        onSubmit={handleSubmit}
-        onClear={() => setSaleItems([])}
-        submitting={submitting}
-      />
+      <div className="h-full overflow-y-auto">
+        <ReviewSale
+          branchName={branchName}
+          products={products}
+          customer={selectedCustomer}
+          saleItems={saleItems}
+          addProduct={addProduct}
+          removeItem={removeItem}
+          updateItem={updateItem}
+          options={renderOptions(true)}
+          total={total}
+          cookingFeePerKg={cookingFeePerKg}
+          allowPriceEdit={isAdmin}
+          paymentMethod={paymentMethod}
+          tableLabel={tableLabel}
+          submitting={submitting}
+          onConfirm={handleConfirm}
+          onBack={() => setStep("build")}
+          onDiscard={handleDiscard}
+        />
+      </div>
     );
   }
 
-  return (
-    <PageShell className="space-y-4 sm:space-y-6">
-      <PageHeader
-        title="New Sale"
-        subtitle="Tap products to add lines quickly, then enter amounts. Same flow as before — fewer clicks to get started."
-      />
-      <p className="-mt-2 text-sm text-gray-500">
-        Branch: {currentSession.branch?.name || user?.branch?.name || "Unassigned"}
-      </p>
-
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <div className="space-y-6 pb-28 sm:pb-32">
-          {isAdmin && (
-            <div className="border-b border-gray-200 pb-4">
-              <label className="mb-2 block text-sm font-semibold text-gray-800">Branch *</label>
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="w-full max-w-md rounded-xl border border-gray-300 px-4 py-3 text-base min-h-[48px] focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-              >
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="grid gap-4 border-b border-gray-200 pb-6 sm:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-800">Payment *</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => {
-                  setPaymentMethod(e.target.value);
-                  if (e.target.value !== "CREDIT") {
-                    setCustomerId("");
-                  }
-                }}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base font-medium min-h-[52px] touch-manipulation focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                required
-              >
-                <option value="CASH">Cash</option>
-                <option value="MPESA">M-Pesa</option>
-                <option value="CREDIT">Credit</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-800">
-                {paymentMethod === "CREDIT" ? "Customer *" : "Customer (wholesale / credit)"}
-              </label>
-              <select
-                value={customerId}
-                onChange={(e) => {
-                  const newId = e.target.value;
-                  setCustomerId(newId);
-                  const selectedCustomer = newId ? customers.find((c) => c.id === parseInt(newId, 10)) : null;
-                  const useWholesale = selectedCustomer?.type === "WHOLESALE";
-                  setSaleItems((prev) =>
-                    prev.map((item) => {
-                      const product = products.find((p) => p.id === parseInt(item.productId, 10));
-                      if (!product) return item;
-                      const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-                      const newPrice = useWholesale ? product.wholesalePrice ?? retail : retail;
-                      if ((product.saleMode || "WEIGHT") === "WEIGHT") {
-                        const amountNum = parseFloat(item.amount || 0);
-                        const qtyNum = parseFloat(item.quantity || 0);
-                        if (item.amount !== "" && item.amount != null && amountNum > 0 && newPrice > 0) {
-                          const quantity = (amountNum / newPrice).toFixed(3);
-                          return { ...item, price: String(newPrice), quantity };
-                        }
-                        if (item.quantity !== "" && item.quantity != null && qtyNum > 0 && newPrice > 0) {
-                          const amount = (qtyNum * newPrice).toFixed(2);
-                          return { ...item, price: String(newPrice), amount };
-                        }
-                        return { ...item, price: String(newPrice) };
-                      }
-                      const quantity = parseFloat(item.quantity || 0);
-                      const amount = quantity > 0 ? (quantity * newPrice).toFixed(2) : item.amount;
-                      return { ...item, price: String(newPrice), amount };
-                    }),
-                  );
-                }}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base min-h-[52px] touch-manipulation focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                required={paymentMethod === "CREDIT"}
-              >
-                <option value="">{paymentMethod === "CREDIT" ? "Select a customer" : "None"}</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}{" "}
-                    {customer.type === "CREDIT" && customer.creditLimit
-                      ? `(Limit: KES ${parseFloat(customer.creditLimit).toLocaleString("en-KE", { minimumFractionDigits: 2 })})`
-                      : ""}{" "}
-                    {customer.type === "WHOLESALE" ? "(Wholesale)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {customerId && customers.find((c) => c.id === parseInt(customerId, 10))?.type === "WHOLESALE" && (
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-900">
-              Wholesale customer — new taps use wholesale price where set.
-            </div>
-          )}
-
-          {/* Quick-add grid */}
-          <section className="rounded-2xl border-2 border-gray-100 bg-gradient-to-b from-gray-50/90 to-white p-4 sm:p-5">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 sm:text-xl">Quick add</h2>
-                <p className="mt-0.5 text-sm text-gray-600">
-                  Large buttons for busy tills. Weight items: enter <strong>KES amount</strong> or <strong>kg</strong> on the line.
-                </p>
-              </div>
-              <input
-                type="search"
-                placeholder="Search products…"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base shadow-sm min-h-[52px] sm:max-w-sm touch-manipulation focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                autoComplete="off"
-              />
-            </div>
-            <div className="max-h-[min(42vh,440px)] overflow-y-auto overscroll-contain pr-1">
-              {filteredProducts.length === 0 ? (
-                <p className="py-10 text-center text-sm text-gray-500">
-                  {productSearch.trim()
-                    ? "No products match this search."
-                    : "Nothing left to sell in this session."}
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {filteredProducts.map((product) => {
-                    const retail = product.defaultPrice ?? product.pricePerUnit ?? 0;
-                    const selectedCustomer = customerId
-                      ? customers.find((c) => c.id === parseInt(customerId, 10))
-                      : null;
-                    const useWholesale = selectedCustomer?.type === "WHOLESALE";
-                    const showPrice =
-                      useWholesale && product.wholesalePrice != null ? product.wholesalePrice : retail;
-                    return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => quickAddProduct(product)}
-                        className="touch-manipulation flex min-h-[88px] flex-col items-start justify-between rounded-2xl border-2 border-gray-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-900/40 hover:shadow-md active:scale-[0.98] sm:min-h-[96px] sm:p-4"
-                      >
-                        <span className="line-clamp-2 text-sm font-bold leading-snug text-gray-900 sm:text-base">
-                          {product.name}
-                        </span>
-                        <span className="mt-1 text-xs font-semibold text-gray-600">
-                          {formatOnHand(product)}
-                        </span>
-                        <span className="mt-2 text-base font-bold tabular-nums text-blue-900 sm:text-lg">
-                          KES{" "}
-                          {Number(showPrice).toLocaleString("en-KE", {
-                            maximumFractionDigits: 0,
-                          })}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+  const till = (
+    <CashierTill
+      branchName={branchName}
+      branchPicker={
+        isAdmin ? (
+          <div className="flex items-center gap-3 border-b border-gray-200 px-3 py-2">
+            <span className="text-sm font-semibold text-gray-600">Branch</span>
+            <div className="max-w-xs flex-1">{branchSelect}</div>
             <button
               type="button"
-              onClick={addItem}
-              className="mt-4 text-sm font-semibold text-blue-900 underline-offset-2 hover:underline min-h-[44px] px-1 py-2 touch-manipulation"
+              onClick={() => setSaleItems((prev) => [...prev, emptyLine()])}
+              className="min-h-[44px] rounded-lg px-3 text-sm font-semibold text-blue-900 hover:bg-blue-50"
             >
-              Add empty line (pick product manually)
+              Add empty line
             </button>
-          </section>
-
-          {/* Line items */}
-          <div>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-bold text-gray-900 sm:text-xl">This sale</h2>
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 tabular-nums">
-                {saleItems.length} line{saleItems.length === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            {saleItems.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 px-4 py-12 text-center">
-                <p className="text-base font-medium text-gray-700">Basket is empty</p>
-                <p className="mt-2 text-sm text-gray-500">Tap a product above, or add an empty line.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {saleItems.map((item, index) => (
-                  <div
-                    key={`${index}-${item.productId || "x"}`}
-                    className="rounded-2xl border-2 border-gray-200 bg-gray-50/40 p-4 sm:p-5"
-                  >
-                    {(() => {
-                      const selectedProduct = products.find((product) => product.id === parseInt(item.productId, 10));
-                      const saleMode = selectedProduct?.saleMode || "WEIGHT";
-                      const isWeightSale = saleMode === "WEIGHT";
-                      const promptLabel = getPromptLabel(selectedProduct);
-                      return (
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-12 sm:gap-4">
-                          <div className="sm:col-span-4">
-                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              Product
-                            </label>
-                            <select
-                              value={item.productId}
-                              onChange={(e) => updateItem(index, "productId", e.target.value)}
-                              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-base min-h-[48px] touch-manipulation focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                              required
-                            >
-                              <option value="">Select product</option>
-                              {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name} ({product.unit}) – KES{" "}
-                                  {parseFloat(product.defaultPrice || product.pricePerUnit || 0).toLocaleString("en-KE", {
-                                    minimumFractionDigits: 0,
-                                  })}
-                                  {product.wholesalePrice != null
-                                    ? ` | W ${parseFloat(product.wholesalePrice).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`
-                                    : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="sm:col-span-3">
-                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              {isWeightSale ? "Amount (KES) *" : "Amount (KES)"}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.amount}
-                              onChange={(e) => updateItem(index, "amount", e.target.value)}
-                              className={`w-full rounded-xl border border-gray-300 px-3 py-3 text-base min-h-[48px] touch-manipulation ${
-                                isWeightSale
-                                  ? "bg-white focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                                  : "cursor-not-allowed bg-gray-100 text-gray-600"
-                              }`}
-                              required={isWeightSale}
-                              readOnly={!isWeightSale}
-                            />
-                          </div>
-
-                          <div className="sm:col-span-3">
-                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              Unit price (KES) *
-                              {customerId &&
-                              customers.find((c) => c.id === parseInt(customerId, 10))?.type === "WHOLESALE" ? (
-                                <span className="font-normal normal-case text-green-700"> · wholesale</span>
-                              ) : null}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.price}
-                              onChange={(e) => updateItem(index, "price", e.target.value)}
-                              className="w-full rounded-xl border border-gray-300 bg-gray-100 px-3 py-3 text-base min-h-[48px] touch-manipulation focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                              placeholder="From product"
-                              title={
-                                customerId &&
-                                customers.find((c) => c.id === parseInt(customerId, 10))?.type === "WHOLESALE"
-                                  ? "Wholesale unit price"
-                                  : "Retail unit price"
-                              }
-                            />
-                          </div>
-
-                          <div className="sm:col-span-2">
-                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              {promptLabel}
-                            </label>
-                            <input
-                              type="number"
-                              step={isWeightSale ? "0.001" : "0.01"}
-                              min="0"
-                              value={item.quantity || ""}
-                              onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-base min-h-[48px] touch-manipulation focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20"
-                              placeholder={
-                                isWeightSale ? `${selectedProduct?.unit || "kg"}` : `Qty (${selectedProduct?.unit || ""})`
-                              }
-                            />
-                          </div>
-
-                          <div className="flex flex-col justify-end gap-2 sm:col-span-12 sm:flex-row sm:items-end sm:justify-between">
-                            <p className="text-lg font-bold tabular-nums text-gray-900 sm:order-2">
-                              Line: KES {parseFloat(item.amount || 0).toFixed(2)}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => removeItem(index)}
-                              className="w-full rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-center text-base font-semibold text-red-800 hover:bg-red-100 min-h-[48px] touch-manipulation sm:w-auto sm:min-w-[140px] sm:order-1"
-                            >
-                              Remove line
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-4 sm:px-6">
-            <span className="text-lg font-semibold text-gray-800">Total</span>
-            <span className="text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
-              KES {calculateTotal().toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-
-          <div
-            className={`${
-              saleItems.length > 0
-                ? "sticky bottom-0 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6"
-                : "border-t border-gray-200 pt-4"
-            }`}
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
-              <button
-                type="button"
-                onClick={() => router.back()}
-                className="flex-1 rounded-xl border-2 border-gray-300 bg-gray-100 px-6 py-4 text-center text-base font-semibold text-gray-800 hover:bg-gray-200 min-h-[56px] touch-manipulation sm:min-h-[60px]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex-[2] rounded-xl bg-green-600 px-6 py-4 text-center text-lg font-bold text-white shadow-md hover:bg-green-700 active:bg-green-800 min-h-[56px] touch-manipulation sm:min-h-[60px] sm:text-xl disabled:opacity-50"
-              >
-                {submitting ? "Creating…" : "Create sale"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </form>
-    </PageShell>
+        ) : null
+      }
+      products={products}
+      customer={selectedCustomer}
+      saleItems={saleItems}
+      addProduct={addProduct}
+      removeItem={removeItem}
+      updateItem={updateItem}
+      options={renderOptions()}
+      total={total}
+      cookingFeePerKg={cookingFeePerKg}
+      allowPriceEdit={isAdmin}
+      onSubmit={handleCharge}
+      onClear={clearSale}
+    />
   );
-}
 
+  // Admins use the sidebar layout, which does not give the page a fixed height.
+  return isAdmin ? <div className="h-[calc(100vh-11rem)] min-h-[560px]">{till}</div> : till;
+}

@@ -23,7 +23,7 @@ export class ProductionRunIngredient {
   @Column()
   productionRunId: number;
 
-  @ManyToOne(() => RecipeIngredient, { nullable: true, eager: true })
+  @ManyToOne(() => RecipeIngredient, { nullable: true, eager: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'recipeIngredientId' })
   recipeIngredient: RecipeIngredient | null;
 

@@ -14,7 +14,7 @@ import {
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
-import { CreateSaleDto } from './dto/create-sale.dto';
+import { AddSaleItemsDto, CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -59,7 +59,12 @@ export class SalesController {
     @Query('dateTo') dateTo?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scopedBranchId = isAdminUser(req.user) ? (branchId ? +branchId : undefined) : req.user.branchId;
+    const isAdmin = isAdminUser(req.user);
+    const scopedBranchId = isAdmin ? (branchId ? +branchId : undefined) : req.user.branchId;
+    if (!isAdmin && !sessionId) {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Nairobi' }).format(new Date());
+      return this.salesService.findAll(undefined, undefined, today, undefined, undefined, scopedBranchId);
+    }
     return this.salesService.findAll(
       sessionId ? +sessionId : undefined,
       productId ? +productId : undefined,
@@ -106,6 +111,14 @@ export class SalesController {
     const receiptText = await this.salesService.generatePlainTextReceipt(+id, req.user);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(receiptText);
+  }
+
+  @Post(':id/items')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Add items to an unpaid sale (items cannot be removed once confirmed)' })
+  addItems(@Param('id') id: string, @Body() dto: AddSaleItemsDto, @Request() req) {
+    return this.salesService.addItems(+id, dto, req.user);
   }
 
   @Patch(':id')

@@ -16,6 +16,7 @@ import { StockEntriesModule } from '../stock-entries/stock-entries.module';
 import { CustomersModule } from '../customers/customers.module';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { ProductionModule } from '../production/production.module';
+import { SaleSettingsModule } from '../sale-settings/sale-settings.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ProductionModule } from '../production/production.module';
     CustomersModule,
     ActivityLogModule,
     forwardRef(() => ProductionModule),
+    SaleSettingsModule,
   ],
   controllers: [SalesController, PaymentsController],
   providers: [SalesService, PaymentsService],

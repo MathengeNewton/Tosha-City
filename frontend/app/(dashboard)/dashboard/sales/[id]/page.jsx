@@ -7,6 +7,9 @@ import { toast } from "react-toastify";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import { buildCustomerBillDocument } from "../customerBill";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
+import ProductGrid from "../ProductGrid";
+import SaleLineCard from "../SaleLineCard";
+import { buildLine, changeLine, formatKes, lineToPayload, linesTotal, validateLines } from "../saleLines";
 
 export default function SaleDetailsPage() {
   const router = useRouter();
@@ -17,6 +20,11 @@ export default function SaleDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [sale, setSale] = useState(null);
   const [payment, setPayment] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [tillProducts, setTillProducts] = useState([]);
+  const [newLines, setNewLines] = useState([]);
+  const [savingItems, setSavingItems] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [mpesaReference, setMpesaReference] = useState("");
@@ -30,12 +38,67 @@ export default function SaleDetailsPage() {
     isAdmin &&
     sale.paymentStatus === "PENDING" &&
     sale.session?.status === "OPEN";
+  const canAddItems =
+    !!sale && sale.paymentStatus === "PENDING" && sale.session?.status === "OPEN" && !sale.restaurantOrderId;
+  const cookingFeePerKg = Number(settings?.cookingFeePerKg ?? 100);
 
   useEffect(() => {
     if (saleId) {
       loadSaleData();
     }
   }, [saleId]);
+
+  useEffect(() => {
+    apiClient.saleSettings
+      .get()
+      .then((res) => setSettings(res.data))
+      .catch(() => setSettings(null));
+  }, []);
+
+  const startAdding = async () => {
+    try {
+      const res = await apiClient.sales.getTillAvailability({ sessionId: sale.sessionId });
+      const list = Array.isArray(res.data) ? res.data : [];
+      setTillProducts(list.filter((product) => Number(product.available) > 0));
+      setNewLines([]);
+      setAdding(true);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not load products");
+    }
+  };
+
+  const updateNewLine = (index, field, value) => {
+    setNewLines((prev) =>
+      prev.map((line, i) => (i === index ? changeLine(line, field, value, tillProducts, sale.customer) : line)),
+    );
+  };
+
+  const handleSaveNewItems = async () => {
+    const problem = validateLines(newLines);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    try {
+      setSavingItems(true);
+      await apiClient.sales.addItems(sale.id, {
+        items: newLines.map((line) =>
+          lineToPayload(
+            line,
+            tillProducts.find((p) => p.id === parseInt(line.productId, 10)),
+          ),
+        ),
+      });
+      toast.success("Items added to the sale");
+      setAdding(false);
+      setNewLines([]);
+      loadSaleData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to add items");
+    } finally {
+      setSavingItems(false);
+    }
+  };
 
   const loadSaleData = async () => {
     try {
@@ -119,7 +182,7 @@ export default function SaleDetailsPage() {
   };
 
   const handleDeleteSale = async () => {
-    if (!confirm(`Delete sale ${sale.saleNumber}? Only unpaid sales can be deleted.`)) return;
+    if (!confirm(`Delete sale ${sale.saleNumber}? Its items go back into stock. Only unpaid sales can be deleted.`)) return;
     try {
       await apiClient.sales.delete(sale.id);
       toast.success("Sale deleted");
@@ -141,7 +204,7 @@ export default function SaleDetailsPage() {
       return;
     }
     doc.open();
-    doc.write(buildCustomerBillDocument(sale, kind));
+    doc.write(buildCustomerBillDocument(sale, kind, settings || {}));
     doc.close();
   };
 
@@ -174,6 +237,14 @@ export default function SaleDetailsPage() {
               Record Payment
             </button>
           )}
+          {canAddItems && !adding && (
+            <button
+              onClick={startAdding}
+              className="flex-1 sm:flex-none bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-blue-800 transition-colors text-sm min-h-[44px]"
+            >
+              Add items
+            </button>
+          )}
           {canAdminEditSale && (
             <button
               onClick={handleOpenEditModal}
@@ -197,7 +268,7 @@ export default function SaleDetailsPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">
-            KES {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+            KES {formatKes(sale.totalAmount)}
           </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -216,14 +287,26 @@ export default function SaleDetailsPage() {
             {sale.customer?.name || "Walk-in"}
             {sale.soldBy?.username ? ` · ${sale.soldBy.username}` : ""}
           </p>
+          {(sale.tableLabel || sale.restaurantOrder?.tableLabel) && (
+            <p className="mt-1 text-base font-bold text-gray-900">
+              Table {sale.tableLabel || sale.restaurantOrder?.tableLabel}
+            </p>
+          )}
         </div>
       </div>
+
+      {sale.paymentStatus === "PAID" && (
+        <p className="no-print rounded-xl bg-gray-100 px-4 py-2 text-sm text-gray-700">
+          This sale is paid and can no longer be edited.
+        </p>
+      )}
 
       <div className="space-y-3">
         {(sale.items || []).map((item) => {
           const qty = parseFloat(item.quantity || 0);
           const unitPrice = parseFloat(item.unitPrice || 0);
           const lineTotal = parseFloat(item.totalPrice || qty * unitPrice || 0);
+          const cookingFee = parseFloat(item.cookingFee || 0);
           return (
             <div key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4">
               <div className="flex items-start justify-between gap-3">
@@ -231,17 +314,83 @@ export default function SaleDetailsPage() {
                   <p className="text-lg font-bold text-gray-900">{item.product?.name || "Item"}</p>
                   <p className="mt-1 text-sm text-gray-600">
                     {qty.toLocaleString("en-KE", { maximumFractionDigits: 3 })} {item.product?.unit || ""} × KES{" "}
-                    {unitPrice.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                    {formatKes(unitPrice)}
                   </p>
                 </div>
                 <p className="text-lg font-bold tabular-nums text-gray-900">
-                  {lineTotal.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                  {formatKes(lineTotal)}
                 </p>
               </div>
+              {item.cookInKitchen && cookingFee > 0 && (
+                <div className="mt-2 flex items-start justify-between gap-3 rounded-lg bg-orange-50 px-3 py-2 text-orange-900">
+                  <p className="text-sm font-semibold">
+                    Kitchen cooking fee · {qty.toLocaleString("en-KE", { maximumFractionDigits: 3 })} kg × KES{" "}
+                    {formatKes(item.cookingFeePerKg)}
+                  </p>
+                  <p className="text-base font-bold tabular-nums">{formatKes(cookingFee)}</p>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {adding && (
+        <div className="no-print space-y-3 rounded-2xl border-2 border-blue-900/30 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <div>
+              <p className="text-lg font-bold text-gray-900">Add items</p>
+              <p className="text-sm text-gray-600">
+                Items already on the sale stay. New items are added to the total.
+              </p>
+            </div>
+            {newLines.length > 0 && (
+              <p className="text-lg font-bold tabular-nums text-gray-900">
+                + KES {formatKes(linesTotal(newLines, tillProducts, cookingFeePerKg))}
+              </p>
+            )}
+          </div>
+          {newLines.map((line, index) => (
+            <SaleLineCard
+              key={`${index}-${line.productId}`}
+              line={line}
+              products={tillProducts}
+              onChange={(field, value) => updateNewLine(index, field, value)}
+              onRemove={() => setNewLines((prev) => prev.filter((_, i) => i !== index))}
+              cookingFeePerKg={cookingFeePerKg}
+              allowPriceEdit={isAdmin}
+            />
+          ))}
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <ProductGrid
+              products={tillProducts}
+              customer={sale.customer}
+              onPick={(product) => setNewLines((prev) => [...prev, buildLine(product, sale.customer)])}
+              className="max-h-[50vh]"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSaveNewItems}
+              disabled={savingItems || newLines.length === 0}
+              className="min-h-[52px] flex-1 rounded-xl bg-green-600 px-6 text-base font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {savingItems ? "Adding…" : "Add to sale"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAdding(false);
+                setNewLines([]);
+              }}
+              className="min-h-[52px] rounded-xl bg-gray-200 px-6 text-base font-semibold text-gray-800 hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {payment?.mpesaReference ? (
         <p className="text-sm text-gray-600">M-Pesa ref {payment.mpesaReference}</p>
@@ -318,9 +467,7 @@ export default function SaleDetailsPage() {
             <h2 className="text-lg sm:text-xl font-bold mb-4">Record Payment</h2>
             <p className="text-sm text-gray-600 mb-4">
               Amount: KES{" "}
-              {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", {
-                minimumFractionDigits: 2,
-              })}
+              {formatKes(sale.totalAmount)}
             </p>
             <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
               <div>

@@ -22,6 +22,8 @@ export enum StockEntryType {
   PRODUCTION_USAGE = 'PRODUCTION_USAGE',
   /** Issued from store to kitchen (KITCHEN_SUPPLY products); not a sale */
   KITCHEN_ISSUE = 'KITCHEN_ISSUE',
+  /** Admin correction; signed quantity (positive adds stock, negative removes) */
+  ADJUSTMENT = 'ADJUSTMENT',
 }
 
 @Entity()
@@ -79,6 +81,10 @@ export class StockEntry {
   @ApiProperty({ description: 'Photo URL for wastage evidence', required: false })
   @Column({ type: 'varchar', nullable: true })
   photoUrl: string | null;
+
+  @ApiProperty({ description: 'Sale that created this entry (byproduct sales)', required: false })
+  @Column({ type: 'int', nullable: true })
+  saleId: number | null;
 
   @ApiProperty({ description: 'User who recorded this entry' })
   @ManyToOne(() => User, { eager: true })

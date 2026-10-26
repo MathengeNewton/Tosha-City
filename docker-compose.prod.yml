@@ -44,6 +44,12 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # Shop tills open the dashboard at http://192.168.x.x:3015. Leave this on.
       CORS_ALLOW_LAN: ${CORS_ALLOW_LAN:-true}
+      # Optional: store wastage photos on Cloudinary instead of the uploads volume.
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    volumes:
+      - uploads_data:/app/uploads
     ports:
       - "${BACKEND_HOST_PORT:-4515}:3000"
     networks:
@@ -75,6 +81,7 @@ services:
 
 volumes:
   db_data: {}
+  uploads_data: {}
 
 networks:
   app-network:

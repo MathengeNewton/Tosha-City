@@ -1,28 +1,94 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "../../../../lib/api";
 import { toast } from "react-toastify";
 import { exportToExcel } from "../../../../lib/exportExcel";
+import { useAuth } from "../../../../contexts/AuthContext";
 import { PageShell, PageHeader, PageLoading } from "../../components/shell";
+import { formatKes } from "./saleLines";
+
+const FILTERS_KEY = "laketown-sales-filters";
+
+function nairobiToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" }).format(new Date());
+}
+
+function todayFilters() {
+  const today = nairobiToday();
+  return { productId: "", dateFrom: today, dateTo: today };
+}
+
+/** URL first, then what the user picked earlier today, otherwise today's sales. */
+function initialFilters(searchParams) {
+  if (searchParams.has("from") || searchParams.has("to") || searchParams.has("product") || searchParams.has("all")) {
+    return {
+      productId: searchParams.get("product") || "",
+      dateFrom: searchParams.get("from") || "",
+      dateTo: searchParams.get("to") || "",
+    };
+  }
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(FILTERS_KEY) || "null");
+    if (saved?.savedOn === nairobiToday() && saved.filters) return saved.filters;
+  } catch {
+    // ignore unreadable storage
+  }
+  return todayFilters();
+}
 
 export default function SalesListPage() {
+  return (
+    <Suspense
+      fallback={
+        <PageShell>
+          <PageLoading message="Loading sales…" />
+        </PageShell>
+      }
+    >
+      <SalesList />
+    </Suspense>
+  );
+}
+
+function SalesList() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { hasRole, loading: authLoading } = useAuth();
+  const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
-  const [filters, setFilters] = useState({
-    productId: "",
-    dateFrom: "",
-    dateTo: "",
-  });
+  const [filters, setFilters] = useState(null);
 
   useEffect(() => {
+    if (authLoading) return;
+    setFilters(isAdmin ? initialFilters(searchParams) : todayFilters());
+  }, [authLoading, isAdmin]);
+
+  useEffect(() => {
+    if (!filters) return;
     loadData();
+    if (!isAdmin) return;
+    const params = new URLSearchParams();
+    if (filters.productId) params.set("product", filters.productId);
+    if (filters.dateFrom) params.set("from", filters.dateFrom);
+    if (filters.dateTo) params.set("to", filters.dateTo);
+    if (!filters.productId && !filters.dateFrom && !filters.dateTo) params.set("all", "1");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    try {
+      window.sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ savedOn: nairobiToday(), filters }));
+    } catch {
+      // ignore unavailable storage
+    }
   }, [filters]);
 
   useEffect(() => {
+    if (authLoading || !isAdmin) return;
     apiClient.products.getAll().then((res) => setProducts(res.data || [])).catch(() => {});
-  }, []);
+  }, [authLoading, isAdmin]);
 
   const loadData = async () => {
     try {
@@ -30,10 +96,8 @@ export default function SalesListPage() {
 
       const params = {};
       if (filters.productId) params.productId = filters.productId;
-      if (filters.dateFrom && filters.dateTo) {
-        params.dateFrom = filters.dateFrom;
-        params.dateTo = filters.dateTo;
-      }
+      if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+      if (filters.dateTo) params.dateTo = filters.dateTo;
 
       const salesRes = await apiClient.sales.getAll(params);
       const list = Array.isArray(salesRes?.data) ? salesRes.data : (salesRes?.data ? [salesRes.data] : []);
@@ -47,7 +111,7 @@ export default function SalesListPage() {
     }
   };
 
-  if (loading) {
+  if (loading || !filters) {
     return (
       <PageShell>
         <PageLoading message="Loading sales…" />
@@ -55,9 +119,15 @@ export default function SalesListPage() {
     );
   }
 
+  const today = nairobiToday();
+  const showingToday = !filters.productId && filters.dateFrom === today && filters.dateTo === today;
+  const showingAll = !filters.productId && !filters.dateFrom && !filters.dateTo;
+  const salesTotal = sales.reduce((sum, sale) => sum + parseFloat(sale.totalAmount || 0), 0);
+  const countAndTotal = `${sales.length} sale${sales.length === 1 ? "" : "s"} · KES ${formatKes(salesTotal)}`;
+
   return (
     <PageShell className="space-y-4 sm:space-y-8">
-      <PageHeader title="Sales" subtitle="View and manage all sales">
+      <PageHeader title="Sales" subtitle={isAdmin ? "View and manage all sales" : "Today's sales"}>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
@@ -98,7 +168,9 @@ export default function SalesListPage() {
         </div>
       </PageHeader>
 
-      {/* Filters */}
+      {!isAdmin ? (
+        <p className="text-sm text-gray-500">Today · {countAndTotal}</p>
+      ) : (
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
         <div className="flex flex-wrap items-end gap-4">
           <div className="min-w-[160px]">
@@ -140,20 +212,33 @@ export default function SalesListPage() {
           </div>
           <button
             type="button"
+            onClick={() => setFilters(todayFilters())}
+            className={`px-4 py-2 border rounded-md text-sm font-medium min-h-[44px] ${
+              showingToday
+                ? "border-blue-900 bg-blue-900 text-white"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Today
+          </button>
+          <button
+            type="button"
             onClick={() => setFilters({ productId: "", dateFrom: "", dateTo: "" })}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium min-h-[44px]"
           >
-            Clear filters
+            All dates
           </button>
-          {!filters.productId && !filters.dateFrom && !filters.dateTo && (
-            <p className="text-sm text-gray-500 self-center">Showing all sales</p>
-          )}
+          <p className="text-sm text-gray-500 self-center">
+            {showingToday ? "Showing today's sales" : showingAll ? "Showing all sales" : "Filtered"}
+            {` · ${countAndTotal}`}
+          </p>
         </div>
       </div>
+      )}
 
       {sales.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-16 text-center text-gray-500">
-          No sales yet
+          {showingToday || !isAdmin ? "No sales today yet" : "No sales for these filters"}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -169,7 +254,7 @@ export default function SalesListPage() {
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-bold text-gray-900">{sale.saleNumber}</p>
                   <p className="text-lg font-bold tabular-nums text-gray-900">
-                    {parseFloat(sale.totalAmount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                    {formatKes(sale.totalAmount)}
                   </p>
                 </div>
                 <p className="mt-1 text-sm text-gray-500">

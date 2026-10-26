@@ -1,3 +1,5 @@
+import { formatKes } from "./saleLines";
+
 function esc(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -29,32 +31,59 @@ function formatQty(value) {
   return qty.toLocaleString("en-KE", { maximumFractionDigits: 3 });
 }
 
-function formatMoney(value) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return "0.00";
-  return amount.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatMoney = formatKes;
+
+// Weight lines are priced by amount and the stored quantity only keeps 2 decimals,
+// so 500 KES at 680/kg is saved as 0.74 kg; derive the weight that was actually sold.
+function soldQuantity(item) {
+  const unitPrice = Number(item.unitPrice);
+  const total = Number(item.totalPrice);
+  if ((item.product?.saleMode || "WEIGHT") === "WEIGHT" && unitPrice > 0 && total > 0) {
+    return total / unitPrice;
+  }
+  return Number(item.quantity);
 }
 
-export function buildCustomerBillDocument(sale, kind = "customer") {
+export function buildCustomerBillDocument(sale, kind = "customer", settings = {}) {
   const { datePart, timePart } = billWhen(sale?.soldAt);
   const branch = sale?.branch?.name || "LakeTown Butchery";
   const servedBy = sale?.soldBy?.username || sale?.soldBy?.email || "Cashier";
   const customer = sale?.customer?.name || "Walk-in";
-  const table = sale?.restaurantOrder?.tableLabel;
+  const table = sale?.tableLabel || sale?.restaurantOrder?.tableLabel;
   const items = Array.isArray(sale?.items) ? sale.items : [];
+  const location = settings?.receiptLocation;
+  const phone = settings?.receiptPhone;
+  const paybill = settings?.paybillNumber;
+  const paybillAccount = settings?.paybillAccount;
 
   const orderNotes = sale?.restaurantOrder?.notes;
   const itemHtml = items
     .map((item) => {
-      const qty = formatQty(item.quantity);
+      const qty = formatQty(soldQuantity(item));
       const unit = item.product?.unit || "";
       const name = item.product?.name || "Item";
+      const cooked = !!item.cookInKitchen;
       const unitPrice = formatMoney(item.unitPrice);
       const lineTotal = formatMoney(item.totalPrice ?? Number(item.quantity) * Number(item.unitPrice || 0));
+      if (kind === "kitchen") {
+        return `
+        <div class="item k-line">
+          <div>${cooked ? "COOK " : ""}${esc(name)}</div>
+          <div class="row"><span>${esc(qty)} ${esc(unit)}</span><span>KES ${esc(lineTotal)}</span></div>
+        </div>`;
+      }
+      const cookingLine =
+        cooked && Number(item.cookingFee) > 0
+          ? `<div class="cook-fee">
+          <div>Kitchen cooking fee</div>
+          <div class="prices"><span>${esc(qty)} kg</span><span>@${esc(formatMoney(item.cookingFeePerKg))}</span><span>${esc(formatMoney(item.cookingFee))}</span></div>
+        </div>`
+          : "";
       return `
         <div class="item">
           <div>${esc(name)}</div>
           <div class="prices"><span>${esc(qty)} ${esc(unit)}</span><span>@${esc(unitPrice)}</span><span>${esc(lineTotal)}</span></div>
+          ${cookingLine}
         </div>`;
     })
     .join("");
@@ -101,6 +130,9 @@ export function buildCustomerBillDocument(sale, kind = "customer") {
     .row span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
     .item { margin-bottom: 5px; }
     .prices { display: flex; justify-content: flex-end; gap: 12px; font-variant-numeric: tabular-nums; }
+    .cook-fee { margin-top: 2px; padding-left: 8px; }
+    .k-line { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+    .table-big { text-align: center; font-size: 18px; font-weight: 700; margin: 4px 0; }
     .thanks { text-align: center; margin-top: 2px; }
     .credit { text-align: center; margin-top: 6px; font-size: 11px; }
   </style>
@@ -108,38 +140,33 @@ export function buildCustomerBillDocument(sale, kind = "customer") {
 <body>
   ${kind === "kitchen" ? `<div id="slip" class="slip">
     <div class="center title">KITCHEN</div>
-    <div class="center house">LAKETOWN BUTCHERY</div>
-    <div class="center">${esc(branch)}</div>
-    <hr class="rule" />
-    <div class="row"><span>Date</span><span>${esc(datePart)}</span></div>
-    <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
-    <div class="row"><span>Served by</span><span>${esc(servedBy)}</span></div>
-    ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
-    <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
+    ${table ? `<div class="table-big">TABLE ${esc(table)}</div>` : ""}
+    <div class="row"><span>${esc(timePart)}</span><span>${esc(sale?.saleNumber || "")}</span></div>
     <hr class="rule" />
     ${itemHtml}
-    ${orderNotes ? `<div class="item">${esc(orderNotes)}</div>` : ""}
-    <hr class="rule" />
-    <div class="row"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
+    ${orderNotes ? `<hr class="rule" /><div class="item"><b>Notes:</b> ${esc(orderNotes)}</div>` : ""}
   </div>` : `<div id="slip" class="slip">
     <div class="center title">CUSTOMER BILL</div>
     <div class="center house">LAKETOWN BUTCHERY</div>
     <div class="center">${esc(branch)}</div>
+    ${location ? `<div class="center">${esc(location)}</div>` : ""}
+    ${phone ? `<div class="center">Tel: ${esc(phone)}</div>` : ""}
+    ${table ? `<div class="table-big">TABLE ${esc(table)}</div>` : ""}
     <hr class="rule" />
     <div class="row"><span>Date</span><span>${esc(datePart)}</span></div>
     <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
     <div class="row"><span>Served by</span><span>${esc(servedBy)}</span></div>
-    ${table ? `<div class="row"><span>Table</span><span>${esc(table)}</span></div>` : ""}
     <div class="row"><span>Customer</span><span>${esc(customer)}</span></div>
     <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
     <hr class="rule" />
     ${itemHtml}
     <hr class="rule" />
     <div class="row"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
-    <div class="row"><span>Till</span><span>6967914</span></div>
+    ${paybill ? `<div class="row"><span>Paybill</span><span>${esc(paybill)}</span></div>` : ""}
+    ${paybillAccount ? `<div class="row"><span>Account No.</span><span>${esc(paybillAccount)}</span></div>` : ""}
     <hr class="rule" />
     <div class="thanks">THANK YOU &amp; WELCOME AGAIN.</div>
-    <div class="credit">Built by mangoseasonlabs.co.ke</div>
+    <div class="credit">Powered by mangoseasonlabs.co.ke</div>
   </div>`}
   <script>
     window.onload = function () {

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsEnum, IsArray, ValidateNested, Min, IsOptional } from 'class-validator';
+import { IsNumber, IsEnum, IsArray, ValidateNested, Min, IsOptional, IsBoolean, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '../entities/payment.enums';
 
@@ -17,6 +17,11 @@ export class CreateSaleItemDto {
   @IsNumber()
   @Min(0)
   unitPrice?: number;
+
+  @ApiProperty({ description: 'Cook this meat in the kitchen (adds the per-kg cooking fee)', required: false })
+  @IsOptional()
+  @IsBoolean()
+  cookInKitchen?: boolean;
 }
 
 export class CreateSaleDto {
@@ -46,5 +51,18 @@ export class CreateSaleDto {
   @IsOptional()
   @IsNumber()
   restaurantOrderId?: number;
+
+  @ApiProperty({ description: 'Table label, e.g. B1 or Shade 3', required: false })
+  @IsOptional()
+  @IsString()
+  tableLabel?: string;
+}
+
+export class AddSaleItemsDto {
+  @ApiProperty({ description: 'Items to add to an unpaid sale', type: [CreateSaleItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateSaleItemDto)
+  items: CreateSaleItemDto[];
 }
 

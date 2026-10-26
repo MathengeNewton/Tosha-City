@@ -12,7 +12,9 @@ import { Sale } from './entities/sale.entity';
 import { PaymentStatus, PaymentMethod } from './entities/payment.enums';
 import { SaleItem } from './entities/sale-item.entity';
 import { SalePayment } from './entities/sale-payment.entity';
-import { CreateSaleDto } from './dto/create-sale.dto';
+import { AddSaleItemsDto, CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
+import { SaleSettingsService } from '../sale-settings/sale-settings.service';
+import { Customer } from '../customers/entities/customer.entity';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { ProductsService } from '../products/products.service';
@@ -24,7 +26,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { UserRole } from '../roles/entities/role.entity';
 import { BranchCatalogScope } from '../../common/enums/branch-catalog-scope.enum';
 import { BranchType } from '../branches/entities/branch.entity';
-import { Product, ProductCategory, ProductSegment } from '../products/entities/product.entity';
+import { Product, ProductCategory, ProductSaleMode, ProductSegment } from '../products/entities/product.entity';
 import { ProductionRun } from '../production/entities/production-run.entity';
 import { RestaurantOrder, RestaurantOrderStatus } from '../restaurant-orders/entities/restaurant-order.entity';
 
@@ -56,6 +58,7 @@ export class SalesService {
     private stockEntriesService: StockEntriesService,
     private customersService: CustomersService,
     private activityLog: ActivityLogService,
+    private saleSettingsService: SaleSettingsService,
   ) {}
 
   private isAdmin(user?: RequestUser): boolean {
@@ -151,7 +154,10 @@ export class SalesService {
         throw new BadRequestException('Customer is required for credit sales');
       }
       if (customer.type !== 'CREDIT') {
-        throw new BadRequestException('Customer must be a credit customer for credit sales');
+        const typeLabel = String(customer.type || 'REGULAR').toLowerCase();
+        throw new BadRequestException(
+          `${customer.name} is a ${typeLabel} customer. Only credit customers can buy on credit; change their type to Credit under Customers.`,
+        );
       }
       // Check credit limit
       const outstandingBalance = await this.customersService.getOutstandingBalance(customer.id);
@@ -160,63 +166,13 @@ export class SalesService {
       }
     }
 
-    const isWholesaleSale = customer?.type === 'WHOLESALE';
-
-    const branchType = session.branch.type;
-    const openSessionIds = await this.openSessionIds();
-    const pooledSessions = openSessionIds.includes(session.id) ? openSessionIds : [...openSessionIds, session.id];
-    const pooledStock = await this.loadStockSnapshot(pooledSessions);
-
-    // Calculate totals and validate stock
-    let totalAmount = 0;
-    const itemsToCreate: Partial<SaleItem>[] = [];
-    const byproductStockEntries: Array<{ productId: number; quantity: number; unit: string }> = [];
-
-    for (const itemDto of createSaleDto.items) {
-      const product = await this.productsService.findOne(itemDto.productId);
-      this.assertProductSellableAtTill(product);
-      this.assertProductAllowedForBranch(product, branchType);
-      const catalogPrice = isWholesaleSale
-        ? Number(product.wholesalePrice ?? product.defaultPrice)
-        : Number(product.defaultPrice);
-      const unitPrice =
-        this.isAdmin(user) && itemDto.unitPrice != null ? Number(itemDto.unitPrice) : catalogPrice;
-      const itemTotal = itemDto.quantity * unitPrice;
-      totalAmount += itemTotal;
-
-      // If this is a byproduct, check parent product stock instead
-      const stockProductId = product.parentProductId || itemDto.productId;
-      const stockProduct = product.parentProductId 
-        ? await this.productsService.findOne(product.parentProductId)
-        : product;
-
-      const availableStock = this.isUniversal(product)
-        ? this.universalOnHand(product, pooledStock)
-        : product.category === ProductCategory.PRODUCTION_ITEM
-          ? await this.getProducedAvailableStock(createSaleDto.sessionId, itemDto.productId)
-          : await this.getAvailableStock(createSaleDto.sessionId, stockProductId);
-      if (availableStock < itemDto.quantity) {
-        throw new BadRequestException(
-          `Insufficient stock for ${product.name}. Available: ${availableStock} ${product.unit}, Requested: ${itemDto.quantity} ${product.unit}`,
-        );
-      }
-
-      itemsToCreate.push({
-        productId: itemDto.productId,
-        quantity: itemDto.quantity,
-        unitPrice,
-        totalPrice: itemTotal,
-      });
-
-      // If this is a byproduct, record it for stock deduction
-      if (product.parentProductId) {
-        byproductStockEntries.push({
-          productId: product.parentProductId,
-          quantity: itemDto.quantity,
-          unit: stockProduct.unit,
-        });
-      }
-    }
+    const { itemsToCreate, byproductStockEntries, totalAmount } = await this.prepareSaleItems(
+      session,
+      createSaleDto.items,
+      customer,
+      user,
+    );
+    const tableLabel = createSaleDto.tableLabel?.trim() || null;
 
     // Retry logic for handling race conditions with sale number generation
     const maxRetries = 3;
@@ -242,6 +198,7 @@ export class SalesService {
           soldById: user.userId,
           branchId: session.branchId,
           restaurantOrderId: createSaleDto.restaurantOrderId ?? null,
+          tableLabel,
         });
 
         const savedSale = await queryRunner.manager.save(Sale, sale);
@@ -265,6 +222,7 @@ export class SalesService {
             unit: byproductEntry.unit,
             notes: 'Byproduct sale (deducted from parent stock)',
             recordedById: user.userId,
+            saleId: savedSale.id,
           });
           await queryRunner.manager.save(StockEntry, stockEntry);
         }
@@ -324,6 +282,168 @@ export class SalesService {
     throw lastError;
   }
 
+  /**
+   * Prices each line, adds any kitchen cooking fee, and checks stock. Items already
+   * on the sale count as sold, so this also works when adding items to an open sale.
+   */
+  private async prepareSaleItems(
+    session: StockSession,
+    items: CreateSaleItemDto[],
+    customer: Customer | null,
+    user: RequestUser,
+  ): Promise<{
+    itemsToCreate: Partial<SaleItem>[];
+    byproductStockEntries: Array<{ productId: number; quantity: number; unit: string }>;
+    totalAmount: number;
+  }> {
+    const isWholesaleSale = customer?.type === 'WHOLESALE';
+    const branchType = session.branch.type;
+    const openSessionIds = await this.openSessionIds();
+    const pooledSessions = openSessionIds.includes(session.id) ? openSessionIds : [...openSessionIds, session.id];
+    const pooledStock = await this.loadStockSnapshot(pooledSessions);
+    const cookingFeePerKg = items.some((item) => item.cookInKitchen)
+      ? await this.saleSettingsService.cookingFeePerKg()
+      : 0;
+
+    let totalAmount = 0;
+    const itemsToCreate: Partial<SaleItem>[] = [];
+    const byproductStockEntries: Array<{ productId: number; quantity: number; unit: string }> = [];
+    const requestedByStockKey = new Map<string, number>();
+
+    for (const itemDto of items) {
+      const quantity = Number(itemDto.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new BadRequestException('Item quantity must be greater than 0');
+      }
+      const product = await this.productsService.findOne(itemDto.productId);
+      this.assertProductSellableAtTill(product);
+      this.assertProductAllowedForBranch(product, branchType);
+      const catalogPrice = isWholesaleSale
+        ? Number(product.wholesalePrice ?? product.defaultPrice)
+        : Number(product.defaultPrice);
+      const unitPrice =
+        this.isAdmin(user) && itemDto.unitPrice != null ? Number(itemDto.unitPrice) : catalogPrice;
+      const itemTotal = this.roundUpKes(quantity * unitPrice);
+
+      let cookingFee = 0;
+      if (itemDto.cookInKitchen) {
+        if (product.saleMode !== ProductSaleMode.WEIGHT) {
+          throw new BadRequestException(
+            `Only meat sold by weight can be cooked in the kitchen ("${product.name}" is sold per ${String(product.saleMode).toLowerCase()})`,
+          );
+        }
+        cookingFee = this.roundUpKes(quantity * cookingFeePerKg);
+      }
+      totalAmount += itemTotal + cookingFee;
+
+      // If this is a byproduct, check parent product stock instead
+      const stockProductId = product.parentProductId || itemDto.productId;
+      const stockProduct = product.parentProductId
+        ? await this.productsService.findOne(product.parentProductId)
+        : product;
+
+      const availableStock = this.isUniversal(product)
+        ? this.universalOnHand(product, pooledStock)
+        : product.category === ProductCategory.PRODUCTION_ITEM
+          ? await this.getProducedAvailableStock(session.id, itemDto.productId)
+          : await this.getAvailableStock(session.id, stockProductId);
+      const stockKey = `${product.category === ProductCategory.PRODUCTION_ITEM ? 'p' : 's'}:${stockProductId}`;
+      const requested = (requestedByStockKey.get(stockKey) || 0) + quantity;
+      requestedByStockKey.set(stockKey, requested);
+      if (availableStock + 1e-6 < requested) {
+        throw new BadRequestException(
+          `Insufficient stock for ${product.name}. Available: ${availableStock} ${product.unit}, Requested: ${requested} ${product.unit}`,
+        );
+      }
+
+      itemsToCreate.push({
+        productId: itemDto.productId,
+        quantity,
+        unitPrice,
+        totalPrice: itemTotal,
+        cookInKitchen: !!itemDto.cookInKitchen,
+        cookingFeePerKg: itemDto.cookInKitchen ? cookingFeePerKg : null,
+        cookingFee,
+      });
+
+      if (product.parentProductId) {
+        byproductStockEntries.push({
+          productId: product.parentProductId,
+          quantity,
+          unit: stockProduct.unit,
+        });
+      }
+    }
+
+    return { itemsToCreate, byproductStockEntries, totalAmount: this.round2(totalAmount) };
+  }
+
+  private round2(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  /** Whole shillings, rounded up. Cents are snapped first so float noise like 500.0000001 stays 500. */
+  private roundUpKes(value: number): number {
+    return Math.ceil(this.round2(value));
+  }
+
+  /** Cashiers and admins can add items to an unpaid sale. Existing items cannot be removed. */
+  async addItems(id: number, dto: AddSaleItemsDto, user: RequestUser): Promise<Sale> {
+    const sale = await this.findOne(id, user);
+    if (sale.paymentStatus === PaymentStatus.PAID) {
+      throw new BadRequestException('This sale is paid and can no longer be edited');
+    }
+    if (sale.session?.status !== SessionStatus.OPEN) {
+      throw new BadRequestException('Items can only be added while the stock session is open');
+    }
+    if (sale.restaurantOrderId) {
+      throw new BadRequestException('Add items to the table order instead of the billed sale');
+    }
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException('Add at least one item');
+    }
+
+    const session = await this.stockSessionsService.findOne(sale.sessionId);
+    const { itemsToCreate, byproductStockEntries, totalAmount } = await this.prepareSaleItems(
+      session,
+      dto.items,
+      sale.customer ?? null,
+      user,
+    );
+
+    await this.dataSource.transaction(async (manager) => {
+      for (const item of itemsToCreate) {
+        await manager.save(SaleItem, manager.create(SaleItem, { ...item, saleId: sale.id }));
+      }
+      for (const entry of byproductStockEntries) {
+        await manager.save(
+          StockEntry,
+          manager.create(StockEntry, {
+            sessionId: sale.sessionId,
+            productId: entry.productId,
+            type: StockEntryType.BYPRODUCT_SALE,
+            quantity: entry.quantity,
+            unit: entry.unit,
+            notes: 'Byproduct sale (deducted from parent stock)',
+            recordedById: user.userId,
+            saleId: sale.id,
+          }),
+        );
+      }
+      await manager.update(Sale, { id: sale.id }, { totalAmount: this.round2(Number(sale.totalAmount) + totalAmount) });
+    });
+
+    await this.activityLog.log({
+      userId: user.userId,
+      action: 'SALE_ITEMS_ADDED',
+      entityType: 'sale',
+      entityId: sale.id,
+      details: { saleNumber: sale.saleNumber, items: dto.items, addedAmount: totalAmount },
+      success: true,
+    });
+    return this.findOne(sale.id, user);
+  }
+
   async findAll(
     sessionId?: number,
     productId?: number,
@@ -349,11 +469,13 @@ export class SalesService {
       );
     }
 
-    if (dateFrom && dateTo) {
-      query.andWhere('DATE(sale.soldAt) >= :dateFrom', { dateFrom });
-      query.andWhere('DATE(sale.soldAt) <= :dateTo', { dateTo });
+    // soldAt is stored as UTC without a zone; the shop works in Nairobi time.
+    const saleDay = `DATE((sale.soldAt AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Nairobi')`;
+    if (dateFrom || dateTo) {
+      if (dateFrom) query.andWhere(`${saleDay} >= :dateFrom`, { dateFrom });
+      if (dateTo) query.andWhere(`${saleDay} <= :dateTo`, { dateTo });
     } else if (date) {
-      query.andWhere('DATE(sale.soldAt) = :date', { date });
+      query.andWhere(`${saleDay} = :date`, { date });
     }
 
     if (branchId) {
@@ -417,37 +539,66 @@ export class SalesService {
       minute: '2-digit',
       hour12: true,
     }).format(soldAt);
+    const settings = await this.saleSettingsService.get();
     const rule = '-'.repeat(width);
     const lines = [
       center('CUSTOMER BILL'),
       center('LAKETOWN BUTCHERY'),
       center((sale.branch?.name || 'LakeTown').toUpperCase()),
     ];
+    if (settings.receiptLocation) {
+      const words = settings.receiptLocation.split(/\s+/);
+      let current = '';
+      for (const word of words) {
+        if (current && `${current} ${word}`.length > width) {
+          lines.push(center(current));
+          current = word;
+        } else {
+          current = current ? `${current} ${word}` : word;
+        }
+      }
+      if (current) lines.push(center(current));
+    }
+    if (settings.receiptPhone) lines.push(center(`Tel: ${settings.receiptPhone}`));
     lines.push(rule);
     lines.push(pair('Date', datePart));
     lines.push(pair('Time', timePart));
     lines.push(pair('Served by', sale.soldBy?.username || 'Cashier'));
-    if (sale.restaurantOrder?.tableLabel) lines.push(pair('Table', sale.restaurantOrder.tableLabel));
+    const table = sale.tableLabel || sale.restaurantOrder?.tableLabel;
+    if (table) lines.push(pair('Table', table));
     lines.push(pair('Customer', sale.customer?.name || 'Walk-in'));
     lines.push(pair('Ticket', sale.saleNumber));
     lines.push(rule);
     for (const item of sale.items || []) {
-      const quantity = Number(item.quantity);
       const unitPrice = Number(item.unitPrice || 0);
-      const totalPrice = Number(item.totalPrice || quantity * unitPrice);
+      const totalPrice = Number(item.totalPrice || Number(item.quantity) * unitPrice);
+      // Stored quantity keeps 2 decimals; weight lines were priced by amount, so derive the real weight.
+      const quantity =
+        item.product?.saleMode === ProductSaleMode.WEIGHT && unitPrice > 0 && totalPrice > 0
+          ? Number((totalPrice / unitPrice).toFixed(3))
+          : Number(item.quantity);
       const unit = item.product?.unit || '';
       lines.push(`- ${quantity} ${item.product?.name || 'Item'} ${unit}`.slice(0, width));
-      lines.push(pair('', `@${unitPrice.toFixed(2)}  ${totalPrice.toFixed(2)}`).trimEnd());
+      lines.push(pair('', `@${this.roundUpKes(unitPrice)}  ${this.roundUpKes(totalPrice)}`).trimEnd());
+      if (item.cookInKitchen && Number(item.cookingFee) > 0) {
+        lines.push(`  Cooking ${quantity} kg`.slice(0, width));
+        lines.push(
+          pair('', `@${this.roundUpKes(Number(item.cookingFeePerKg || 0))}  ${this.roundUpKes(Number(item.cookingFee))}`).trimEnd(),
+        );
+      }
     }
     lines.push(rule);
-    lines.push(pair('Total', Number(sale.totalAmount).toFixed(2)));
+    lines.push(pair('Total', String(this.roundUpKes(Number(sale.totalAmount)))));
     lines.push(pair('Payment', sale.paymentMethod || 'CASH'));
     lines.push(pair('Status', sale.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID'));
     if (sale.payment?.method === 'MPESA' && sale.payment.mpesaReference) {
       lines.push(pair('M-Pesa', sale.payment.mpesaReference));
     }
+    if (settings.paybillNumber) lines.push(pair('Paybill', settings.paybillNumber));
+    if (settings.paybillAccount) lines.push(pair('Account No.', settings.paybillAccount));
     lines.push(rule);
     lines.push(center('THANK YOU & WELCOME AGAIN.'));
+    lines.push(center('Powered by mangoseasonlabs.co.ke'));
     return lines.join('\n');
   }
 
@@ -503,7 +654,21 @@ export class SalesService {
         throw new BadRequestException('Sales can only be deleted while their stock session is still open');
       }
 
-      await this.saleRepository.remove(sale);
+      // Sold quantities come back automatically once the sale items are gone; byproduct
+      // deductions are separate stock entries, so remove those with the sale.
+      await this.dataSource.transaction(async (manager) => {
+        await manager.delete(StockEntry, { saleId: sale.id, type: StockEntryType.BYPRODUCT_SALE });
+        if (sale.restaurantOrderId) {
+          await manager.update(Sale, { id: sale.id }, { restaurantOrderId: null });
+          await manager.update(
+            RestaurantOrder,
+            { id: sale.restaurantOrderId },
+            { status: RestaurantOrderStatus.OPEN },
+          );
+        }
+        await manager.delete(SaleItem, { saleId: sale.id });
+        await manager.delete(Sale, { id: sale.id });
+      });
       await this.activityLog.log({
         userId: userId ?? null,
         action: 'SALE_DELETED',
@@ -611,14 +776,22 @@ export class SalesService {
     const kitchenIssueEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.KITCHEN_ISSUE);
     const kitchenIssueQty = kitchenIssueEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
 
+    const productionUsageEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.PRODUCTION_USAGE);
+    const productionUsageQty = productionUsageEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
+    const adjustmentEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.ADJUSTMENT);
+    const adjustmentQty = adjustmentEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
     return (
       openingStock +
-      incomingStock -
+      incomingStock +
+      adjustmentQty -
       soldStock -
       wastage -
       byproductSaleQty -
       partnerShareQty -
-      kitchenIssueQty
+      kitchenIssueQty -
+      productionUsageQty
     );
   }
 
@@ -699,7 +872,10 @@ export class SalesService {
     },
   ): number {
     const recorded = this.sessionStockOnHand(product.id, snapshot.entryQty, snapshot.sold);
-    const produced = (snapshot.produced.get(product.id) || 0) - (snapshot.sold.get(product.id) || 0);
+    const produced =
+      (snapshot.produced.get(product.id) || 0) +
+      snapshot.entryQty(product.id, StockEntryType.ADJUSTMENT) -
+      (snapshot.sold.get(product.id) || 0);
     return product.category === ProductCategory.PRODUCTION_ITEM ? Math.max(recorded, produced) : recorded;
   }
 
@@ -750,7 +926,9 @@ export class SalesService {
         const available = this.isUniversal(product)
           ? this.universalOnHand(product, pooledStock)
           : product.category === ProductCategory.PRODUCTION_ITEM
-            ? (producedByProduct.get(product.id) || 0) - (soldByProduct.get(product.id) || 0)
+            ? (producedByProduct.get(product.id) || 0) +
+              entryQty(product.id, StockEntryType.ADJUSTMENT) -
+              (soldByProduct.get(product.id) || 0)
             : this.sessionStockOnHand(product.parentProductId || product.id, entryQty, soldByProduct);
         return { product, available: Math.round(available * 1000) / 1000 };
       })
@@ -779,7 +957,8 @@ export class SalesService {
   ): number {
     return (
       entryQty(productId, StockEntryType.OPENING) +
-      entryQty(productId, StockEntryType.INCOMING) -
+      entryQty(productId, StockEntryType.INCOMING) +
+      entryQty(productId, StockEntryType.ADJUSTMENT) -
       (soldByProduct.get(productId) || 0) -
       entryQty(productId, StockEntryType.WASTAGE) -
       entryQty(productId, StockEntryType.BYPRODUCT_SALE) -
@@ -856,7 +1035,10 @@ export class SalesService {
       .andWhere('item.productId = :productId', { productId })
       .getRawOne();
 
-    return Number(producedResult?.total || 0) - Number(soldResult?.total || 0);
+    const adjustmentEntries = await this.stockEntriesService.findAll(sessionId, productId, StockEntryType.ADJUSTMENT);
+    const adjustmentQty = adjustmentEntries.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+
+    return Number(producedResult?.total || 0) + adjustmentQty - Number(soldResult?.total || 0);
   }
 
   private assertRestaurantItemsMatchOrder(
