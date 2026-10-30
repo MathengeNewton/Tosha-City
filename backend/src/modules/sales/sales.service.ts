@@ -30,6 +30,10 @@ import { Product, ProductCategory, ProductSaleMode, ProductSegment } from '../pr
 import { ProductionRun } from '../production/entities/production-run.entity';
 import { RestaurantOrder, RestaurantOrderStatus } from '../restaurant-orders/entities/restaurant-order.entity';
 
+// Keep in step with SMALL_COOK_* in the till's saleLines.js.
+const SMALL_COOK_MAX_KG = 0.5;
+const SMALL_COOK_FEE = 50;
+
 type RequestUser = {
   userId: number;
   roles?: Array<{ name?: string } | string>;
@@ -332,7 +336,7 @@ export class SalesService {
             `Only meat sold by weight can be cooked in the kitchen ("${product.name}" is sold per ${String(product.saleMode).toLowerCase()})`,
           );
         }
-        cookingFee = this.roundUpKes(quantity * cookingFeePerKg);
+        cookingFee = this.cookingFeeFor(quantity, cookingFeePerKg);
       }
       totalAmount += itemTotal + cookingFee;
 
@@ -385,6 +389,14 @@ export class SalesService {
   /** Whole shillings, rounded up. Cents are snapped first so float noise like 500.0000001 stays 500. */
   private roundUpKes(value: number): number {
     return Math.ceil(this.round2(value));
+  }
+
+  /** Under half a kg is cooked for a flat 50; from half a kg up it is charged per kg. */
+  private cookingFeeFor(kg: number, cookingFeePerKg: number): number {
+    const weight = Math.round(kg * 1000) / 1000;
+    if (weight <= 0) return 0;
+    if (weight < SMALL_COOK_MAX_KG) return SMALL_COOK_FEE;
+    return this.roundUpKes(weight * cookingFeePerKg);
   }
 
   /** Cashiers and admins can add items to an unpaid sale. Existing items cannot be removed. */
@@ -582,9 +594,9 @@ export class SalesService {
       lines.push(pair('', `@${this.roundUpKes(unitPrice)}  ${this.roundUpKes(totalPrice)}`).trimEnd());
       if (item.cookInKitchen && Number(item.cookingFee) > 0) {
         lines.push(`  Cooking ${quantity} kg`.slice(0, width));
-        lines.push(
-          pair('', `@${this.roundUpKes(Number(item.cookingFeePerKg || 0))}  ${this.roundUpKes(Number(item.cookingFee))}`).trimEnd(),
-        );
+        const rate =
+          quantity < SMALL_COOK_MAX_KG ? 'under 1/2 kg' : `@${this.roundUpKes(Number(item.cookingFeePerKg || 0))}`;
+        lines.push(pair('', `${rate}  ${this.roundUpKes(Number(item.cookingFee))}`).trimEnd());
       }
     }
     lines.push(rule);
@@ -594,8 +606,13 @@ export class SalesService {
     if (sale.payment?.method === 'MPESA' && sale.payment.mpesaReference) {
       lines.push(pair('M-Pesa', sale.payment.mpesaReference));
     }
-    if (settings.paybillNumber) lines.push(pair('Paybill', settings.paybillNumber));
-    if (settings.paybillAccount) lines.push(pair('Account No.', settings.paybillAccount));
+    if (settings.tillNumber || settings.paybillNumber) {
+      lines.push(rule);
+      lines.push(center('PAY VIA M-PESA'));
+      if (settings.tillNumber) lines.push(pair('Buy Goods Till', settings.tillNumber));
+      if (settings.paybillNumber) lines.push(pair('Paybill', settings.paybillNumber));
+      if (settings.paybillNumber && settings.paybillAccount) lines.push(pair('Account No.', settings.paybillAccount));
+    }
     lines.push(rule);
     lines.push(center('THANK YOU & WELCOME AGAIN.'));
     lines.push(center('Powered by mangoseasonlabs.co.ke'));

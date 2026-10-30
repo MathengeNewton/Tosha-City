@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { BranchCatalogScope } from '../../common/enums/branch-catalog-scope.enum';
 import { Branch, BranchType } from '../branches/entities/branch.entity';
 import { Product, ProductCategory, ProductSaleMode, ProductSegment } from './entities/product.entity';
@@ -166,8 +166,30 @@ export class ProductsService implements OnModuleInit {
     return await this.productRepository.save(product);
   }
 
-  async remove(id: number): Promise<void> {
+  /**
+   * Deletes a product that was never used. One that appears in sales, stock, recipes or
+   * production must stay for history, so it is deactivated instead.
+   */
+  async remove(id: number): Promise<{ deleted: boolean; deactivated: boolean; message: string }> {
     const product = await this.findOne(id);
-    await this.productRepository.remove(product);
+    try {
+      await this.productRepository.delete(id);
+      return { deleted: true, deactivated: false, message: `"${product.name}" deleted` };
+    } catch (e) {
+      if (!(e instanceof QueryFailedError) || (e as QueryFailedError & { code?: string }).code !== '23503') {
+        throw e;
+      }
+    }
+    const wasActive = product.isActive;
+    if (wasActive) {
+      await this.productRepository.update(id, { isActive: false });
+    }
+    return {
+      deleted: false,
+      deactivated: true,
+      message: wasActive
+        ? `"${product.name}" has sales or stock history, so it was deactivated instead of deleted`
+        : `"${product.name}" has sales or stock history, so it can't be deleted. It stays deactivated and off the till`,
+    };
   }
 }

@@ -145,9 +145,26 @@ export function lineQuantity(line, product) {
   return quantity;
 }
 
+// Keep in step with SMALL_COOK_* in the backend sales service.
+export const SMALL_COOK_MAX_KG = 0.5;
+export const SMALL_COOK_FEE = 50;
+
+/** Under half a kg is cooked for a flat 50; from half a kg up it is charged per kg. */
+export function cookingFeeFor(kg, cookingFeePerKg) {
+  const weight = Math.round(Number(kg || 0) * 1000) / 1000;
+  if (weight <= 0) return 0;
+  if (weight < SMALL_COOK_MAX_KG) return SMALL_COOK_FEE;
+  return roundUpKes(weight * Number(cookingFeePerKg || 0));
+}
+
+export function isSmallCook(kg) {
+  const weight = Math.round(Number(kg || 0) * 1000) / 1000;
+  return weight > 0 && weight < SMALL_COOK_MAX_KG;
+}
+
 export function lineCookingFee(line, product, cookingFeePerKg) {
   if (!line.cookInKitchen || !isWeightProduct(product)) return 0;
-  return roundUpKes(lineQuantity(line, product) * Number(cookingFeePerKg || 0));
+  return cookingFeeFor(lineQuantity(line, product), cookingFeePerKg);
 }
 
 export function linesTotal(lines, products, cookingFeePerKg) {

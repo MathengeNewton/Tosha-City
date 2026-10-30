@@ -1,4 +1,4 @@
-import { formatKes } from "./saleLines";
+import { formatKes, isSmallCook } from "./saleLines";
 
 function esc(value) {
   return String(value ?? "")
@@ -53,6 +53,7 @@ export function buildCustomerBillDocument(sale, kind = "customer", settings = {}
   const items = Array.isArray(sale?.items) ? sale.items : [];
   const location = settings?.receiptLocation;
   const phone = settings?.receiptPhone;
+  const till = settings?.tillNumber;
   const paybill = settings?.paybillNumber;
   const paybillAccount = settings?.paybillAccount;
 
@@ -68,15 +69,18 @@ export function buildCustomerBillDocument(sale, kind = "customer", settings = {}
       if (kind === "kitchen") {
         return `
         <div class="item k-line">
-          <div>${cooked ? "COOK " : ""}${esc(name)}</div>
+          <div>${cooked ? "COOK · " : ""}${esc(name)}</div>
           <div class="row"><span>${esc(qty)} ${esc(unit)}</span><span>KES ${esc(lineTotal)}</span></div>
         </div>`;
       }
+      const cookRate = isSmallCook(soldQuantity(item))
+        ? "under ½ kg"
+        : `@${esc(formatMoney(item.cookingFeePerKg))}`;
       const cookingLine =
         cooked && Number(item.cookingFee) > 0
           ? `<div class="cook-fee">
           <div>Kitchen cooking fee</div>
-          <div class="prices"><span>${esc(qty)} kg</span><span>@${esc(formatMoney(item.cookingFeePerKg))}</span><span>${esc(formatMoney(item.cookingFee))}</span></div>
+          <div class="prices"><span>${esc(qty)} kg</span><span>${cookRate}</span><span>${esc(formatMoney(item.cookingFee))}</span></div>
         </div>`
           : "";
       return `
@@ -131,7 +135,8 @@ export function buildCustomerBillDocument(sale, kind = "customer", settings = {}
     .item { margin-bottom: 5px; }
     .prices { display: flex; justify-content: flex-end; gap: 12px; font-variant-numeric: tabular-nums; }
     .cook-fee { margin-top: 2px; padding-left: 8px; }
-    .k-line { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+    .k-line { font-size: 14px; margin-bottom: 6px; }
+    .pay-head { text-align: center; font-size: 12px; letter-spacing: 1px; margin-bottom: 2px; }
     .table-big { text-align: center; font-size: 18px; font-weight: 700; margin: 4px 0; }
     .thanks { text-align: center; margin-top: 2px; }
     .credit { text-align: center; margin-top: 6px; font-size: 11px; }
@@ -162,8 +167,11 @@ export function buildCustomerBillDocument(sale, kind = "customer", settings = {}
     ${itemHtml}
     <hr class="rule" />
     <div class="row"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
+    ${till || paybill ? `<hr class="rule" />
+    <div class="pay-head">PAY VIA M-PESA</div>
+    ${till ? `<div class="row"><span>Buy Goods Till</span><span>${esc(till)}</span></div>` : ""}
     ${paybill ? `<div class="row"><span>Paybill</span><span>${esc(paybill)}</span></div>` : ""}
-    ${paybillAccount ? `<div class="row"><span>Account No.</span><span>${esc(paybillAccount)}</span></div>` : ""}
+    ${paybill && paybillAccount ? `<div class="row"><span>Account No.</span><span>${esc(paybillAccount)}</span></div>` : ""}` : ""}
     <hr class="rule" />
     <div class="thanks">THANK YOU &amp; WELCOME AGAIN.</div>
     <div class="credit">Powered by mangoseasonlabs.co.ke</div>

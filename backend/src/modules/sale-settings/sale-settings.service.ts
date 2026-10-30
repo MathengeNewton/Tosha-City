@@ -20,6 +20,7 @@ export class SaleSettingsService {
         tables: DEFAULT_TABLES,
         receiptLocation: 'Nairobi-Nakuru Highway @ Kayole Adams',
         receiptPhone: '0746315595',
+        tillNumber: '6967914',
         paybillNumber: '222111',
         paybillAccount: '2783009',
       }),

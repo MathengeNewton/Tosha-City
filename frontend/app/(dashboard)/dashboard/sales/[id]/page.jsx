@@ -9,7 +9,15 @@ import { buildCustomerBillDocument } from "../customerBill";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
 import ProductGrid from "../ProductGrid";
 import SaleLineCard from "../SaleLineCard";
-import { buildLine, changeLine, formatKes, lineToPayload, linesTotal, validateLines } from "../saleLines";
+import {
+  buildLine,
+  changeLine,
+  formatKes,
+  isSmallCook,
+  lineToPayload,
+  linesTotal,
+  validateLines,
+} from "../saleLines";
 
 export default function SaleDetailsPage() {
   const router = useRouter();
@@ -324,8 +332,10 @@ export default function SaleDetailsPage() {
               {item.cookInKitchen && cookingFee > 0 && (
                 <div className="mt-2 flex items-start justify-between gap-3 rounded-lg bg-orange-50 px-3 py-2 text-orange-900">
                   <p className="text-sm font-semibold">
-                    Kitchen cooking fee · {qty.toLocaleString("en-KE", { maximumFractionDigits: 3 })} kg × KES{" "}
-                    {formatKes(item.cookingFeePerKg)}
+                    Kitchen cooking fee · {qty.toLocaleString("en-KE", { maximumFractionDigits: 3 })} kg
+                    {isSmallCook(unitPrice > 0 && lineTotal > 0 ? lineTotal / unitPrice : qty)
+                      ? " (under ½ kg)"
+                      : ` × KES ${formatKes(item.cookingFeePerKg)}`}
                   </p>
                   <p className="text-base font-bold tabular-nums">{formatKes(cookingFee)}</p>
                 </div>

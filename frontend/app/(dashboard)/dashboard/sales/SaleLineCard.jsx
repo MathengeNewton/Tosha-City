@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import NumberPad from "./NumberPad";
-import { formatKes, isWeightProduct, lineCookingFee, lineQuantity } from "./saleLines";
+import { SMALL_COOK_FEE, formatKes, isWeightProduct, lineCookingFee, lineQuantity } from "./saleLines";
 
 const WEIGHT_PRESETS = [
   { value: 0.25, label: "¼" },
@@ -115,7 +115,7 @@ export default function SaleLineCard({
             />
             Cook in kitchen
             <span className="font-normal text-orange-800">
-              ({formatKes(cookingFeePerKg)}/kg)
+              ({formatKes(cookingFeePerKg)}/kg · {formatKes(SMALL_COOK_FEE)} under ½ kg)
             </span>
           </span>
           {line.cookInKitchen && (

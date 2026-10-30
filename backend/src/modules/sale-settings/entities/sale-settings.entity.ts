@@ -30,6 +30,10 @@ export class SaleSettings {
   @Column({ type: 'varchar', nullable: true })
   receiptPhone: string | null;
 
+  @ApiProperty({ description: 'M-Pesa Buy Goods till number', example: '6967914' })
+  @Column({ type: 'varchar', nullable: true, default: '6967914' })
+  tillNumber: string | null;
+
   @ApiProperty({ example: '222111' })
   @Column({ type: 'varchar', nullable: true })
   paybillNumber: string | null;

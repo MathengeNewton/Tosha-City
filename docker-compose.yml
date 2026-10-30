@@ -49,8 +49,9 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-laketown_butchery}
       PORT: 3000
       NODE_ENV: ${NODE_ENV:-production}
-      # Local only. Inserts one pork demo day (stock + production) on backend startup. Not set in prod compose.
-      SEED_DEMO_DAY: ${SEED_DEMO_DAY:-true}
+      # Demo data only. Set SEED_DEMO_DAY=true in a throwaway local .env to insert a pork demo day
+      # (products, opening stock, production) on backend startup. Never enable on the shop server.
+      SEED_DEMO_DAY: ${SEED_DEMO_DAY:-false}
       JWT_SECRET: ${JWT_SECRET:-default_secret_key_change_in_production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       # CORS: must match the URL users use to open the dashboard (include port if not 80/443)

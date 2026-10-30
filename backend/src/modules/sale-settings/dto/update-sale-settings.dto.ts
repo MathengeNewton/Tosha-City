@@ -27,6 +27,11 @@ export class UpdateSaleSettingsDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  tillNumber?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   paybillNumber?: string;
 
   @ApiProperty({ required: false })

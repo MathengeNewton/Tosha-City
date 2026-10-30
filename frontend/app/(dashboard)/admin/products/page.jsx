@@ -222,8 +222,12 @@ export default function ProductsPage() {
     }
 
     try {
-      await apiClient.products.delete(id);
-      toast.success("Product deleted successfully");
+      const { data } = await apiClient.products.delete(id);
+      if (data?.deleted === false) {
+        toast.info(data.message);
+      } else {
+        toast.success("Product deleted successfully");
+      }
       loadProducts();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to delete product");

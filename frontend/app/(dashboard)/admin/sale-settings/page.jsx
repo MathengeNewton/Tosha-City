@@ -16,6 +16,7 @@ export default function SaleSettingsPage() {
     tables: [],
     receiptLocation: "",
     receiptPhone: "",
+    tillNumber: "",
     paybillNumber: "",
     paybillAccount: "",
   });
@@ -31,6 +32,7 @@ export default function SaleSettingsPage() {
           tables: Array.isArray(data.tables) ? data.tables : [],
           receiptLocation: data.receiptLocation || "",
           receiptPhone: data.receiptPhone || "",
+          tillNumber: data.tillNumber || "",
           paybillNumber: data.paybillNumber || "",
           paybillAccount: data.paybillAccount || "",
         });
@@ -64,6 +66,7 @@ export default function SaleSettingsPage() {
         tables: form.tables,
         receiptLocation: form.receiptLocation.trim(),
         receiptPhone: form.receiptPhone.trim(),
+        tillNumber: form.tillNumber.trim(),
         paybillNumber: form.paybillNumber.trim(),
         paybillAccount: form.paybillAccount.trim(),
       });
@@ -92,7 +95,7 @@ export default function SaleSettingsPage() {
           <h2 className="text-lg font-bold text-gray-900">Kitchen cooking fee</h2>
           <p className="text-sm text-gray-600">
             Charged per kg when a customer asks the kitchen to cook meat bought at the butchery. Example at 100/kg:
-            4.5 kg adds 450 to the bill.
+            4.5 kg adds 450 to the bill. Anything under ½ kg is cooked for a flat KES 50.
           </p>
           <div className="max-w-xs">
             <label className="block text-sm font-medium text-gray-700 mb-1">KES per kg *</label>
@@ -172,6 +175,15 @@ export default function SaleSettingsPage() {
                 type="text"
                 value={form.receiptPhone}
                 onChange={(e) => setForm({ ...form, receiptPhone: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">M-Pesa till number</label>
+              <input
+                type="text"
+                value={form.tillNumber}
+                onChange={(e) => setForm({ ...form, tillNumber: e.target.value })}
                 className={inputClass}
               />
             </div>
