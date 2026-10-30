@@ -1,5 +1,6 @@
 "use client";
 import { formatKes } from "./saleLines";
+import { paymentLabel } from "./PaymentPicker";
 
 /**
  * Receipt view for a paid sale. Rendered inside a wrapper with class receipt-print-only
@@ -67,12 +68,12 @@ export default function ReceiptView({ sale, payment }) {
         <div className="border-t border-gray-200 pt-4 space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-600">Payment Method:</span>
-            <span className="font-semibold">{payment.method}</span>
+            <span className="font-semibold">{paymentLabel(payment.method, payment.mpesaChannel)}</span>
           </div>
-          {payment.mpesaReference && (
+          {payment.reference && (
             <div className="flex justify-between">
-              <span className="text-gray-600">MPESA Reference:</span>
-              <span className="font-semibold">{payment.mpesaReference}</span>
+              <span className="text-gray-600">Reference:</span>
+              <span className="font-semibold">{payment.reference}</span>
             </div>
           )}
           <div className="flex justify-between">

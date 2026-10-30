@@ -9,6 +9,7 @@ import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import ProductPicker from "../../../../components/restaurant/ProductPicker";
 import { isRetailCounterProduct } from "../../../../lib/productSegment";
 import { PageShell, PageHeader } from "../../components/shell";
+import PaymentPicker, { emptyPayment, paymentPayload, paymentProblem } from "../sales/PaymentPicker";
 
 const fmtKes = (n) =>
   `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} KES`;
@@ -87,8 +88,21 @@ export default function TableOrdersPage() {
   const [billMethod, setBillMethod] = useState("CASH");
   const [billIncomplete, setBillIncomplete] = useState(false);
 
-  const [payMethod, setPayMethod] = useState("CASH");
-  const [payMpesa, setPayMpesa] = useState("");
+  const [payForm, setPayForm] = useState(emptyPayment("CASH"));
+  const [saleSettings, setSaleSettings] = useState(null);
+
+  useEffect(() => {
+    apiClient.saleSettings
+      .get()
+      .then((res) => setSaleSettings(res.data))
+      .catch(() => setSaleSettings(null));
+  }, []);
+
+  const linkedSaleId = detail?.linkedSale?.id;
+  const linkedSaleMethod = detail?.linkedSale?.paymentMethod;
+  useEffect(() => {
+    setPayForm(emptyPayment(linkedSaleMethod));
+  }, [linkedSaleId, linkedSaleMethod]);
 
   const effectiveBranchId = isAdmin ? selectedBranchId : user?.branchId ? String(user.branchId) : "";
 
@@ -300,11 +314,13 @@ export default function TableOrdersPage() {
 
   const recordPayment = async () => {
     if (!detail?.id) return;
+    const problem = paymentProblem(payForm);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
     try {
-      await apiClient.restaurantOrders.recordPayment(detail.id, {
-        method: payMethod,
-        mpesaReference: payMethod === "MPESA" ? payMpesa : undefined,
-      });
+      await apiClient.restaurantOrders.recordPayment(detail.id, paymentPayload(payForm));
       toast.success("Payment recorded");
       await refreshDetailAndList();
     } catch (e) {
@@ -689,6 +705,7 @@ export default function TableOrdersPage() {
                       >
                         <option value="CASH">Cash</option>
                         <option value="MPESA">M-Pesa</option>
+                        <option value="PDQ">Card (PDQ)</option>
                         <option value="CREDIT">Credit</option>
                       </select>
                       <label className="flex items-start gap-2 text-sm text-white/90">
@@ -728,22 +745,7 @@ export default function TableOrdersPage() {
                   {detail.linkedSale.paymentStatus === "PENDING" && !detail.linkedSale.payment && (
                     <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                       <p className="font-semibold text-emerald-900">Record payment</p>
-                      <select
-                        value={payMethod}
-                        onChange={(e) => setPayMethod(e.target.value)}
-                        className={orderModalField}
-                      >
-                        <option value="CASH">Cash</option>
-                        <option value="MPESA">M-Pesa</option>
-                      </select>
-                      {payMethod === "MPESA" && (
-                        <input
-                          value={payMpesa}
-                          onChange={(e) => setPayMpesa(e.target.value)}
-                          placeholder="M-Pesa ref"
-                          className={orderModalField}
-                        />
-                      )}
+                      <PaymentPicker value={payForm} onChange={setPayForm} settings={saleSettings} />
                       <button
                         type="button"
                         onClick={recordPayment}

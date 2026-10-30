@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Sale } from './sale.entity';
-import { PaymentMethod } from './payment.enums';
+import { MpesaChannel, PaymentMethod } from './payment.enums';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('sale_payments')
@@ -38,9 +38,13 @@ export class SalePayment {
   })
   method: PaymentMethod;
 
-  @ApiProperty({ description: 'MPESA reference (if payment method is MPESA)', required: false })
-  @Column({ type: 'varchar', nullable: true })
-  mpesaReference: string | null;
+  @ApiProperty({ description: 'M-Pesa till or paybill (M-Pesa payments only)', enum: MpesaChannel, required: false })
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  mpesaChannel: MpesaChannel | null;
+
+  @ApiProperty({ description: 'M-Pesa code or PDQ slip reference', required: false })
+  @Column({ name: 'mpesaReference', type: 'varchar', nullable: true })
+  reference: string | null;
 
   @ApiProperty({ description: 'User who received the payment' })
   @ManyToOne(() => User, { eager: true })

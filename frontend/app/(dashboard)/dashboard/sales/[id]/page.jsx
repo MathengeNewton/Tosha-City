@@ -9,6 +9,7 @@ import { buildCustomerBillDocument } from "../customerBill";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
 import ProductGrid from "../ProductGrid";
 import SaleLineCard from "../SaleLineCard";
+import PaymentPicker, { emptyPayment, paymentLabel, paymentPayload, paymentProblem } from "../PaymentPicker";
 import {
   buildLine,
   changeLine,
@@ -34,8 +35,7 @@ export default function SaleDetailsPage() {
   const [newLines, setNewLines] = useState([]);
   const [savingItems, setSavingItems] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
-  const [mpesaReference, setMpesaReference] = useState("");
+  const [paymentForm, setPaymentForm] = useState(emptyPayment("CASH"));
   const [submitting, setSubmitting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
@@ -133,31 +133,28 @@ export default function SaleDetailsPage() {
   };
 
   const openRecordPaymentModal = () => {
-    setPaymentMethod("CASH");
-    setMpesaReference("");
+    setPaymentForm(emptyPayment(sale?.paymentMethod));
     setShowPaymentModal(true);
   };
 
   const closePaymentModal = () => {
     setShowPaymentModal(false);
-    setPaymentMethod("CASH");
-    setMpesaReference("");
   };
 
   const handleRecordPaymentSubmit = async (e) => {
     e.preventDefault();
     if (!sale) return;
-    if (paymentMethod === "MPESA" && !mpesaReference.trim()) {
-      toast.error("MPESA reference is required");
+    const problem = paymentProblem(paymentForm);
+    if (problem) {
+      toast.error(problem);
       return;
     }
     try {
       setSubmitting(true);
       await apiClient.payments.create({
         saleId: sale.id,
-        amount: sale.totalAmount,
-        method: paymentMethod,
-        mpesaReference: paymentMethod === "MPESA" ? mpesaReference.trim() : undefined,
+        amount: Number(sale.totalAmount),
+        ...paymentPayload(paymentForm),
       });
       toast.success("Payment recorded successfully");
       closePaymentModal();
@@ -281,10 +278,13 @@ export default function SaleDetailsPage() {
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
-          <p className="mt-1 text-lg font-bold text-gray-900">{sale.paymentMethod || "—"}</p>
+          <p className="mt-1 text-lg font-bold text-gray-900">
+            {payment ? paymentLabel(payment.method, payment.mpesaChannel) : paymentLabel(sale.paymentMethod)}
+          </p>
           <p className={`mt-1 text-sm font-semibold ${sale.paymentStatus === "PAID" ? "text-green-700" : "text-amber-700"}`}>
             {sale.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
           </p>
+          {payment?.reference && <p className="mt-1 text-sm text-gray-600">Ref {payment.reference}</p>}
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">When</p>
@@ -402,10 +402,6 @@ export default function SaleDetailsPage() {
         </div>
       )}
 
-      {payment?.mpesaReference ? (
-        <p className="text-sm text-gray-600">M-Pesa ref {payment.mpesaReference}</p>
-      ) : null}
-
       <div className="no-print flex flex-wrap gap-3">
         <button
           type="button"
@@ -445,7 +441,8 @@ export default function SaleDetailsPage() {
                   required
                 >
                   <option value="CASH">Cash</option>
-                  <option value="MPESA">MPESA</option>
+                  <option value="MPESA">M-Pesa</option>
+                  <option value="PDQ">Card (PDQ)</option>
                   <option value="CREDIT">Credit</option>
                 </select>
               </div>
@@ -480,38 +477,7 @@ export default function SaleDetailsPage() {
               {formatKes(sale.totalAmount)}
             </p>
             <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Method *
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => {
-                    setPaymentMethod(e.target.value);
-                    if (e.target.value === "CASH") setMpesaReference("");
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="MPESA">MPESA</option>
-                </select>
-              </div>
-              {paymentMethod === "MPESA" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    MPESA Reference *
-                  </label>
-                  <input
-                    type="text"
-                    value={mpesaReference}
-                    onChange={(e) => setMpesaReference(e.target.value)}
-                    placeholder="e.g. ABC123XYZ"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                    required={paymentMethod === "MPESA"}
-                  />
-                </div>
-              )}
+              <PaymentPicker value={paymentForm} onChange={setPaymentForm} settings={settings} />
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   type="button"

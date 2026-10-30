@@ -4,7 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { SalePayment } from './entities/sale-payment.entity';
 import { Sale, PaymentStatus } from './entities/sale.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { PaymentMethod } from './entities/payment.enums';
+import { MpesaChannel, PaymentMethod } from './entities/payment.enums';
 import { UserRole } from '../roles/entities/role.entity';
 
 type RequestUser = {
@@ -72,10 +72,7 @@ export class PaymentsService {
       }
     }
 
-    // Validate MPESA reference if method is MPESA
-    if (createPaymentDto.method === PaymentMethod.MPESA && !createPaymentDto.mpesaReference) {
-      throw new BadRequestException('MPESA reference is required for MPESA payments');
-    }
+    const { mpesaChannel, reference } = await this.paymentDetails(createPaymentDto);
 
     // Create payment and update sale status in a transaction
     const queryRunner = this.dataSource.createQueryRunner();
@@ -88,18 +85,23 @@ export class PaymentsService {
         saleId: createPaymentDto.saleId,
         amount: createPaymentDto.amount,
         method: createPaymentDto.method,
-        mpesaReference: createPaymentDto.mpesaReference || null,
+        mpesaChannel,
+        reference,
         receivedById: userId,
       });
 
       const savedPayment = await queryRunner.manager.save(SalePayment, payment);
 
-      // Update only paymentStatus so TypeORM does not touch the payment relation
-      // (saving the full Sale entity with payment=null would set payment.saleId to null)
+      // Update only these columns so TypeORM does not touch the payment relation
+      // (saving the full Sale entity with payment=null would set payment.saleId to null).
+      // Reports group by the sale's method, so it follows how the bill was actually paid;
+      // credit sales stay CREDIT so they still show against the customer.
       await queryRunner.manager.update(
         Sale,
         { id: createPaymentDto.saleId },
-        { paymentStatus: PaymentStatus.PAID },
+        sale.paymentMethod === PaymentMethod.CREDIT
+          ? { paymentStatus: PaymentStatus.PAID }
+          : { paymentStatus: PaymentStatus.PAID, paymentMethod: createPaymentDto.method },
       );
 
       await queryRunner.commitTransaction();
@@ -121,6 +123,38 @@ export class PaymentsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  /** M-Pesa needs till or paybill and an unused code; PDQ may carry a slip reference; cash carries nothing. */
+  private async paymentDetails(
+    dto: CreatePaymentDto,
+  ): Promise<{ mpesaChannel: MpesaChannel | null; reference: string | null }> {
+    const reference = dto.reference?.trim() || null;
+    if (dto.method === PaymentMethod.MPESA) {
+      if (!dto.mpesaChannel) {
+        throw new BadRequestException('Choose whether the M-Pesa payment came to the till or the paybill');
+      }
+      if (!reference) {
+        throw new BadRequestException('Enter the M-Pesa code');
+      }
+      const code = reference.toUpperCase();
+      const used = await this.paymentRepository
+        .createQueryBuilder('payment')
+        .leftJoinAndSelect('payment.sale', 'sale')
+        .where('payment.method = :method', { method: PaymentMethod.MPESA })
+        .andWhere('UPPER(payment.reference) = :code', { code })
+        .getOne();
+      if (used) {
+        throw new BadRequestException(
+          `M-Pesa code ${code} was already used on sale ${used.sale?.saleNumber || used.saleId}`,
+        );
+      }
+      return { mpesaChannel: dto.mpesaChannel, reference: code };
+    }
+    if (dto.method === PaymentMethod.PDQ) {
+      return { mpesaChannel: null, reference };
+    }
+    return { mpesaChannel: null, reference: null };
   }
 
   async findPaymentBySaleId(saleId: number, user?: RequestUser): Promise<SalePayment | null> {

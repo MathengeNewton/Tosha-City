@@ -18,10 +18,12 @@ import {
   repriceLines,
   validateLines,
 } from "../saleLines";
+import { paymentLabel } from "../PaymentPicker";
 
 const PAYMENT_METHODS = [
   { id: "CASH", label: "Cash" },
   { id: "MPESA", label: "M-Pesa" },
+  { id: "PDQ", label: "Card" },
   { id: "CREDIT", label: "Credit" },
 ];
 
@@ -66,7 +68,7 @@ function SaleOptions({
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-2 px-3 pt-3">
+      <div className="grid grid-cols-4 gap-2 px-3 pt-3">
         {PAYMENT_METHODS.map((method) => (
           <button
             key={method.id}
@@ -247,7 +249,7 @@ function ReviewSale({
           </div>
           <div className="px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
-            <p className="text-base font-bold text-gray-900">{paymentMethod}</p>
+            <p className="text-base font-bold text-gray-900">{paymentLabel(paymentMethod)}</p>
             <p className="text-sm text-gray-600">{customer?.name || "Walk-in"}</p>
           </div>
           <div className="px-4 py-3">

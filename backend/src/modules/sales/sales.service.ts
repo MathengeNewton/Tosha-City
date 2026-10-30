@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Sale } from './entities/sale.entity';
-import { PaymentStatus, PaymentMethod } from './entities/payment.enums';
+import { PaymentStatus, PaymentMethod, paymentLabel } from './entities/payment.enums';
 import { SaleItem } from './entities/sale-item.entity';
 import { SalePayment } from './entities/sale-payment.entity';
 import { AddSaleItemsDto, CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
@@ -601,10 +601,17 @@ export class SalesService {
     }
     lines.push(rule);
     lines.push(pair('Total', String(this.roundUpKes(Number(sale.totalAmount)))));
-    lines.push(pair('Payment', sale.paymentMethod || 'CASH'));
+    lines.push(
+      pair(
+        'Payment',
+        sale.payment
+          ? paymentLabel(sale.payment.method, sale.payment.mpesaChannel)
+          : paymentLabel(sale.paymentMethod),
+      ),
+    );
     lines.push(pair('Status', sale.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID'));
-    if (sale.payment?.method === 'MPESA' && sale.payment.mpesaReference) {
-      lines.push(pair('M-Pesa', sale.payment.mpesaReference));
+    if (sale.payment?.reference) {
+      lines.push(pair('Ref', sale.payment.reference));
     }
     if (settings.tillNumber || settings.paybillNumber) {
       lines.push(rule);

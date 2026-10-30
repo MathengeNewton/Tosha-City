@@ -207,7 +207,7 @@ export class StockSessionsService {
 
       if (unpaidCashMpesaSales.length > 0) {
         throw new BadRequestException(
-          `Cannot close session. There are ${unpaidCashMpesaSales.length} unpaid cash/mpesa sale(s). Please record payments for all non-credit sales before closing.`,
+          `Cannot close session. There are ${unpaidCashMpesaSales.length} unpaid cash, M-Pesa or card sale(s). Please record payments for all non-credit sales before closing.`,
         );
       }
 
