@@ -1,6 +1,12 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
+import { ReconciliationService } from './reconciliation.service';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,7 +18,24 @@ import { UserRole } from '../roles/entities/role.entity';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly reconciliationService: ReconciliationService,
+  ) {}
+
+  @Get('reconciliation')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({
+    summary:
+      'Short/excess check for a stock session (latest session when no ID is given)',
+  })
+  @ApiQuery({ name: 'sessionId', required: false, type: Number })
+  getReconciliation(@Query('sessionId') sessionId?: string) {
+    return this.reconciliationService.getSessionReconciliation(
+      sessionId ? +sessionId : undefined,
+    );
+  }
 
   @Get('sales')
   @UseGuards(RolesGuard)
@@ -61,7 +84,12 @@ export class ReportsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get daily summary (Admin only)' })
-  @ApiQuery({ name: 'date', required: false, type: String, description: 'Date in YYYY-MM-DD format' })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    type: String,
+    description: 'Date in YYYY-MM-DD format',
+  })
   getDailySummary(@Query('date') date?: string) {
     return this.reportsService.getDailySummary(date);
   }
@@ -78,4 +106,3 @@ export class ReportsController {
     return this.reportsService.getStockShareReport(filters);
   }
 }
-

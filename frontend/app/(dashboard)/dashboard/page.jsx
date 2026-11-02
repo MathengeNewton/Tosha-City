@@ -5,6 +5,7 @@ import { apiClient } from "../../../lib/api";
 import { toast } from "react-toastify";
 import Link from "next/link";
 import CurrentSessionBanner from "../components/CurrentSessionBanner";
+import { StockReconciliationCard } from "./components/StockReconciliation";
 import { PageShell, PageHeader, PageLoading } from "../components/shell";
 import { useAuth } from "../../../contexts/AuthContext";
 import { ymdFromApiDate } from "../../../lib/time";
@@ -221,6 +222,8 @@ export default function CashierDashboard() {
           </div>
         </div>
       </div>
+
+      <StockReconciliationCard sessionId={currentSession?.id} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link

@@ -24,6 +24,7 @@ import {
   XMarkIcon,
   DocumentTextIcon,
   ShareIcon,
+  BanknotesIcon,
 } from "@heroicons/react/24/outline";
 
 export default function DashboardLayout({ children }) {
@@ -39,6 +40,7 @@ export default function DashboardLayout({ children }) {
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
+    { name: "Expenses", href: "/dashboard/expenses", icon: BanknotesIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },
     { name: "Recipes", href: "/admin/recipes", icon: DocumentTextIcon },
     { name: "Suppliers", href: "/admin/suppliers", icon: TruckIcon },
@@ -52,6 +54,7 @@ export default function DashboardLayout({ children }) {
     { name: "Stock Session", href: "/dashboard/stock", icon: ClipboardDocumentListIcon },
     { name: "New Sale", href: "/dashboard/sales/new", icon: CreditCardIcon },
     { name: "Sales", href: "/dashboard/sales", icon: ChartBarIcon },
+    { name: "Expenses", href: "/dashboard/expenses", icon: BanknotesIcon },
     { name: "Reports", href: "/dashboard/reports", icon: DocumentChartBarIcon },
     { name: "Activity log", href: "/admin/activity-log", icon: DocumentTextIcon },
     { name: "Products", href: "/admin/products", icon: CubeIcon },

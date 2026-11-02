@@ -7,6 +7,8 @@ import { exportToExcel, exportToExcelMultiSheet } from "../../../../lib/exportEx
 import { useAuth } from "../../../../contexts/AuthContext";
 import CurrentSessionBanner from "../../components/CurrentSessionBanner";
 import ProductionTab from "../components/ProductionTab";
+import ExpensesTab from "../components/ExpensesTab";
+import { StockReconciliationTable } from "../components/StockReconciliation";
 import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 import {
   ClipboardDocumentListIcon,
@@ -611,7 +613,7 @@ export default function StockManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px overflow-x-auto">
-              {['overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages', 'stock-share', 'sales'].map((tab) => (
+              {['overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages', 'stock-share', 'expenses', 'sales'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -629,6 +631,7 @@ export default function StockManagementPage() {
                    tab === 'closing' ? 'Closing Stock' :
                    tab === 'wastages' ? 'Wastages' :
                    tab === 'stock-share' ? 'Stock Share' :
+                   tab === 'expenses' ? 'Expenses' :
                    'Sales'}
                 </button>
               ))}
@@ -804,6 +807,13 @@ export default function StockManagementPage() {
                   <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
+            )}
+            {activeTab === 'expenses' && (
+              <ExpensesTab
+                session={selectedSession}
+                canManage={canManageEntries}
+                isAdmin={isAdmin}
+              />
             )}
             {activeTab === 'sales' && (
               <SalesTable sales={sales} />
@@ -2470,6 +2480,16 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
         </div>
       )}
 
+      {session?.id && (
+        <StockReconciliationTable
+          sessionId={session.id}
+          refreshKey={[
+            session.status,
+            (stockEntries || []).reduce((sum, e) => sum + parseFloat(e.quantity || 0), stockEntries?.length ?? 0),
+            (sales || []).reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), sales?.length ?? 0),
+          ].join("-")}
+        />
+      )}
 
       {/* Payment Methods */}
       {Object.keys(analytics.paymentMethods).length > 0 && (

@@ -20,6 +20,7 @@ import { CustomerProductPrice } from './modules/customers/entities/customer-prod
 import { ActivityLog } from './modules/activity-log/entities/activity-log.entity';
 import { Partner } from './modules/partners/entities/partner.entity';
 import { StockShare } from './modules/stock-share/entities/stock-share.entity';
+import { Expense } from './modules/expenses/entities/expense.entity';
 import { Recipe } from './modules/recipes/entities/recipe.entity';
 import { RecipeIngredient } from './modules/recipes/entities/recipe-ingredient.entity';
 import { ProductionRun } from './modules/production/entities/production-run.entity';
@@ -41,6 +42,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { StockShareModule } from './modules/stock-share/stock-share.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 import AppConfig from './core/config/app.config';
 
 @Module({
@@ -71,6 +73,7 @@ import AppConfig from './core/config/app.config';
       ActivityLog,
       Partner,
       StockShare,
+      Expense,
       Recipe,
       RecipeIngredient,
       ProductionRun,
@@ -105,6 +108,7 @@ import AppConfig from './core/config/app.config';
     ActivityLogModule,
     PartnersModule,
     StockShareModule,
+    ExpensesModule,
     SeedModule,
   ],
   controllers: [AppController],

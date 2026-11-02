@@ -156,6 +156,8 @@ export const apiClient = {
     getSalesReport: (params) => api.get('/reports/sales', { params }),
     getStockReport: (params) => api.get('/reports/stock', { params }),
     getWastageReport: (params) => api.get('/reports/wastage', { params }),
+    getReconciliation: (sessionId) =>
+      api.get('/reports/reconciliation', { params: sessionId ? { sessionId } : {} }),
     getStockShareReport: (params) => api.get('/reports/stock-share', { params }),
     getWeeklyComparison: () => api.get('/reports/weekly-comparison'),
     getDailySummary: (date) => api.get('/reports/daily-summary', { params: date ? { date } : {} }),
@@ -216,6 +218,14 @@ export const apiClient = {
     create: (data) => api.post('/stock-share', data),
     update: (id, data) => api.patch(`/stock-share/${id}`, data),
     markPaid: (id) => api.post(`/stock-share/${id}/mark-paid`),
+  },
+
+  expenses: {
+    getAll: (params) => api.get('/expenses', { params }), // params: sessionId, startDate, endDate, category
+    getById: (id) => api.get(`/expenses/${id}`),
+    create: (data) => api.post('/expenses', data),
+    update: (id, data) => api.patch(`/expenses/${id}`, data),
+    delete: (id) => api.delete(`/expenses/${id}`),
   },
 
   recipes: {
