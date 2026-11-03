@@ -59,7 +59,6 @@ export default function CustomersPage() {
     address: "",
     isWholesale: false,
     creditEnabled: false,
-    creditLimit: "",
     paymentTerms: "",
     notes: "",
     isActive: true,
@@ -100,7 +99,6 @@ export default function CustomersPage() {
         address: customer.address || "",
         isWholesale: customerIsWholesale(customer),
         creditEnabled: customerHasCredit(customer),
-        creditLimit: customer.creditLimit || "",
         paymentTerms: customer.paymentTerms || "",
         notes: customer.notes || "",
         isActive: customer.isActive !== undefined ? customer.isActive : true,
@@ -114,7 +112,6 @@ export default function CustomersPage() {
         address: "",
         isWholesale: activeTab === "wholesale",
         creditEnabled: false,
-        creditLimit: "",
         paymentTerms: "",
         notes: "",
         isActive: true,
@@ -133,10 +130,7 @@ export default function CustomersPage() {
         address: formData.address || null,
         isWholesale: !!formData.isWholesale,
         creditEnabled: !!formData.creditEnabled,
-        creditLimit:
-          formData.creditEnabled && formData.creditLimit
-            ? parseFloat(formData.creditLimit)
-            : null,
+        creditLimit: null,
         paymentTerms: formData.creditEnabled ? formData.paymentTerms || null : null,
         notes: formData.notes || null,
         isActive: formData.isActive,
@@ -191,10 +185,6 @@ export default function CustomersPage() {
                 phone: c.phone || "",
                 email: c.email || "",
                 address: c.address || "",
-                creditLimit:
-                  customerHasCredit(c) && c.creditLimit
-                    ? parseFloat(c.creditLimit)
-                    : "",
                 status: c.isActive ? "Active" : "Inactive",
                 createdAt: c.createdAt ? new Date(c.createdAt).toLocaleString() : "",
               }));
@@ -207,7 +197,6 @@ export default function CustomersPage() {
                   { key: "phone", label: "Phone" },
                   { key: "email", label: "Email" },
                   { key: "address", label: "Address" },
-                  { key: "creditLimit", label: "Credit Limit (KES)" },
                   { key: "status", label: "Status" },
                   { key: "createdAt", label: "Created" },
                 ],
@@ -293,9 +282,6 @@ export default function CustomersPage() {
                   Contact
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Credit limit
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -306,7 +292,7 @@ export default function CustomersPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
                     No {activeTab} customers in this date range
                   </td>
                 </tr>
@@ -341,13 +327,6 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {customer.phone || customer.email || "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {credit && customer.creditLimit
-                          ? `KES ${parseFloat(customer.creditLimit).toLocaleString("en-KE", {
-                              minimumFractionDigits: 2,
-                            })}`
-                          : "—"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
@@ -515,28 +494,12 @@ export default function CustomersPage() {
                     </span>
                     <span className="text-xs text-gray-500">
                       Allow this {formData.isWholesale ? "wholesale" : "regular"} customer to buy
-                      on credit (limit required).
+                      on credit.
                     </span>
                   </span>
                 </label>
                 {formData.creditEnabled && (
                   <div className="grid grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Credit limit (KES) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={formData.creditLimit}
-                        onChange={(e) =>
-                          setFormData({ ...formData, creditLimit: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
-                        required
-                      />
-                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Payment terms

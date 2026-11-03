@@ -196,10 +196,11 @@ export class OwnerSummaryService {
           .getRawMany(),
         this.stockEntryRepo
           .createQueryBuilder('entry')
-          .select(`TO_CHAR(DATE(entry.recordedAt), 'YYYY-MM-DD')`, 'day')
+          .innerJoin('entry.session', 'session')
+          .select(`TO_CHAR(session.date, 'YYYY-MM-DD')`, 'day')
           .addSelect('SUM(entry.quantity)', 'qty')
           .where('entry.type = :type', { type: StockEntryType.WASTAGE })
-          .andWhere('DATE(entry.recordedAt) BETWEEN :from AND :to', { from, to })
+          .andWhere('session.date BETWEEN :from AND :to', { from, to })
           .groupBy('day')
           .getRawMany(),
         this.saleItemRepo

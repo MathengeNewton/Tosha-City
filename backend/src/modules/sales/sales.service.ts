@@ -112,19 +112,6 @@ export class SalesService {
       }
     }
 
-
-    if (createSaleDto.paymentMethod === PaymentMethod.CREDIT && customer) {
-      const outstandingBalance = await this.customersService.getOutstandingBalance(customer.id);
-      if (
-        customer.creditLimit != null &&
-        outstandingBalance + totalAmount > Number(customer.creditLimit) + 0.01
-      ) {
-        throw new BadRequestException(
-          `Credit limit exceeded. Outstanding: ${outstandingBalance}, sale: ${totalAmount}, limit: ${customer.creditLimit}`,
-        );
-      }
-    }
-
     // Retry logic for handling race conditions with sale number generation
     const maxRetries = 3;
     let lastError: any;

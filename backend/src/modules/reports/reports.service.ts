@@ -143,7 +143,7 @@ export class ReportsService {
       .leftJoinAndSelect('entry.session', 'session');
 
     if (filters.startDate && filters.endDate) {
-      query.where('DATE(entry.recordedAt) BETWEEN :startDate AND :endDate', {
+      query.where('session.date BETWEEN :startDate AND :endDate', {
         startDate: filters.startDate,
         endDate: filters.endDate,
       });
@@ -273,7 +273,7 @@ export class ReportsService {
       .where('entry.type = :type', { type: StockEntryType.WASTAGE });
 
     if (filters.startDate && filters.endDate) {
-      query.andWhere('DATE(entry.recordedAt) BETWEEN :startDate AND :endDate', {
+      query.andWhere('session.date BETWEEN :startDate AND :endDate', {
         startDate: filters.startDate,
         endDate: filters.endDate,
       });
@@ -283,7 +283,10 @@ export class ReportsService {
       query.andWhere('entry.productId = :productId', { productId: filters.productId });
     }
 
-    const wastageEntries = await query.orderBy('entry.recordedAt', 'DESC').getMany();
+    const wastageEntries = await query
+      .orderBy('session.date', 'DESC')
+      .addOrderBy('entry.recordedAt', 'DESC')
+      .getMany();
 
     // Group by product
     const wastageByProduct = {};
@@ -304,7 +307,8 @@ export class ReportsService {
         id: entry.id,
         quantity: entry.quantity,
         unit: entry.unit,
-        date: entry.recordedAt,
+        date: entry.session?.date ?? entry.recordedAt,
+        recordedAt: entry.recordedAt,
         notes: entry.notes,
         photoUrl: entry.photoUrl,
       });
@@ -322,7 +326,8 @@ export class ReportsService {
         product: e.product?.name,
         quantity: e.quantity,
         unit: e.unit,
-        date: e.recordedAt,
+        date: e.session?.date ?? e.recordedAt,
+        recordedAt: e.recordedAt,
         notes: e.notes,
         photoUrl: e.photoUrl,
       })),

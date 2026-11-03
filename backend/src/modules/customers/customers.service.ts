@@ -160,17 +160,9 @@ export class CustomersService {
     return unpaidSales.reduce((total, sale) => total + Number(sale.totalAmount), 0);
   }
 
-  async getBalanceSummary(customerId: number): Promise<{
-    outstandingBalance: number;
-    creditLimit: number | null;
-    availableCredit: number | null;
-  }> {
-    const customer = await this.findOne(customerId);
+  async getBalanceSummary(customerId: number): Promise<{ outstandingBalance: number }> {
     const outstandingBalance = await this.getOutstandingBalance(customerId);
-    const limit = customer.creditLimit != null ? Number(customer.creditLimit) : null;
-    const availableCredit =
-      limit != null ? Math.max(0, limit - outstandingBalance) : null;
-    return { outstandingBalance, creditLimit: limit, availableCredit };
+    return { outstandingBalance };
   }
 
   async getCreditCustomersWithBalances(): Promise<Array<Customer & { outstandingBalance: number }>> {

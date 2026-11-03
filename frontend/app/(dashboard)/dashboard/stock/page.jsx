@@ -24,6 +24,7 @@ import {
   sharePaymentLabel,
 } from "../../../../lib/stockShare";
 import {
+  addDaysYmd,
   defaultDateRangeYmd,
   formatDate,
   formatDateTime,
@@ -2597,6 +2598,36 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const isWastage = type === 'WASTAGE';
+  const [wasteSessions, setWasteSessions] = useState([]);
+  const [wasteSessionId, setWasteSessionId] = useState('');
+
+  // Waste is usually counted the morning after, so it defaults to the previous session's day.
+  useEffect(() => {
+    if (!isWastage) return;
+    let cancelled = false;
+    const sessionYmd = ymdFromApiDate(session.date);
+    apiClient.stockSessions
+      .getAll({ dateFrom: addDaysYmd(sessionYmd, -14), dateTo: sessionYmd })
+      .then((res) => {
+        if (cancelled) return;
+        const options = (res.data || [])
+          .filter((s) => s.id === session.id || ymdFromApiDate(s.date) < sessionYmd)
+          .sort((a, b) => ymdFromApiDate(b.date).localeCompare(ymdFromApiDate(a.date)) || b.id - a.id);
+        if (!options.some((s) => s.id === session.id)) options.unshift(session);
+        const previous = options.find((s) => s.id !== session.id);
+        setWasteSessions(options);
+        setWasteSessionId(String((previous || session).id));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWasteSessions([session]);
+        setWasteSessionId(String(session.id));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isWastage, session.id, session.date]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -2627,14 +2658,23 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
         setSubmitting(false);
         return;
       }
+      if (isWastage && !wasteSessionId) {
+        toast.error("Choose which day this waste belongs to");
+        setSubmitting(false);
+        return;
+      }
       if (selectedFile) {
         const uploadRes = await apiClient.uploads.upload(selectedFile);
         // Store the filename (full path) in the database
         photoUrl = uploadRes.data.filename;
       }
 
+      const targetSession = isWastage
+        ? wasteSessions.find((s) => String(s.id) === String(wasteSessionId)) || session
+        : session;
+
       await apiClient.stockEntries.create({
-        sessionId: session.id,
+        sessionId: targetSession.id,
         productId: parseInt(formData.productId),
         supplierId: type === 'INCOMING' && formData.supplierId ? parseInt(formData.supplierId) : undefined,
         type: type,
@@ -2643,7 +2683,11 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
         notes: formData.notes || null,
         photoUrl: photoUrl,
       });
-      toast.success(`${type} stock entry recorded successfully`);
+      if (targetSession.id !== session.id) {
+        toast.success(`Wastage recorded for ${formatDate(targetSession.date)}. It shows on that day's session.`);
+      } else {
+        toast.success(`${type} stock entry recorded successfully`);
+      }
       setFormData({ productId: '', supplierId: '', quantity: '', unit: 'kg', notes: '', photoUrl: null });
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -2661,6 +2705,35 @@ function StockEntryForm({ session, products, suppliers = [], type, onSuccess }) 
         <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           Record stock taken from the store into the kitchen. Quantity cannot exceed on-hand for this session.
         </p>
+      )}
+      {isWastage && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Waste is for *
+          </label>
+          <select
+            value={wasteSessionId}
+            onChange={(e) => setWasteSessionId(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+            required
+          >
+            {wasteSessions.length === 0 && <option value="">Loading sessions…</option>}
+            {wasteSessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {formatDate(s.date)}
+                {s.id === session.id
+                  ? ' (this session)'
+                  : s.id === wasteSessions.find((o) => o.id !== session.id)?.id
+                    ? ' (previous session)'
+                    : ''}
+                {s.status === 'CLOSED' ? ' · closed' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Waste counted this morning belongs to yesterday. It is added to that day&apos;s stock check and reports.
+          </p>
+        </div>
       )}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">

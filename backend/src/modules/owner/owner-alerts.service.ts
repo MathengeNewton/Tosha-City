@@ -223,12 +223,13 @@ export class OwnerAlertsService {
       this.stockEntryRepo
         .createQueryBuilder('entry')
         .innerJoin('entry.product', 'product')
-        .select(`TO_CHAR(DATE(entry.recordedAt), 'YYYY-MM-DD')`, 'day')
+        .innerJoin('entry.session', 'session')
+        .select(`TO_CHAR(session.date, 'YYYY-MM-DD')`, 'day')
         .addSelect('SUM(entry.quantity * product.defaultPrice)', 'value')
         .addSelect('SUM(entry.quantity)', 'qty')
         .addSelect('COUNT(entry.id)', 'entries')
         .where('entry.type = :type', { type: StockEntryType.WASTAGE })
-        .andWhere('DATE(entry.recordedAt) BETWEEN :baselineFrom AND :to', { baselineFrom, to })
+        .andWhere('session.date BETWEEN :baselineFrom AND :to', { baselineFrom, to })
         .groupBy('day')
         .getRawMany(),
       this.sessionRepo.count({
