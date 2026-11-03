@@ -113,9 +113,6 @@ export class StockSessionsService {
   async update(id: number, updateDto: { date?: string }, userId?: number): Promise<StockSession> {
     try {
       const session = await this.findOne(id);
-      if (session.status !== SessionStatus.OPEN) {
-        throw new BadRequestException('Only open sessions can be updated');
-      }
       if (updateDto.date) {
         const newDate = new Date(updateDto.date);
         newDate.setHours(0, 0, 0, 0);
@@ -256,6 +253,18 @@ export class StockSessionsService {
   async findOne(id: number, branchId?: number): Promise<StockSession> {
     const session = await this.sessionRepository.findOne({
       where: branchId ? { id, branchId } : { id },
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Stock session with ID ${id} not found`);
+    }
+
+    return session;
+  }
+
+  async findOneWithDetails(id: number, branchId?: number): Promise<StockSession> {
+    const session = await this.sessionRepository.findOne({
+      where: branchId ? { id, branchId } : { id },
       relations: ['openedBy', 'stockEntries', 'sales'],
     });
 
@@ -310,59 +319,58 @@ export class StockSessionsService {
     }
 
     const sessions = await queryBuilder.getMany();
+    if (sessions.length === 0) return [];
 
-    // Get statistics for each session
-    const sessionsWithStats = await Promise.all(
-      sessions.map(async (session) => {
-        // Count opening stock entries
-        const openingCount = await this.stockEntryRepository.count({
-          where: {
-            sessionId: session.id,
-            type: StockEntryType.OPENING,
-          },
-        });
+    const sessionIds = sessions.map((session) => session.id);
 
-        // Count incoming stock entries
-        const incomingCount = await this.stockEntryRepository.count({
-          where: {
-            sessionId: session.id,
-            type: StockEntryType.INCOMING,
-          },
-        });
+    const [entryRows, saleRows] = await Promise.all([
+      this.stockEntryRepository
+        .createQueryBuilder('entry')
+        .select('entry.sessionId', 'sessionId')
+        .addSelect('entry.type', 'type')
+        .addSelect('COUNT(*)', 'count')
+        .where('entry.sessionId IN (:...sessionIds)', { sessionIds })
+        .andWhere('entry.type IN (:...types)', {
+          types: [StockEntryType.OPENING, StockEntryType.INCOMING],
+        })
+        .groupBy('entry.sessionId')
+        .addGroupBy('entry.type')
+        .getRawMany(),
+      this.saleRepository
+        .createQueryBuilder('sale')
+        .select('sale.sessionId', 'sessionId')
+        .addSelect('COUNT(*)', 'salesCount')
+        .addSelect(
+          'COALESCE(SUM(CASE WHEN sale.paymentStatus = :paid THEN sale.totalAmount ELSE 0 END), 0)',
+          'totalRevenue',
+        )
+        .where('sale.sessionId IN (:...sessionIds)', { sessionIds })
+        .setParameter('paid', PaymentStatus.PAID)
+        .groupBy('sale.sessionId')
+        .getRawMany(),
+    ]);
 
-        // Count sales
-        const salesCount = await this.saleRepository.count({
-          where: {
-            sessionId: session.id,
-          },
-        });
+    const entryCounts = new Map<string, number>();
+    for (const row of entryRows) {
+      entryCounts.set(`${row.sessionId}:${row.type}`, Number(row.count));
+    }
+    const saleStats = new Map<number, { salesCount: number; totalRevenue: number }>();
+    for (const row of saleRows) {
+      saleStats.set(Number(row.sessionId), {
+        salesCount: Number(row.salesCount),
+        totalRevenue: parseFloat(row.totalRevenue),
+      });
+    }
 
-        // Calculate total revenue (sum of paid sales)
-        const paidSales = await this.saleRepository.find({
-          where: {
-            sessionId: session.id,
-            paymentStatus: PaymentStatus.PAID,
-          },
-        });
-
-        const totalRevenue = paidSales.reduce(
-          (sum, sale) => sum + parseFloat(sale.totalAmount.toString()),
-          0,
-        );
-
-        return {
-          ...session,
-          stats: {
-            openingStockCount: openingCount,
-            incomingStockCount: incomingCount,
-            salesCount,
-            totalRevenue,
-          },
-        };
-      }),
-    );
-
-    return sessionsWithStats;
+    return sessions.map((session) => ({
+      ...session,
+      stats: {
+        openingStockCount: entryCounts.get(`${session.id}:${StockEntryType.OPENING}`) ?? 0,
+        incomingStockCount: entryCounts.get(`${session.id}:${StockEntryType.INCOMING}`) ?? 0,
+        salesCount: saleStats.get(session.id)?.salesCount ?? 0,
+        totalRevenue: saleStats.get(session.id)?.totalRevenue ?? 0,
+      },
+    }));
   }
 }
 

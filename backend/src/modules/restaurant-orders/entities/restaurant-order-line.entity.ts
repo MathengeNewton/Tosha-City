@@ -6,6 +6,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Product } from '../../products/entities/product.entity';
@@ -19,6 +20,7 @@ export enum RestaurantOrderLineStatus {
 }
 
 @Entity()
+@Index(['orderId'])
 export class RestaurantOrderLine {
   @ApiProperty()
   @PrimaryGeneratedColumn()

@@ -123,7 +123,7 @@ export class RestaurantOrdersService {
 
   async create(dto: CreateRestaurantOrderDto, user: RequestUser): Promise<RestaurantOrder> {
     const session = await this.stockSessionsService.findOne(dto.sessionId);
-    if (session.status !== SessionStatus.OPEN) {
+    if (session.status !== SessionStatus.OPEN && !this.isAdmin(user)) {
       throw new BadRequestException('Session is not open');
     }
     if (!this.isAdmin(user)) {

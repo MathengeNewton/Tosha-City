@@ -13,13 +13,15 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { SalesService } from './sales.service';
-import { AddSaleItemsDto, CreateSaleDto } from './dto/create-sale.dto';
+import { SalesService, SalesListFilters } from './sales.service';
+import { AddSaleItemsDto, CreateSaleDto, EditSaleItemsDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
+
+const MAX_PAGE_SIZE = 200;
 
 function isAdminUser(user: { roles?: Array<{ name?: string } | string> }) {
   return (user?.roles || []).some((role) =>
@@ -50,6 +52,8 @@ export class SalesController {
   @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date YYYY-MM-DD' })
   @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date YYYY-MM-DD' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID filter (admin only)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size; when set the response is { items, total, totalAmount }' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Number of sales to skip (with limit)' })
   findAll(
     @Request() req,
     @Query('sessionId') sessionId?: string,
@@ -58,21 +62,31 @@ export class SalesController {
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('branchId') branchId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
     const isAdmin = isAdminUser(req.user);
     const scopedBranchId = isAdmin ? (branchId ? +branchId : undefined) : req.user.branchId;
+    let filters: SalesListFilters;
     if (!isAdmin && !sessionId) {
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Nairobi' }).format(new Date());
-      return this.salesService.findAll(undefined, undefined, today, undefined, undefined, scopedBranchId);
+      filters = { date: today, branchId: scopedBranchId };
+    } else {
+      filters = {
+        sessionId: sessionId ? +sessionId : undefined,
+        productId: productId ? +productId : undefined,
+        date,
+        dateFrom,
+        dateTo,
+        branchId: scopedBranchId,
+      };
     }
-    return this.salesService.findAll(
-      sessionId ? +sessionId : undefined,
-      productId ? +productId : undefined,
-      date,
-      dateFrom,
-      dateTo,
-      scopedBranchId,
-    );
+    if (limit) {
+      const pageSize = Math.min(Math.max(parseInt(limit, 10) || MAX_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+      const skip = Math.max(parseInt(offset || '0', 10) || 0, 0);
+      return this.salesService.findPage(filters, pageSize, skip);
+    }
+    return this.salesService.findAll(filters);
   }
 
   @Get('kitchen-supply-balances')
@@ -119,6 +133,14 @@ export class SalesController {
   @ApiOperation({ summary: 'Add items to an unpaid sale (items cannot be removed once confirmed)' })
   addItems(@Param('id') id: string, @Body() dto: AddSaleItemsDto, @Request() req) {
     return this.salesService.addItems(+id, dto, req.user);
+  }
+
+  @Patch(':id/items')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Change quantity and price of items on a sale, or remove items (Admin only)' })
+  editItems(@Param('id') id: string, @Body() dto: EditSaleItemsDto, @Request() req) {
+    return this.salesService.editItems(+id, dto, req.user);
   }
 
   @Patch(':id')

@@ -124,6 +124,7 @@ export const apiClient = {
     getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),
     create: (data) => api.post('/sales', data),
     addItems: (id, data) => api.post(`/sales/${id}/items`, data),
+    editItems: (id, data) => api.patch(`/sales/${id}/items`, data),
     update: (id, data) => api.patch(`/sales/${id}`, data),
     delete: (id) => api.delete(`/sales/${id}`),
   },

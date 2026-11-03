@@ -8,6 +8,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { StockSession } from '../../stock-sessions/entities/stock-session.entity';
@@ -22,6 +23,10 @@ import { RestaurantOrder } from '../../restaurant-orders/entities/restaurant-ord
 export { PaymentMethod, PaymentStatus };
 
 @Entity()
+@Index(['soldAt'])
+@Index(['branchId', 'soldAt'])
+@Index(['sessionId', 'paymentStatus'])
+@Index(['customerId'])
 export class Sale {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
   @PrimaryGeneratedColumn()

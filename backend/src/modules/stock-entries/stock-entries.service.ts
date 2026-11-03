@@ -14,7 +14,6 @@ import { UpdateStockEntryDto } from './dto/update-stock-entry.dto';
 import { StockSessionsService } from '../stock-sessions/stock-sessions.service';
 import { SessionStatus } from '../stock-sessions/entities/stock-session.entity';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import { Sale } from '../sales/entities/sale.entity';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ProductsService } from '../products/products.service';
 import { ProductSegment } from '../products/entities/product.entity';
@@ -25,8 +24,6 @@ export class StockEntriesService {
   constructor(
     @InjectRepository(StockEntry)
     private entryRepository: Repository<StockEntry>,
-    @InjectRepository(Sale)
-    private saleRepository: Repository<Sale>,
     private stockSessionsService: StockSessionsService,
     private suppliersService: SuppliersService,
     private activityLog: ActivityLogService,
@@ -42,16 +39,14 @@ export class StockEntriesService {
     ) {
       throw new BadRequestException(`${createEntryDto.type} entries are created automatically by the system.`);
     }
-    // Verify session exists and is open (for opening/incoming entries)
+    // Verify session exists; non-admins can only record into open sessions
     const session = await this.stockSessionsService.findOne(createEntryDto.sessionId);
+    const sessionLocked = session.status !== SessionStatus.OPEN && !isAdmin;
 
     const quantity = Number(createEntryDto.quantity);
     if (createEntryDto.type === StockEntryType.ADJUSTMENT) {
       if (!isAdmin) {
         throw new ForbiddenException('Only an admin can adjust stock');
-      }
-      if (session.status !== SessionStatus.OPEN) {
-        throw new BadRequestException('Cannot adjust stock in a closed session');
       }
       if (!Number.isFinite(quantity) || quantity === 0) {
         throw new BadRequestException('Adjustment quantity must be a non-zero number');
@@ -68,7 +63,7 @@ export class StockEntriesService {
     }
 
     if (createEntryDto.type === StockEntryType.OPENING || createEntryDto.type === StockEntryType.INCOMING) {
-      if (session.status !== SessionStatus.OPEN) {
+      if (sessionLocked) {
         throw new BadRequestException('Cannot add opening/incoming stock to a closed session');
       }
     }
@@ -79,7 +74,7 @@ export class StockEntriesService {
       createEntryDto.type === StockEntryType.PARTNER_SHARE ||
       createEntryDto.type === StockEntryType.KITCHEN_ISSUE
     ) {
-      if (session.status !== SessionStatus.OPEN) {
+      if (sessionLocked) {
         throw new BadRequestException('Cannot add closing/wastage/partner share/kitchen issue to a closed session');
       }
     }
@@ -181,18 +176,6 @@ export class StockEntriesService {
     try {
       const entry = await this.findOne(id);
 
-      const session = await this.stockSessionsService.findOne(entry.sessionId);
-      if (session.status === SessionStatus.CLOSED) {
-        throw new BadRequestException('Cannot update stock entry in a closed session');
-      }
-
-      const salesCount = await this.saleRepository.count({ where: { sessionId: entry.sessionId } });
-      if (salesCount > 0) {
-        throw new BadRequestException(
-          'Cannot edit stock entries when this session has sales. Adjust or remove sales first.',
-        );
-      }
-
       Object.assign(entry, updateEntryDto);
       const saved = await this.entryRepository.save(entry);
       await this.activityLog.log({
@@ -221,18 +204,6 @@ export class StockEntriesService {
   async remove(id: number, userId?: number): Promise<void> {
     try {
       const entry = await this.findOne(id);
-
-      const session = await this.stockSessionsService.findOne(entry.sessionId);
-      if (session.status === SessionStatus.CLOSED) {
-        throw new BadRequestException('Cannot delete stock entry in a closed session');
-      }
-
-      const salesCount = await this.saleRepository.count({ where: { sessionId: entry.sessionId } });
-      if (salesCount > 0) {
-        throw new BadRequestException(
-          'Cannot delete stock entries when this session has sales. Adjust or remove sales first.',
-        );
-      }
 
       await this.entryRepository.remove(entry);
       await this.activityLog.log({

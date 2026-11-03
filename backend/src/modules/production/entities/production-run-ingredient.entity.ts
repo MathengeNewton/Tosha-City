@@ -4,6 +4,7 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { ProductionRun } from './production-run.entity';
@@ -11,6 +12,7 @@ import { Product } from '../../products/entities/product.entity';
 import { RecipeIngredient } from '../../recipes/entities/recipe-ingredient.entity';
 
 @Entity()
+@Index(['productionRunId'])
 export class ProductionRunIngredient {
   @ApiProperty({ example: 1 })
   @PrimaryGeneratedColumn()

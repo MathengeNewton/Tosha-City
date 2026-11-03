@@ -5,12 +5,15 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Sale } from './sale.entity';
 import { Product } from '../../products/entities/product.entity';
 
 @Entity()
+@Index(['saleId'])
+@Index(['productId', 'saleId'])
 export class SaleItem {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
   @PrimaryGeneratedColumn()

@@ -13,10 +13,12 @@ import PaymentPicker, { emptyPayment, paymentLabel, paymentPayload, paymentProbl
 import {
   buildLine,
   changeLine,
+  cookingFeeFor,
   formatKes,
   isSmallCook,
   lineToPayload,
   linesTotal,
+  roundUpKes,
   validateLines,
 } from "../saleLines";
 
@@ -39,15 +41,19 @@ export default function SaleDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
+  const [editPayment, setEditPayment] = useState(emptyPayment("CASH"));
   const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [editingItems, setEditingItems] = useState(false);
+  const [itemDrafts, setItemDrafts] = useState([]);
+  const [savingItemEdits, setSavingItemEdits] = useState(false);
 
-  const canAdminEditSale =
-    !!sale &&
-    isAdmin &&
-    sale.paymentStatus === "PENDING" &&
-    sale.session?.status === "OPEN";
+  const isPaid = sale?.paymentStatus === "PAID";
+  const canAdminEditSale = !!sale && isAdmin;
   const canAddItems =
-    !!sale && sale.paymentStatus === "PENDING" && sale.session?.status === "OPEN" && !sale.restaurantOrderId;
+    !!sale &&
+    sale.paymentStatus === "PENDING" &&
+    (sale.session?.status === "OPEN" || isAdmin) &&
+    !sale.restaurantOrderId;
   const cookingFeePerKg = Number(settings?.cookingFeePerKg ?? 100);
 
   useEffect(() => {
@@ -105,6 +111,74 @@ export default function SaleDetailsPage() {
       toast.error(error.response?.data?.message || "Failed to add items");
     } finally {
       setSavingItems(false);
+    }
+  };
+
+  const startEditingItems = () => {
+    setAdding(false);
+    setNewLines([]);
+    setItemDrafts(
+      (sale.items || []).map((item) => ({
+        id: item.id,
+        name: item.product?.name || "Item",
+        unit: item.product?.unit || "",
+        quantity: String(Number(item.quantity || 0)),
+        unitPrice: String(Number(item.unitPrice || 0)),
+        cookInKitchen: !!item.cookInKitchen,
+        cookingFeePerKg: item.cookingFeePerKg ?? cookingFeePerKg,
+      })),
+    );
+    setEditingItems(true);
+  };
+
+  const updateDraft = (id, field, value) => {
+    setItemDrafts((prev) => prev.map((draft) => (draft.id === id ? { ...draft, [field]: value } : draft)));
+  };
+
+  const draftLineTotal = (draft) => roundUpKes(parseFloat(draft.quantity || 0) * parseFloat(draft.unitPrice || 0));
+  const draftCookingFee = (draft) =>
+    draft.cookInKitchen ? cookingFeeFor(parseFloat(draft.quantity || 0), draft.cookingFeePerKg) : 0;
+  const draftsTotal = itemDrafts.reduce((sum, draft) => sum + draftLineTotal(draft) + draftCookingFee(draft), 0);
+
+  const handleSaveItemEdits = async () => {
+    if (itemDrafts.length === 0) {
+      toast.error("A sale needs at least one item. Use Delete Sale instead.");
+      return;
+    }
+    for (const draft of itemDrafts) {
+      if (!(parseFloat(draft.quantity) > 0)) {
+        toast.error(`Quantity for ${draft.name} must be greater than 0`);
+        return;
+      }
+      if (draft.unitPrice === "" || !(parseFloat(draft.unitPrice) >= 0)) {
+        toast.error(`Enter a price for ${draft.name}`);
+        return;
+      }
+    }
+    if (
+      isPaid &&
+      !confirm(
+        `This sale is paid. Its payment amount will change from KES ${formatKes(sale.totalAmount)} to KES ${formatKes(draftsTotal)}. Continue?`,
+      )
+    ) {
+      return;
+    }
+    try {
+      setSavingItemEdits(true);
+      await apiClient.sales.editItems(sale.id, {
+        items: itemDrafts.map((draft) => ({
+          id: draft.id,
+          quantity: parseFloat(draft.quantity),
+          unitPrice: parseFloat(draft.unitPrice),
+        })),
+      });
+      toast.success("Sale items updated");
+      setEditingItems(false);
+      loadSaleData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update items");
+    } finally {
+      setSavingItemEdits(false);
     }
   };
 
@@ -168,14 +242,30 @@ export default function SaleDetailsPage() {
 
   const handleOpenEditModal = () => {
     setEditPaymentMethod(sale.paymentMethod || "CASH");
+    const recorded = emptyPayment(payment?.method);
+    setEditPayment({
+      ...recorded,
+      mpesaChannel: recorded.method === "MPESA" ? payment?.mpesaChannel || "TILL" : "",
+      reference: payment?.reference || "",
+    });
     setShowEditModal(true);
   };
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
+    let body = { paymentMethod: editPaymentMethod };
+    if (isPaid) {
+      const problem = paymentProblem(editPayment);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+      const { method, mpesaChannel, reference } = paymentPayload(editPayment);
+      body = { paymentMethod: method, mpesaChannel, reference };
+    }
     try {
       setSubmittingEdit(true);
-      await apiClient.sales.update(sale.id, { paymentMethod: editPaymentMethod });
+      await apiClient.sales.update(sale.id, body);
       toast.success("Sale updated");
       setShowEditModal(false);
       loadSaleData();
@@ -187,7 +277,10 @@ export default function SaleDetailsPage() {
   };
 
   const handleDeleteSale = async () => {
-    if (!confirm(`Delete sale ${sale.saleNumber}? Its items go back into stock. Only unpaid sales can be deleted.`)) return;
+    const message = isPaid
+      ? `Delete paid sale ${sale.saleNumber}? Its payment record is removed too and its items go back into stock. This cannot be undone.`
+      : `Delete sale ${sale.saleNumber}? Its items go back into stock.`;
+    if (!confirm(message)) return;
     try {
       await apiClient.sales.delete(sale.id);
       toast.success("Sale deleted");
@@ -242,12 +335,20 @@ export default function SaleDetailsPage() {
               Record Payment
             </button>
           )}
-          {canAddItems && !adding && (
+          {canAddItems && !adding && !editingItems && (
             <button
               onClick={startAdding}
               className="flex-1 sm:flex-none bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-blue-800 transition-colors text-sm min-h-[44px]"
             >
               Add items
+            </button>
+          )}
+          {canAdminEditSale && !editingItems && (
+            <button
+              onClick={startEditingItems}
+              className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm min-h-[44px]"
+            >
+              Edit items
             </button>
           )}
           {canAdminEditSale && (
@@ -303,13 +404,101 @@ export default function SaleDetailsPage() {
         </div>
       </div>
 
-      {sale.paymentStatus === "PAID" && (
+      {isPaid && !isAdmin && (
         <p className="no-print rounded-xl bg-gray-100 px-4 py-2 text-sm text-gray-700">
           This sale is paid and can no longer be edited.
         </p>
       )}
 
-      <div className="space-y-3">
+      {editingItems && (
+        <div className="no-print space-y-3 rounded-2xl border-2 border-gray-700/30 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <div>
+              <p className="text-lg font-bold text-gray-900">Edit items</p>
+              <p className="text-sm text-gray-600">
+                Change quantity or price, or remove an item. Stock{isPaid ? " and the payment amount" : ""} update to match.
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">New total</p>
+              <p className="text-lg font-bold tabular-nums text-gray-900">KES {formatKes(draftsTotal)}</p>
+            </div>
+          </div>
+          {itemDrafts.map((draft) => (
+            <div key={draft.id} className="rounded-xl border border-gray-200 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-base font-bold text-gray-900">{draft.name}</p>
+                <button
+                  type="button"
+                  onClick={() => setItemDrafts((prev) => prev.filter((d) => d.id !== draft.id))}
+                  className="rounded-md px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-50"
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Quantity{draft.unit ? ` (${draft.unit})` : ""}
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={draft.quantity}
+                    onChange={(e) => updateDraft(draft.id, "quantity", e.target.value)}
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-base min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Unit price (KES)</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={draft.unitPrice}
+                    onChange={(e) => updateDraft(draft.id, "unitPrice", e.target.value)}
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-base min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <div className="col-span-2 sm:col-span-1 sm:text-right">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Line total</p>
+                  <p className="mt-2 text-lg font-bold tabular-nums text-gray-900">{formatKes(draftLineTotal(draft))}</p>
+                  {draft.cookInKitchen && (
+                    <p className="text-sm text-orange-800">+ {formatKes(draftCookingFee(draft))} cooking</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {itemDrafts.length === 0 && (
+            <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Every item is removed. A sale needs at least one item; use Delete Sale to remove the whole sale.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSaveItemEdits}
+              disabled={savingItemEdits || itemDrafts.length === 0}
+              className="min-h-[52px] flex-1 rounded-xl bg-green-600 px-6 text-base font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {savingItemEdits ? "Saving…" : "Save changes"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingItems(false)}
+              className="min-h-[52px] rounded-xl bg-gray-200 px-6 text-base font-semibold text-gray-800 hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`space-y-3 ${editingItems ? "hidden print:block" : ""}`}>
         {(sale.items || []).map((item) => {
           const qty = parseFloat(item.quantity || 0);
           const unitPrice = parseFloat(item.unitPrice || 0);
@@ -425,27 +614,35 @@ export default function SaleDetailsPage() {
         </Link>
       </div>
 
-      {/* Edit Sale Modal (admin, unpaid only) */}
+      {/* Edit Sale Modal (admin) */}
       {showEditModal && sale && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg sm:text-xl font-bold mb-4">Edit Sale {sale.saleNumber}</h2>
-            <p className="text-sm text-gray-600 mb-4">Change payment method (unpaid sales only).</p>
+            <p className="text-sm text-gray-600 mb-4">
+              {isPaid
+                ? "Correct how this sale was paid. The payment record is updated too."
+                : "Change payment method."}
+            </p>
             <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
-                <select
-                  value={editPaymentMethod}
-                  onChange={(e) => setEditPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
-                  required
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="MPESA">M-Pesa</option>
-                  <option value="PDQ">Card (PDQ)</option>
-                  <option value="CREDIT">Credit</option>
-                </select>
-              </div>
+              {isPaid ? (
+                <PaymentPicker value={editPayment} onChange={setEditPayment} settings={settings} />
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-base min-h-[44px]"
+                    required
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="MPESA">M-Pesa</option>
+                    <option value="PDQ">Card (PDQ)</option>
+                    <option value="CREDIT">Credit</option>
+                  </select>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button
                   type="button"

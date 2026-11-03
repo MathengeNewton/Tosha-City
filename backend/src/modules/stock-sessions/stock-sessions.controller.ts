@@ -98,7 +98,7 @@ export class StockSessionsController {
   @ApiOperation({ summary: 'Get a stock session by ID' })
   findOne(@Param('id') id: string, @Request() req) {
     const scopedBranchId = isAdminUser(req.user) ? undefined : req.user.branchId;
-    return this.stockSessionsService.findOne(+id, scopedBranchId);
+    return this.stockSessionsService.findOneWithDetails(+id, scopedBranchId);
   }
 }
 

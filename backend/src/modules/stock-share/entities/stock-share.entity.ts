@@ -5,6 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Partner } from '../../partners/entities/partner.entity';
@@ -13,6 +14,8 @@ import { StockSession } from '../../stock-sessions/entities/stock-session.entity
 import { User } from '../../users/entities/user.entity';
 
 @Entity()
+@Index(['sessionId'])
+@Index(['partnerId'])
 export class StockShare {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
   @PrimaryGeneratedColumn()

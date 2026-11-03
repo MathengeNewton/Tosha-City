@@ -23,13 +23,13 @@ export class StockShareService {
     private salesService: SalesService,
   ) {}
 
-  async create(dto: CreateStockShareDto, userId: number): Promise<StockShare> {
+  async create(dto: CreateStockShareDto, userId: number, isAdmin = false): Promise<StockShare> {
     await this.partnersService.findOne(dto.partnerId);
     const product = await this.productsService.findOne(dto.productId);
 
     if (dto.sessionId) {
       const session = await this.stockSessionsService.findOne(dto.sessionId);
-      if (session.status !== SessionStatus.OPEN) {
+      if (session.status !== SessionStatus.OPEN && !isAdmin) {
         throw new BadRequestException('Cannot record a stock share for a closed session');
       }
       const available = await this.salesService.getAvailableStock(dto.sessionId, dto.productId);
@@ -48,6 +48,7 @@ export class StockShareService {
           notes: dto.notes ? `Partner share: ${dto.notes}` : 'Stock share with partner',
         },
         userId,
+        isAdmin,
       );
     }
 

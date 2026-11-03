@@ -6,6 +6,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Branch } from '../../branches/entities/branch.entity';
@@ -16,6 +17,7 @@ import { User } from '../../users/entities/user.entity';
 import { ProductionRunIngredient } from './production-run-ingredient.entity';
 
 @Entity()
+@Index(['sessionId'])
 export class ProductionRun {
   @ApiProperty({ example: 1 })
   @PrimaryGeneratedColumn()

@@ -7,12 +7,13 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, SelectQueryBuilder, In } from 'typeorm';
 import { Sale } from './entities/sale.entity';
 import { PaymentStatus, PaymentMethod, paymentLabel } from './entities/payment.enums';
 import { SaleItem } from './entities/sale-item.entity';
 import { SalePayment } from './entities/sale-payment.entity';
-import { AddSaleItemsDto, CreateSaleDto, CreateSaleItemDto } from './dto/create-sale.dto';
+import { PaymentsService } from './payments.service';
+import { AddSaleItemsDto, CreateSaleDto, CreateSaleItemDto, EditSaleItemsDto } from './dto/create-sale.dto';
 import { SaleSettingsService } from '../sale-settings/sale-settings.service';
 import { Customer } from '../customers/entities/customer.entity';
 import { UpdateSaleDto } from './dto/update-sale.dto';
@@ -40,6 +41,21 @@ type RequestUser = {
   branchId?: number | null;
 };
 
+export type SalesListFilters = {
+  sessionId?: number;
+  productId?: number;
+  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  branchId?: number;
+};
+
+export type SalesPage = {
+  items: Sale[];
+  total: number;
+  totalAmount: number;
+};
+
 @Injectable()
 export class SalesService {
   constructor(
@@ -63,6 +79,7 @@ export class SalesService {
     private customersService: CustomersService,
     private activityLog: ActivityLogService,
     private saleSettingsService: SaleSettingsService,
+    private paymentsService: PaymentsService,
   ) {}
 
   private isAdmin(user?: RequestUser): boolean {
@@ -102,9 +119,9 @@ export class SalesService {
   }
 
   async create(createSaleDto: CreateSaleDto, user: RequestUser): Promise<Sale> {
-    // Verify session exists and is open
+    // Verify session exists and is open (admins can also record into closed sessions)
     const session = await this.stockSessionsService.findOne(createSaleDto.sessionId);
-    if (session.status !== SessionStatus.OPEN) {
+    if (session.status !== SessionStatus.OPEN && !this.isAdmin(user)) {
       throw new BadRequestException('Cannot create sale for a closed session');
     }
 
@@ -340,18 +357,12 @@ export class SalesService {
       }
       totalAmount += itemTotal + cookingFee;
 
-      // If this is a byproduct, check parent product stock instead
-      const stockProductId = product.parentProductId || itemDto.productId;
       const stockProduct = product.parentProductId
         ? await this.productsService.findOne(product.parentProductId)
         : product;
 
-      const availableStock = this.isUniversal(product)
-        ? this.universalOnHand(product, pooledStock)
-        : product.category === ProductCategory.PRODUCTION_ITEM
-          ? await this.getProducedAvailableStock(session.id, itemDto.productId)
-          : await this.getAvailableStock(session.id, stockProductId);
-      const stockKey = `${product.category === ProductCategory.PRODUCTION_ITEM ? 'p' : 's'}:${stockProductId}`;
+      const availableStock = await this.availableStockFor(session, product, pooledStock);
+      const stockKey = this.stockKeyFor(product);
       const requested = (requestedByStockKey.get(stockKey) || 0) + quantity;
       requestedByStockKey.set(stockKey, requested);
       if (availableStock + 1e-6 < requested) {
@@ -382,6 +393,24 @@ export class SalesService {
     return { itemsToCreate, byproductStockEntries, totalAmount: this.round2(totalAmount) };
   }
 
+  /** Byproducts draw on their parent product's stock; production items on what was produced. */
+  private async availableStockFor(
+    session: StockSession,
+    product: Product,
+    pooledStock: Awaited<ReturnType<SalesService['loadStockSnapshot']>>,
+  ): Promise<number> {
+    if (this.isUniversal(product)) return this.universalOnHand(product, pooledStock);
+    if (product.category === ProductCategory.PRODUCTION_ITEM) {
+      return this.getProducedAvailableStock(session.id, product.id);
+    }
+    return this.getAvailableStock(session.id, product.parentProductId || product.id);
+  }
+
+  private stockKeyFor(product: Product): string {
+    const stockProductId = product.parentProductId || product.id;
+    return `${product.category === ProductCategory.PRODUCTION_ITEM ? 'p' : 's'}:${stockProductId}`;
+  }
+
   private round2(value: number): number {
     return Math.round(value * 100) / 100;
   }
@@ -405,7 +434,7 @@ export class SalesService {
     if (sale.paymentStatus === PaymentStatus.PAID) {
       throw new BadRequestException('This sale is paid and can no longer be edited');
     }
-    if (sale.session?.status !== SessionStatus.OPEN) {
+    if (sale.session?.status !== SessionStatus.OPEN && !this.isAdmin(user)) {
       throw new BadRequestException('Items can only be added while the stock session is open');
     }
     if (sale.restaurantOrderId) {
@@ -456,22 +485,164 @@ export class SalesService {
     return this.findOne(sale.id, user);
   }
 
-  async findAll(
-    sessionId?: number,
-    productId?: number,
-    date?: string,
-    dateFrom?: string,
-    dateTo?: string,
-    branchId?: number,
-  ): Promise<Sale[]> {
-    const query = this.saleRepository.createQueryBuilder('sale')
-      .leftJoinAndSelect('sale.items', 'items')
-      .leftJoinAndSelect('items.product', 'product')
-      .leftJoinAndSelect('sale.soldBy', 'soldBy')
-      .leftJoinAndSelect('sale.session', 'session');
+  /**
+   * Admins can change the quantity and price of items on any sale, or remove items.
+   * The total, byproduct stock deductions and (for paid sales) the payment amount follow.
+   */
+  async editItems(id: number, dto: EditSaleItemsDto, user: RequestUser): Promise<Sale> {
+    if (!this.isAdmin(user)) {
+      throw new ForbiddenException('Only an admin can change the items on a sale');
+    }
+    const sale = await this.findOne(id, user);
+    const changes = dto.items || [];
+    if (changes.length === 0) {
+      throw new BadRequestException('A sale needs at least one item. Delete the sale instead.');
+    }
+
+    const existing = new Map(sale.items.map((item) => [item.id, item]));
+    const kept = new Set<number>();
+    for (const change of changes) {
+      const item = existing.get(Number(change.id));
+      if (!item) {
+        throw new BadRequestException(`Item ${change.id} is not on sale ${sale.saleNumber}`);
+      }
+      if (kept.has(item.id)) {
+        throw new BadRequestException(`${item.product?.name || 'An item'} is listed twice`);
+      }
+      kept.add(item.id);
+      if (!Number.isFinite(Number(change.quantity)) || Number(change.quantity) <= 0) {
+        throw new BadRequestException(`Quantity for ${item.product?.name || 'an item'} must be greater than 0`);
+      }
+      if (!Number.isFinite(Number(change.unitPrice)) || Number(change.unitPrice) < 0) {
+        throw new BadRequestException(`Price for ${item.product?.name || 'an item'} cannot be negative`);
+      }
+    }
+    const removed = sale.items.filter((item) => !kept.has(item.id));
+
+    // Only a net increase per stock pool needs stock; reductions and removals give stock back.
+    const session = await this.stockSessionsService.findOne(sale.sessionId);
+    const extraByKey = new Map<string, { product: Product; extra: number }>();
+    const addExtra = (product: Product, delta: number) => {
+      const key = this.stockKeyFor(product);
+      const current = extraByKey.get(key) || { product, extra: 0 };
+      current.extra += delta;
+      extraByKey.set(key, current);
+    };
+    for (const change of changes) {
+      const item = existing.get(Number(change.id))!;
+      addExtra(item.product, Number(change.quantity) - Number(item.quantity));
+    }
+    for (const item of removed) {
+      addExtra(item.product, -Number(item.quantity));
+    }
+    if ([...extraByKey.values()].some(({ extra }) => extra > 1e-6)) {
+      const openSessionIds = await this.openSessionIds();
+      const pooledSessions = openSessionIds.includes(session.id) ? openSessionIds : [...openSessionIds, session.id];
+      const pooledStock = await this.loadStockSnapshot(pooledSessions);
+      for (const { product, extra } of extraByKey.values()) {
+        if (extra <= 1e-6) continue;
+        const available = await this.availableStockFor(session, product, pooledStock);
+        if (available + 1e-6 < extra) {
+          throw new BadRequestException(
+            `Not enough stock to add ${this.round2(extra)} ${product.unit} of ${product.name}. Available: ${this.round2(available)} ${product.unit}`,
+          );
+        }
+      }
+    }
+
+    const needsCurrentFee = changes.some((change) => {
+      const item = existing.get(Number(change.id))!;
+      return item.cookInKitchen && item.cookingFeePerKg == null;
+    });
+    const currentFeePerKg = needsCurrentFee ? await this.saleSettingsService.cookingFeePerKg() : 0;
+
+    let totalAmount = 0;
+    const updates = changes.map((change) => {
+      const item = existing.get(Number(change.id))!;
+      const quantity = Number(change.quantity);
+      const unitPrice = Number(change.unitPrice);
+      const totalPrice = this.roundUpKes(quantity * unitPrice);
+      const cookingFeePerKg = item.cookInKitchen
+        ? Number(item.cookingFeePerKg ?? currentFeePerKg)
+        : item.cookingFeePerKg;
+      const cookingFee = item.cookInKitchen ? this.cookingFeeFor(quantity, Number(cookingFeePerKg)) : 0;
+      totalAmount += totalPrice + cookingFee;
+      return { item, quantity, unitPrice, totalPrice, cookingFeePerKg, cookingFee };
+    });
+    totalAmount = this.round2(totalAmount);
+
+    const byproductEntries: Array<{ productId: number; quantity: number; unit: string }> = [];
+    for (const { item, quantity } of updates) {
+      if (!item.product?.parentProductId) continue;
+      const parent = await this.productsService.findOne(item.product.parentProductId);
+      byproductEntries.push({ productId: parent.id, quantity, unit: parent.unit });
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      for (const { item, quantity, unitPrice, totalPrice, cookingFeePerKg, cookingFee } of updates) {
+        await manager.update(SaleItem, { id: item.id }, { quantity, unitPrice, totalPrice, cookingFeePerKg, cookingFee });
+      }
+      if (removed.length > 0) {
+        await manager.delete(SaleItem, { id: In(removed.map((item) => item.id)) });
+      }
+      await manager.delete(StockEntry, { saleId: sale.id, type: StockEntryType.BYPRODUCT_SALE });
+      for (const entry of byproductEntries) {
+        await manager.save(
+          StockEntry,
+          manager.create(StockEntry, {
+            sessionId: sale.sessionId,
+            productId: entry.productId,
+            type: StockEntryType.BYPRODUCT_SALE,
+            quantity: entry.quantity,
+            unit: entry.unit,
+            notes: 'Byproduct sale (deducted from parent stock)',
+            recordedById: sale.soldById,
+            saleId: sale.id,
+          }),
+        );
+      }
+      await manager.update(Sale, { id: sale.id }, { totalAmount });
+      if (sale.paymentStatus === PaymentStatus.PAID) {
+        await manager.update(SalePayment, { saleId: sale.id }, { amount: totalAmount });
+      }
+    });
+
+    await this.activityLog.log({
+      userId: user.userId,
+      action: 'SALE_ITEMS_EDITED',
+      entityType: 'sale',
+      entityId: sale.id,
+      details: {
+        saleNumber: sale.saleNumber,
+        before: {
+          totalAmount: Number(sale.totalAmount),
+          items: sale.items.map((item) => ({
+            id: item.id,
+            product: item.product?.name,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+          })),
+        },
+        after: {
+          totalAmount,
+          items: updates.map(({ item, quantity, unitPrice }) => ({
+            id: item.id,
+            product: item.product?.name,
+            quantity,
+            unitPrice,
+          })),
+        },
+      },
+      success: true,
+    });
+    return this.findOne(sale.id, user);
+  }
+
+  private applySalesFilters(query: SelectQueryBuilder<Sale>, filters: SalesListFilters) {
+    const { sessionId, productId, date, branchId } = filters;
 
     if (sessionId) {
-      query.where('sale.sessionId = :sessionId', { sessionId });
+      query.andWhere('sale.sessionId = :sessionId', { sessionId });
     }
 
     if (productId) {
@@ -482,19 +653,60 @@ export class SalesService {
     }
 
     // soldAt is stored as UTC without a zone; the shop works in Nairobi time.
-    const saleDay = `DATE((sale.soldAt AT TIME ZONE 'UTC') AT TIME ZONE 'Africa/Nairobi')`;
-    if (dateFrom || dateTo) {
-      if (dateFrom) query.andWhere(`${saleDay} >= :dateFrom`, { dateFrom });
-      if (dateTo) query.andWhere(`${saleDay} <= :dateTo`, { dateTo });
-    } else if (date) {
-      query.andWhere(`${saleDay} = :date`, { date });
+    // Compare soldAt against the UTC bounds of each Nairobi day so its index can be used.
+    let { dateFrom, dateTo } = filters;
+    if (!dateFrom && !dateTo && date) {
+      dateFrom = date;
+      dateTo = date;
+    }
+    if (dateFrom) {
+      query.andWhere(
+        `sale.soldAt >= (CAST(CAST(:dateFrom AS date) AS timestamp) AT TIME ZONE 'Africa/Nairobi') AT TIME ZONE 'UTC'`,
+        { dateFrom },
+      );
+    }
+    if (dateTo) {
+      query.andWhere(
+        `sale.soldAt < (CAST(CAST(:dateTo AS date) + 1 AS timestamp) AT TIME ZONE 'Africa/Nairobi') AT TIME ZONE 'UTC'`,
+        { dateTo },
+      );
     }
 
     if (branchId) {
       query.andWhere('sale.branchId = :branchId', { branchId });
     }
 
-    return await query.orderBy('sale.soldAt', 'DESC').getMany();
+    return query;
+  }
+
+  private salesListQuery(filters: SalesListFilters) {
+    const query = this.saleRepository.createQueryBuilder('sale')
+      .leftJoinAndSelect('sale.items', 'items')
+      .leftJoinAndSelect('items.product', 'product')
+      .leftJoinAndSelect('sale.soldBy', 'soldBy')
+      .leftJoinAndSelect('sale.session', 'session');
+    return this.applySalesFilters(query, filters)
+      .orderBy('sale.soldAt', 'DESC')
+      .addOrderBy('sale.id', 'DESC');
+  }
+
+  async findAll(filters: SalesListFilters): Promise<Sale[]> {
+    return await this.salesListQuery(filters).getMany();
+  }
+
+  async findPage(filters: SalesListFilters, limit: number, offset: number): Promise<SalesPage> {
+    const totalsQuery = this.saleRepository.createQueryBuilder('sale')
+      .select('COUNT(*)', 'total')
+      .addSelect('COALESCE(SUM(sale.totalAmount), 0)', 'totalAmount');
+    const [items, totals] = await Promise.all([
+      this.salesListQuery(filters).skip(offset).take(limit).getMany(),
+      this.applySalesFilters(totalsQuery, filters).getRawOne(),
+    ]);
+    return {
+      items,
+      total: Number(totals?.total ?? 0),
+      totalAmount: parseFloat(totals?.totalAmount ?? 0),
+    };
   }
 
   async findOne(id: number, user?: RequestUser): Promise<Sale> {
@@ -629,20 +841,33 @@ export class SalesService {
   async update(id: number, updateSaleDto: UpdateSaleDto, userId: number, user?: RequestUser): Promise<Sale> {
     try {
       const sale = await this.findOne(id, user);
+      const isAdmin = this.isAdmin(user);
 
-      if (sale.paymentStatus === PaymentStatus.PAID) {
+      if (sale.paymentStatus === PaymentStatus.PAID && !isAdmin) {
         throw new BadRequestException('Cannot update a paid sale');
       }
 
-      if (sale.session?.status !== SessionStatus.OPEN) {
+      if (sale.session?.status !== SessionStatus.OPEN && !isAdmin) {
         throw new BadRequestException('Sales can only be edited while their stock session is still open');
       }
 
-      if (updateSaleDto.paymentMethod) {
-        sale.paymentMethod = updateSaleDto.paymentMethod;
+      let saved: Sale;
+      if (sale.paymentStatus === PaymentStatus.PAID) {
+        if (!updateSaleDto.paymentMethod) {
+          throw new BadRequestException('Choose how the sale was paid');
+        }
+        await this.paymentsService.correctPayment(sale, {
+          method: updateSaleDto.paymentMethod,
+          mpesaChannel: updateSaleDto.mpesaChannel,
+          reference: updateSaleDto.reference,
+        });
+        saved = await this.findOne(id, user);
+      } else {
+        if (updateSaleDto.paymentMethod) {
+          sale.paymentMethod = updateSaleDto.paymentMethod;
+        }
+        saved = await this.saleRepository.save(sale);
       }
-
-      const saved = await this.saleRepository.save(sale);
       await this.activityLog.log({
         userId,
         action: 'SALE_UPDATED',
@@ -670,11 +895,11 @@ export class SalesService {
     try {
       const sale = await this.findOne(id, user);
 
-      if (sale.paymentStatus === PaymentStatus.PAID) {
+      if (sale.paymentStatus === PaymentStatus.PAID && !this.isAdmin(user)) {
         throw new BadRequestException('Cannot delete a paid sale');
       }
 
-      if (sale.session?.status !== SessionStatus.OPEN) {
+      if (sale.session?.status !== SessionStatus.OPEN && !this.isAdmin(user)) {
         throw new BadRequestException('Sales can only be deleted while their stock session is still open');
       }
 
@@ -690,6 +915,7 @@ export class SalesService {
             { status: RestaurantOrderStatus.OPEN },
           );
         }
+        await manager.delete(SalePayment, { saleId: sale.id });
         await manager.delete(SaleItem, { saleId: sale.id });
         await manager.delete(Sale, { id: sale.id });
       });
@@ -698,7 +924,11 @@ export class SalesService {
         action: 'SALE_DELETED',
         entityType: 'sale',
         entityId: id,
-        details: { saleNumber: sale.saleNumber },
+        details: {
+          saleNumber: sale.saleNumber,
+          paymentStatus: sale.paymentStatus,
+          totalAmount: sale.totalAmount,
+        },
         success: true,
       });
     } catch (e: any) {

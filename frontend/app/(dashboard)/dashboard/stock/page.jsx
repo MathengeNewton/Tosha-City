@@ -413,11 +413,10 @@ export default function StockManagementPage() {
     const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
     const adjustmentEntries = stockEntries.filter((e) => e.type === "ADJUSTMENT");
     const sessionHasSales = selectedSession?.sales?.length > 0;
-    const lockedNotice = sessionHasSales && canManageEntries ? (
+    const sessionEditable = selectedSession.status === 'OPEN' || isAdmin;
+    const lockedNotice = sessionHasSales && canManageEntries && !isAdmin ? (
       <p className="text-amber-700 text-sm mb-2 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-        {isAdmin
-          ? "Entries can't be edited or deleted once the session has sales. Use the Adjustments tab to correct stock."
-          : "Edit/delete for entries is locked when the session has sales. Ask an admin to adjust stock."}
+        Saved entries can only be corrected by an admin.
       </p>
     ) : null;
     const sessionTabs = [
@@ -706,7 +705,7 @@ export default function StockManagementPage() {
             )}
             {activeTab === 'opening' && (
               <div>
-                {canManageEntries && selectedSession.status === 'OPEN' && (
+                {canManageEntries && sessionEditable && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -714,15 +713,15 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                <div className={canManageEntries && sessionEditable ? "mt-6" : ""}>
                   {lockedNotice}
-                  <StockEntriesTable stockEntries={openingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
+                  <StockEntriesTable stockEntries={openingEntries} canEdit={canEditStockEntries} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="OPENING" />
                 </div>
               </div>
             )}
             {activeTab === 'incoming' && (
               <div>
-                {canManageEntries && selectedSession.status === 'OPEN' && (
+                {canManageEntries && sessionEditable && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products}
@@ -731,9 +730,9 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                <div className={canManageEntries && sessionEditable ? "mt-6" : ""}>
                   {lockedNotice}
-                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
+                  <StockEntriesTable stockEntries={incomingEntries} canEdit={canEditStockEntries} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={suppliers} entryType="INCOMING" />
                 </div>
               </div>
             )}
@@ -781,7 +780,7 @@ export default function StockManagementPage() {
                     </div>
                   </div>
                 )}
-                {canManageEntries && selectedSession.status === 'OPEN' && (
+                {canManageEntries && sessionEditable && (
                   <StockEntryForm
                     session={selectedSession}
                     products={products.filter(
@@ -791,11 +790,11 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={canManageEntries && selectedSession.status === "OPEN" ? "mt-6" : ""}>
+                <div className={canManageEntries && sessionEditable ? "mt-6" : ""}>
                   {lockedNotice}
                   <StockEntriesTable
                     stockEntries={kitchenIssueEntries}
-                    canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)}
+                    canEdit={canEditStockEntries}
                     onEdit={() => loadSessionDetails(selectedSession.id)}
                     products={products}
                     suppliers={[]}
@@ -806,7 +805,7 @@ export default function StockManagementPage() {
             )}
             {activeTab === 'closing' && (
               <div>
-                {canManageEntries && selectedSession.status === 'OPEN' && (
+                {canManageEntries && sessionEditable && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -814,15 +813,15 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                <div className={canManageEntries && sessionEditable ? "mt-6" : ""}>
                   {lockedNotice}
-                  <StockEntriesTable stockEntries={closingEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
+                  <StockEntriesTable stockEntries={closingEntries} canEdit={canEditStockEntries} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="CLOSING" />
                 </div>
               </div>
             )}
             {activeTab === 'wastages' && (
               <div>
-                {canManageEntries && selectedSession.status === 'OPEN' && (
+                {canManageEntries && sessionEditable && (
                   <StockEntryForm 
                     session={selectedSession} 
                     products={products} 
@@ -831,23 +830,21 @@ export default function StockManagementPage() {
                     onSuccess={() => loadSessionDetails(selectedSession.id)}
                   />
                 )}
-                <div className={canManageEntries && selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                <div className={canManageEntries && sessionEditable ? "mt-6" : ""}>
                   {lockedNotice}
-                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries && !(selectedSession?.sales?.length > 0)} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
+                  <StockEntriesTable stockEntries={wastageEntries} canEdit={canEditStockEntries} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="WASTAGE" />
                 </div>
               </div>
             )}
             {activeTab === 'adjustments' && isAdmin && (
               <div>
-                {selectedSession.status === 'OPEN' && (
-                  <StockEntryForm
-                    session={selectedSession}
-                    products={products}
-                    type="ADJUSTMENT"
-                    onSuccess={() => loadSessionDetails(selectedSession.id)}
-                  />
-                )}
-                <div className={selectedSession.status === 'OPEN' ? "mt-6" : ""}>
+                <StockEntryForm
+                  session={selectedSession}
+                  products={products}
+                  type="ADJUSTMENT"
+                  onSuccess={() => loadSessionDetails(selectedSession.id)}
+                />
+                <div className="mt-6">
                   <StockEntriesTable stockEntries={adjustmentEntries} canEdit={false} onEdit={() => loadSessionDetails(selectedSession.id)} products={products} suppliers={[]} entryType="ADJUSTMENT" />
                 </div>
               </div>
@@ -1656,6 +1653,8 @@ const stockShareInputClass =
 
 // Stock Share tab: record and list shares for this session (from incoming stock)
 function StockShareTab({ session, products, canManage, onRefresh }) {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [shares, setShares] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1732,7 +1731,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
   };
 
   if (!session) return null;
-  const isOpen = session.status === "OPEN";
+  const sessionEditable = session.status === "OPEN" || isAdmin;
 
   return (
     <div className="space-y-6">
@@ -1783,7 +1782,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
               <p className="text-sm text-gray-600">Log meat or product given to a partner from this session.</p>
             </div>
           </div>
-          {canManage && isOpen && !showForm && (
+          {canManage && sessionEditable && !showForm && (
             <button
               type="button"
               onClick={() => setShowForm(true)}
@@ -1796,20 +1795,20 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
         </div>
 
         <div className="pt-4">
-          {!isOpen && (
+          {!sessionEditable && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               This session is <strong>not open</strong>. Stock share can only be recorded while the session status is{" "}
               <strong>Open</strong>.
             </div>
           )}
 
-          {isOpen && !canManage && (
+          {sessionEditable && !canManage && (
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
               You don&apos;t have permission to record stock share for this branch.
             </div>
           )}
 
-          {canManage && isOpen && showForm && (
+          {canManage && sessionEditable && showForm && (
             <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-4">
               {partners.length === 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -1915,7 +1914,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
             </form>
           )}
 
-          {canManage && isOpen && !showForm && (
+          {canManage && sessionEditable && !showForm && (
             <p className="text-center text-sm text-gray-500 sm:text-left">
               Tap <strong className="text-gray-700">Start recording</strong> when you are ready to log a share.
             </p>
@@ -1935,7 +1934,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
             <ClipboardDocumentListIcon className="mx-auto h-10 w-10 text-gray-300" aria-hidden />
             <p className="mt-2 text-sm font-medium text-gray-800">No stock shares yet</p>
             <p className="mt-1 text-sm text-gray-600">
-              {canManage && isOpen
+              {canManage && sessionEditable
                 ? "When you record a share, it will appear here."
                 : "Shares for this session will show up here once recorded."}
             </p>

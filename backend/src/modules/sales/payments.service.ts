@@ -13,6 +13,8 @@ type RequestUser = {
   branchId?: number | null;
 };
 
+export type PaymentDetailsInput = Pick<CreatePaymentDto, 'method' | 'mpesaChannel' | 'reference'>;
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -125,9 +127,31 @@ export class PaymentsService {
     }
   }
 
+  /** Admin correction of how a paid sale was paid. The sale's method follows, except credit sales stay CREDIT. */
+  async correctPayment(sale: Sale, details: PaymentDetailsInput): Promise<void> {
+    if (!Object.values(PaymentMethod).includes(details.method)) {
+      throw new BadRequestException('Choose a valid payment method');
+    }
+    if (details.method === PaymentMethod.CREDIT) {
+      throw new BadRequestException('A paid sale cannot be switched to credit');
+    }
+    const payment = await this.paymentRepository.findOne({ where: { saleId: sale.id } });
+    if (!payment) {
+      throw new BadRequestException('This sale has no payment record to correct');
+    }
+    const { mpesaChannel, reference } = await this.paymentDetails(details, payment.id);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(SalePayment, { id: payment.id }, { method: details.method, mpesaChannel, reference });
+      if (sale.paymentMethod !== PaymentMethod.CREDIT) {
+        await manager.update(Sale, { id: sale.id }, { paymentMethod: details.method });
+      }
+    });
+  }
+
   /** M-Pesa needs till or paybill and an unused code; PDQ may carry a slip reference; cash carries nothing. */
   private async paymentDetails(
-    dto: CreatePaymentDto,
+    dto: PaymentDetailsInput,
+    excludePaymentId?: number,
   ): Promise<{ mpesaChannel: MpesaChannel | null; reference: string | null }> {
     const reference = dto.reference?.trim() || null;
     if (dto.method === PaymentMethod.MPESA) {
@@ -138,12 +162,15 @@ export class PaymentsService {
         throw new BadRequestException('Enter the M-Pesa code');
       }
       const code = reference.toUpperCase();
-      const used = await this.paymentRepository
+      const usedQuery = this.paymentRepository
         .createQueryBuilder('payment')
         .leftJoinAndSelect('payment.sale', 'sale')
         .where('payment.method = :method', { method: PaymentMethod.MPESA })
-        .andWhere('UPPER(payment.reference) = :code', { code })
-        .getOne();
+        .andWhere('UPPER(payment.reference) = :code', { code });
+      if (excludePaymentId) {
+        usedQuery.andWhere('payment.id != :excludePaymentId', { excludePaymentId });
+      }
+      const used = await usedQuery.getOne();
       if (used) {
         throw new BadRequestException(
           `M-Pesa code ${code} was already used on sale ${used.sale?.saleNumber || used.saleId}`,

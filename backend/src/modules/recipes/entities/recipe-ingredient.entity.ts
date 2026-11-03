@@ -4,12 +4,14 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Recipe } from './recipe.entity';
 import { Product } from '../../products/entities/product.entity';
 
 @Entity()
+@Index(['recipeId'])
 export class RecipeIngredient {
   @ApiProperty({ example: 1 })
   @PrimaryGeneratedColumn()

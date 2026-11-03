@@ -66,3 +66,30 @@ export class AddSaleItemsDto {
   items: CreateSaleItemDto[];
 }
 
+export class EditSaleItemDto {
+  @ApiProperty({ description: 'ID of an item already on the sale', example: 1 })
+  @IsNumber()
+  id: number;
+
+  @ApiProperty({ description: 'New quantity', example: 1.5 })
+  @IsNumber()
+  @Min(0.01)
+  quantity: number;
+
+  @ApiProperty({ description: 'New unit price', example: 800.0 })
+  @IsNumber()
+  @Min(0)
+  unitPrice: number;
+}
+
+export class EditSaleItemsDto {
+  @ApiProperty({
+    description: 'The items the sale should keep, with their new quantity and price. Items left out are removed.',
+    type: [EditSaleItemDto],
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EditSaleItemDto)
+  items: EditSaleItemDto[];
+}
+

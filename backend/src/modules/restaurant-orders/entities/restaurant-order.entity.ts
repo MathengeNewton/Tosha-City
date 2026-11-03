@@ -7,6 +7,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { Branch } from '../../branches/entities/branch.entity';
@@ -26,6 +27,8 @@ export enum RestaurantOrderStatus {
 }
 
 @Entity()
+@Index(['sessionId', 'status'])
+@Index(['branchId'])
 export class RestaurantOrder {
   @ApiProperty()
   @PrimaryGeneratedColumn()

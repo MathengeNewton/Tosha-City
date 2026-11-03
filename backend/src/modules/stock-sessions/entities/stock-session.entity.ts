@@ -21,6 +21,8 @@ export enum SessionStatus {
 }
 
 @Entity()
+@Index(['branchId', 'date'])
+@Index(['branchId', 'status'])
 export class StockSession {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
   @PrimaryGeneratedColumn()

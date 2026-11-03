@@ -10,6 +10,7 @@ import { PageShell, PageHeader, PageLoading } from "../../components/shell";
 import { formatKes } from "./saleLines";
 
 const FILTERS_KEY = "laketown-sales-filters";
+const PAGE_SIZE = 50;
 
 function nairobiToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi" }).format(new Date());
@@ -59,7 +60,10 @@ function SalesList() {
   const { hasRole, loading: authLoading } = useAuth();
   const isAdmin = hasRole("admin");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [sales, setSales] = useState([]);
+  const [totals, setTotals] = useState({ count: 0, amount: 0 });
   const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState(null);
 
@@ -90,24 +94,77 @@ function SalesList() {
     apiClient.products.getAll().then((res) => setProducts(res.data || [])).catch(() => {});
   }, [authLoading, isAdmin]);
 
+  const filterParams = () => {
+    const params = {};
+    if (filters.productId) params.productId = filters.productId;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    return params;
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
-
-      const params = {};
-      if (filters.productId) params.productId = filters.productId;
-      if (filters.dateFrom) params.dateFrom = filters.dateFrom;
-      if (filters.dateTo) params.dateTo = filters.dateTo;
-
-      const salesRes = await apiClient.sales.getAll(params);
-      const list = Array.isArray(salesRes?.data) ? salesRes.data : (salesRes?.data ? [salesRes.data] : []);
-      setSales(list);
-
+      const res = await apiClient.sales.getAll({ ...filterParams(), limit: PAGE_SIZE, offset: 0 });
+      setSales(res.data?.items || []);
+      setTotals({ count: res.data?.total || 0, amount: res.data?.totalAmount || 0 });
     } catch (error) {
       console.error("Error loading sales:", error);
       toast.error("Failed to load sales");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    try {
+      setLoadingMore(true);
+      const res = await apiClient.sales.getAll({ ...filterParams(), limit: PAGE_SIZE, offset: sales.length });
+      setSales((current) => {
+        const seen = new Set(current.map((sale) => sale.id));
+        return [...current, ...(res.data?.items || []).filter((sale) => !seen.has(sale.id))];
+      });
+      setTotals({ count: res.data?.total || 0, amount: res.data?.totalAmount || 0 });
+    } catch (error) {
+      console.error("Error loading more sales:", error);
+      toast.error("Failed to load more sales");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const exportSales = async () => {
+    try {
+      setExporting(true);
+      const res = await apiClient.sales.getAll(filterParams());
+      const allSales = Array.isArray(res?.data) ? res.data : [];
+      const rows = allSales.map((s) => ({
+        saleNumber: s.saleNumber,
+        date: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
+        itemsCount: s.items?.length ?? 0,
+        totalAmount: parseFloat(s.totalAmount || 0),
+        paymentMethod: s.paymentMethod || "",
+        paymentStatus: s.paymentStatus,
+      }));
+      const dateStr = new Date().toISOString().split("T")[0];
+      exportToExcel(
+        rows,
+        [
+          { key: "saleNumber", label: "Sale #" },
+          { key: "date", label: "Date" },
+          { key: "itemsCount", label: "Items" },
+          { key: "totalAmount", label: "Total (KES)" },
+          { key: "paymentMethod", label: "Payment method" },
+          { key: "paymentStatus", label: "Payment status" },
+        ],
+        `sales-export-${dateStr}`
+      );
+      toast.success("Excel exported");
+    } catch (error) {
+      console.error("Error exporting sales:", error);
+      toast.error("Failed to export sales");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -122,8 +179,7 @@ function SalesList() {
   const today = nairobiToday();
   const showingToday = !filters.productId && filters.dateFrom === today && filters.dateTo === today;
   const showingAll = !filters.productId && !filters.dateFrom && !filters.dateTo;
-  const salesTotal = sales.reduce((sum, sale) => sum + parseFloat(sale.totalAmount || 0), 0);
-  const countAndTotal = `${sales.length} sale${sales.length === 1 ? "" : "s"} · KES ${formatKes(salesTotal)}`;
+  const countAndTotal = `${totals.count} sale${totals.count === 1 ? "" : "s"} · KES ${formatKes(totals.amount)}`;
 
   return (
     <PageShell className="space-y-4 sm:space-y-8">
@@ -131,33 +187,11 @@ function SalesList() {
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => {
-              const rows = sales.map((s) => ({
-                saleNumber: s.saleNumber,
-                date: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
-                itemsCount: s.items?.length ?? 0,
-                totalAmount: parseFloat(s.totalAmount || 0),
-                paymentMethod: s.paymentMethod || "",
-                paymentStatus: s.paymentStatus,
-              }));
-              const dateStr = new Date().toISOString().split("T")[0];
-              exportToExcel(
-                rows,
-                [
-                  { key: "saleNumber", label: "Sale #" },
-                  { key: "date", label: "Date" },
-                  { key: "itemsCount", label: "Items" },
-                  { key: "totalAmount", label: "Total (KES)" },
-                  { key: "paymentMethod", label: "Payment method" },
-                  { key: "paymentStatus", label: "Payment status" },
-                ],
-                `sales-export-${dateStr}`
-              );
-              toast.success("Excel exported");
-            }}
-            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium min-h-[44px]"
+            onClick={exportSales}
+            disabled={exporting}
+            className="flex-1 sm:flex-none bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm font-medium min-h-[44px] disabled:opacity-60"
           >
-            Export Excel
+            {exporting ? "Exporting…" : "Export Excel"}
           </button>
           <Link
             href="/dashboard/sales/new"
@@ -276,6 +310,22 @@ function SalesList() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {sales.length > 0 && sales.length < totals.count && (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-gray-500">
+            Showing {sales.length} of {totals.count}
+          </p>
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium min-h-[44px] disabled:opacity-60"
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
         </div>
       )}
     </PageShell>

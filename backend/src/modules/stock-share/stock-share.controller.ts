@@ -18,6 +18,12 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
 
+function isAdminUser(user: { roles?: Array<{ name?: string } | string> }) {
+  return (user?.roles || []).some((role) =>
+    typeof role === 'string' ? role === UserRole.ADMIN : role?.name === UserRole.ADMIN,
+  );
+}
+
 @ApiTags('Stock Share')
 @Controller('stock-share')
 @UseGuards(JwtAuthGuard)
@@ -31,7 +37,7 @@ export class StockShareController {
   @ApiOperation({ summary: 'Record a stock share to a partner' })
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   create(@Body() dto: CreateStockShareDto, @Request() req) {
-    return this.stockShareService.create(dto, req.user.userId);
+    return this.stockShareService.create(dto, req.user.userId, isAdminUser(req.user));
   }
 
   @Get()

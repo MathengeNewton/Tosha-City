@@ -125,8 +125,8 @@ export default function ProductionTab({
     }
   };
 
-  const sessionOpen = session?.status === "OPEN";
-  const canRecord = canManage && sessionOpen;
+  const sessionEditable = session?.status === "OPEN" || isAdmin;
+  const canRecord = canManage && sessionEditable;
 
   const howItWorksBody = (
     <ul className="mt-3 list-none space-y-2 text-sm text-gray-700">
@@ -224,14 +224,14 @@ export default function ProductionTab({
         </div>
 
         <div className="pt-4">
-          {!sessionOpen && (
+          {!sessionEditable && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               This session is <strong>not open</strong>. Production can only be recorded while the stock session status
               is <strong>Open</strong>.
             </div>
           )}
 
-          {sessionOpen && !canManage && (
+          {sessionEditable && !canManage && (
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
               You don&apos;t have permission to record production for this branch.
             </div>

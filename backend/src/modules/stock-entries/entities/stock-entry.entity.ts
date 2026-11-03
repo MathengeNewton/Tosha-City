@@ -5,6 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { StockSession } from '../../stock-sessions/entities/stock-session.entity';
@@ -27,6 +28,9 @@ export enum StockEntryType {
 }
 
 @Entity()
+@Index(['sessionId', 'type'])
+@Index(['productId'])
+@Index(['saleId'])
 export class StockEntry {
   @ApiProperty({ description: 'Unique identifier', example: 1 })
   @PrimaryGeneratedColumn()
