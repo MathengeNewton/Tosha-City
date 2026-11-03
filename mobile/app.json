@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "ToshaCity Owner",
+    "slug": "toshacity-owner",
+    "version": "1.0.0",
+    "scheme": "toshacityowner",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "ke.co.toshacity.owner",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D47A1",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#0D47A1",
+          "defaultChannel": "default"
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "apiUrl": "https://apis.toshacity.co.ke/api"
+    }
+  }
+}

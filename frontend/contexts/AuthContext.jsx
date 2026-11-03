@@ -16,6 +16,16 @@ export function isKitchenOnlyAccount(user) {
   return has("kitchen") && !has("admin") && !has("cashier");
 }
 
+/** Owner role only — uses the owner mobile app, not the shop screens. */
+export function isOwnerOnlyAccount(user) {
+  if (!user?.roles?.length) return false;
+  const names = user.roles
+    .map((r) => (typeof r === "string" ? r : r?.name) || "")
+    .filter(Boolean);
+  const has = (role) => names.some((n) => n === role);
+  return has("owner") && !has("admin") && !has("cashier");
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);

@@ -1,4 +1,4 @@
-import { Controller, Post, Request, UseGuards, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Request, UseGuards, Body, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -30,6 +31,15 @@ export class AuthController {
       this.logger.error(`Login failed for user: ${req.user?.username || 'unknown'}`, error.stack);
       throw error;
     }
+  }
+
+  @ApiOperation({ summary: 'Get a new access token using a refresh token' })
+  @ApiBody({ type: RefreshTokenDto })
+  @ApiOkResponse({ type: LoginResponseDto })
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  @Post('refresh')
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refresh_token);
   }
 
   @ApiOperation({ summary: 'Reset user password' })

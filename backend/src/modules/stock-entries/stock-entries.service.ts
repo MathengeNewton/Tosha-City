@@ -150,6 +150,12 @@ export class StockEntriesService {
         );
       }
 
+      const before = {
+        productId: entry.productId,
+        product: entry.product?.name,
+        quantity: Number(entry.quantity),
+        unit: entry.unit,
+      };
       Object.assign(entry, updateEntryDto);
       const saved = await this.entryRepository.save(entry);
       await this.activityLog.log({
@@ -157,7 +163,7 @@ export class StockEntriesService {
         action: 'STOCK_ENTRY_UPDATED',
         entityType: 'stock_entry',
         entityId: id,
-        details: { sessionId: entry.sessionId, type: entry.type, ...updateEntryDto },
+        details: { sessionId: entry.sessionId, type: entry.type, before, ...updateEntryDto },
         success: true,
       });
       return saved;
@@ -222,7 +228,14 @@ export class StockEntriesService {
         action: 'STOCK_ENTRY_DELETED',
         entityType: 'stock_entry',
         entityId: id,
-        details: { sessionId: entry.sessionId, type: entry.type },
+        details: {
+          sessionId: entry.sessionId,
+          type: entry.type,
+          productId: entry.productId,
+          product: entry.product?.name,
+          quantity: Number(entry.quantity),
+          unit: entry.unit,
+        },
         success: true,
       });
     } catch (e: any) {

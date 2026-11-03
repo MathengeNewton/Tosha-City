@@ -43,6 +43,7 @@ import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { StockShareModule } from './modules/stock-share/stock-share.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
+import { OwnerModule } from './modules/owner/owner.module';
 import AppConfig from './core/config/app.config';
 
 @Module({
@@ -109,6 +110,7 @@ import AppConfig from './core/config/app.config';
     PartnersModule,
     StockShareModule,
     ExpensesModule,
+    OwnerModule,
     SeedModule,
   ],
   controllers: [AppController],

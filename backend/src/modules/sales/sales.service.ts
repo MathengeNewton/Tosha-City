@@ -373,6 +373,7 @@ export class SalesService {
         throw new BadRequestException('Cannot update a paid sale');
       }
 
+      const previousPaymentMethod = sale.paymentMethod;
       if (updateSaleDto.paymentMethod) {
         sale.paymentMethod = updateSaleDto.paymentMethod;
       }
@@ -383,7 +384,12 @@ export class SalesService {
         action: 'SALE_UPDATED',
         entityType: 'sale',
         entityId: id,
-        details: { ...updateSaleDto } as Record<string, unknown>,
+        details: {
+          ...updateSaleDto,
+          saleNumber: sale.saleNumber,
+          totalAmount: Number(sale.totalAmount),
+          previousPaymentMethod,
+        } as Record<string, unknown>,
         success: true,
       });
       return saved;
@@ -415,7 +421,21 @@ export class SalesService {
         action: 'SALE_DELETED',
         entityType: 'sale',
         entityId: id,
-        details: { saleNumber: sale.saleNumber },
+        details: {
+          saleNumber: sale.saleNumber,
+          sessionId: sale.sessionId,
+          totalAmount: Number(sale.totalAmount),
+          paymentMethod: sale.paymentMethod,
+          paymentStatus: sale.paymentStatus,
+          customer: sale.customer?.name ?? null,
+          soldAt: sale.soldAt,
+          items: (sale.items ?? []).map((i) => ({
+            product: i.product?.name,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unitPrice),
+            totalPrice: Number(i.totalPrice),
+          })),
+        },
         success: true,
       });
     } catch (e: any) {

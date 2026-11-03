@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth, isOwnerOnlyAccount } from "../../contexts/AuthContext";
 
 import SideBar from "./SideBar";
 import DashBoardHeader from "./DashboardHeader";
@@ -30,7 +30,7 @@ import {
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { hasRole } = useAuth();
+  const { hasRole, user, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -81,6 +81,29 @@ export default function DashboardLayout({ children }) {
       }
     }
   }, [isAdmin, pathname, router, isCashierAllowedPath]);
+
+  if (isOwnerOnlyAccount(user)) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
+          <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+            <h1 className="text-xl font-semibold text-gray-900 mb-2">Use the ToshaCity Owner app</h1>
+            <p className="text-sm text-gray-600 mb-6">
+              Owner accounts see the daily summary, warnings and trends in the ToshaCity Owner app on your phone.
+              The shop screens are for cashiers and admins.
+            </p>
+            <button
+              type="button"
+              onClick={logout}
+              className="bg-blue-900 text-white px-4 py-2 rounded-md hover:bg-[#1e88b5] transition-colors text-sm min-h-[44px]"
+            >
+              Log out
+            </button>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>

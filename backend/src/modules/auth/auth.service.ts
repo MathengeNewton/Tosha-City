@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { REFRESH_TOKEN_TYPE } from './auth.constants';
 
 @Injectable()
 export class AuthService {
@@ -46,6 +47,10 @@ export class AuthService {
     };
     return {
       access_token: this.jwtService.sign(payload),
+      refresh_token: this.jwtService.sign(
+        { sub: user.id, type: REFRESH_TOKEN_TYPE },
+        { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '30d') as any },
+      ),
       user: {
         id: user.id,
         username: user.username,
@@ -53,6 +58,25 @@ export class AuthService {
         email: user.email,
       },
     };
+  }
+
+  /** Swap a valid refresh token for a fresh access + refresh token (used by the owner mobile app). */
+  async refresh(refreshToken: string) {
+    let payload: { sub?: number; type?: string };
+    try {
+      payload = this.jwtService.verify(refreshToken);
+    } catch {
+      throw new UnauthorizedException('Refresh token is invalid or expired');
+    }
+    if (payload.type !== REFRESH_TOKEN_TYPE || !payload.sub) {
+      throw new UnauthorizedException('Not a refresh token');
+    }
+    const user = await this.userRepo.findOne({
+      where: { id: payload.sub },
+      relations: ['roles'],
+    });
+    if (!user) throw new UnauthorizedException('User no longer exists');
+    return this.login(user);
   }
 
   async register(username: string, password: string, roles: string[]) {

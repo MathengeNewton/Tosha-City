@@ -10,7 +10,7 @@ import { defaultDateRangeYmd, todayYmd } from "../../../../lib/time";
 const { dateFrom: defaultDateFrom, dateTo: defaultDateTo } = defaultDateRangeYmd(365);
 
 /** Only these roles can be assigned in the UI (matches product roles). */
-const ASSIGNABLE_ROLE_NAMES = new Set(["admin", "cashier"]);
+const ASSIGNABLE_ROLE_NAMES = new Set(["admin", "cashier", "owner"]);
 
 function filterByDateRange(items, dateFrom, dateTo, dateKey = "createdAt") {
   if (!dateFrom && !dateTo) return items;
@@ -57,7 +57,7 @@ const UsersPage = () => {
     const filtered = roles.filter((role) =>
       ASSIGNABLE_ROLE_NAMES.has(role.name?.toLowerCase())
     );
-    const order = { admin: 0, cashier: 1 };
+    const order = { admin: 0, cashier: 1, owner: 2 };
     return [...filtered].sort(
       (a, b) =>
         (order[a.name?.toLowerCase()] ?? 99) - (order[b.name?.toLowerCase()] ?? 99)
