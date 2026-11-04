@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StockSession, SessionStatus } from './entities/stock-session.entity';
@@ -9,6 +9,7 @@ import { StockEntry, StockEntryType } from '../stock-entries/entities/stock-entr
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { Branch } from '../branches/entities/branch.entity';
 import { UserRole } from '../roles/entities/role.entity';
+import { currentSessionSql, isCurrentSession, nairobiToday } from '../../common/utils/shop-day';
 
 type RequestUser = {
   userId: number;
@@ -262,9 +263,9 @@ export class StockSessionsService {
     return session;
   }
 
-  async findOneWithDetails(id: number, branchId?: number): Promise<StockSession> {
+  async findOneWithDetails(id: number, user?: RequestUser): Promise<StockSession> {
     const session = await this.sessionRepository.findOne({
-      where: branchId ? { id, branchId } : { id },
+      where: { id },
       relations: ['openedBy', 'stockEntries', 'sales'],
     });
 
@@ -272,7 +273,18 @@ export class StockSessionsService {
       throw new NotFoundException(`Stock session with ID ${id} not found`);
     }
 
+    this.assertCanView(session, user);
     return session;
+  }
+
+  assertCanView(session: StockSession, user?: RequestUser): void {
+    if (!user || this.isAdmin(user)) return;
+    if (!user.branchId || session.branchId !== user.branchId) {
+      throw new NotFoundException(`Stock session with ID ${session.id} not found`);
+    }
+    if (!isCurrentSession(session)) {
+      throw new ForbiddenException('Only an admin can view past sessions and their sales');
+    }
   }
 
   async findByDate(date: Date, branchId?: number): Promise<StockSession | null> {
@@ -290,6 +302,7 @@ export class StockSessionsService {
     dateTo?: string,
     status?: SessionStatus,
     branchId?: number,
+    currentOnly = false,
   ): Promise<any[]> {
     const queryBuilder = this.sessionRepository
       .createQueryBuilder('session')
@@ -316,6 +329,10 @@ export class StockSessionsService {
 
     if (branchId) {
       queryBuilder.andWhere('session.branchId = :branchId', { branchId });
+    }
+
+    if (currentOnly) {
+      queryBuilder.andWhere(currentSessionSql('session'), { shopToday: nairobiToday() });
     }
 
     const sessions = await queryBuilder.getMany();

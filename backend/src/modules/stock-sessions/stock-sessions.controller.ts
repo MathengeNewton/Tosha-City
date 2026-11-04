@@ -78,7 +78,11 @@ export class StockSessionsController {
     @Query('status') status?: SessionStatus,
     @Query('branchId') branchId?: string,
   ) {
-    const scopedBranchId = isAdminUser(req.user) ? (branchId ? +branchId : undefined) : req.user.branchId;
+    if (!isAdminUser(req.user)) {
+      if (!req.user.branchId) return [];
+      return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status, req.user.branchId, true);
+    }
+    const scopedBranchId = branchId ? +branchId : undefined;
     // If any filter is provided, use findAllWithStats, otherwise use simple findAll
     if (dateFrom || dateTo || status || scopedBranchId) {
       return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status, scopedBranchId);
@@ -97,8 +101,7 @@ export class StockSessionsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a stock session by ID' })
   findOne(@Param('id') id: string, @Request() req) {
-    const scopedBranchId = isAdminUser(req.user) ? undefined : req.user.branchId;
-    return this.stockSessionsService.findOneWithDetails(+id, scopedBranchId);
+    return this.stockSessionsService.findOneWithDetails(+id, req.user);
   }
 }
 

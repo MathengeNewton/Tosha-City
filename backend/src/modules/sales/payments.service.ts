@@ -6,6 +6,7 @@ import { Sale, PaymentStatus } from './entities/sale.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { MpesaChannel, PaymentMethod } from './entities/payment.enums';
 import { UserRole } from '../roles/entities/role.entity';
+import { currentSessionSql, isCurrentSession, nairobiToday } from '../../common/utils/shop-day';
 
 type RequestUser = {
   userId: number;
@@ -36,6 +37,13 @@ export class PaymentsService {
     if (this.isAdmin(user)) return;
     if (!user.branchId || sale.branchId !== user.branchId) {
       throw new ForbiddenException('You cannot access this sale');
+    }
+  }
+
+  private assertCurrentSale(sale: Sale, user?: RequestUser): void {
+    if (!user || this.isAdmin(user)) return;
+    if (sale.session && !isCurrentSession(sale.session)) {
+      throw new ForbiddenException('Only an admin can view past sales');
     }
   }
 
@@ -185,11 +193,12 @@ export class PaymentsService {
   }
 
   async findPaymentBySaleId(saleId: number, user?: RequestUser): Promise<SalePayment | null> {
-    const sale = await this.saleRepository.findOne({ where: { id: saleId } });
+    const sale = await this.saleRepository.findOne({ where: { id: saleId }, relations: ['session'] });
     if (!sale) {
       throw new NotFoundException(`Sale with ID ${saleId} not found`);
     }
     this.assertSaleBranchAccess(sale, user);
+    this.assertCurrentSale(sale, user);
     return await this.paymentRepository.findOne({
       where: { saleId },
       relations: ['sale', 'receivedBy'],
@@ -209,7 +218,10 @@ export class PaymentsService {
       if (!user.branchId) {
         throw new ForbiddenException('Your account is not assigned to a branch');
       }
-      query.where('sale.branchId = :branchId', { branchId: user.branchId });
+      query
+        .innerJoin('sale.session', 'session')
+        .where('sale.branchId = :branchId', { branchId: user.branchId })
+        .andWhere(currentSessionSql('session'), { shopToday: nairobiToday() });
     }
 
     if (filters?.saleId) {
@@ -234,7 +246,7 @@ export class PaymentsService {
   async findOne(id: number, user?: RequestUser): Promise<SalePayment> {
     const payment = await this.paymentRepository.findOne({
       where: { id },
-      relations: ['sale', 'sale.items', 'sale.items.product', 'receivedBy'],
+      relations: ['sale', 'sale.session', 'sale.items', 'sale.items.product', 'receivedBy'],
     });
 
     if (!payment) {
@@ -243,6 +255,7 @@ export class PaymentsService {
 
     if (payment.sale) {
       this.assertSaleBranchAccess(payment.sale, user);
+      this.assertCurrentSale(payment.sale, user);
     }
 
     return payment;

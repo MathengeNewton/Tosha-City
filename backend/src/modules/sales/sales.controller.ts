@@ -20,6 +20,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../roles/entities/role.entity';
+import { nairobiToday } from '../../common/utils/shop-day';
 
 const MAX_PAGE_SIZE = 200;
 
@@ -54,7 +55,7 @@ export class SalesController {
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID filter (admin only)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Page size; when set the response is { items, total, totalAmount }' })
   @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Number of sales to skip (with limit)' })
-  findAll(
+  async findAll(
     @Request() req,
     @Query('sessionId') sessionId?: string,
     @Query('productId') productId?: string,
@@ -69,9 +70,11 @@ export class SalesController {
     const scopedBranchId = isAdmin ? (branchId ? +branchId : undefined) : req.user.branchId;
     let filters: SalesListFilters;
     if (!isAdmin && !sessionId) {
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Nairobi' }).format(new Date());
-      filters = { date: today, branchId: scopedBranchId };
+      filters = { date: nairobiToday(), branchId: scopedBranchId };
     } else {
+      if (!isAdmin) {
+        await this.salesService.assertCanViewSession(+sessionId!, req.user);
+      }
       filters = {
         sessionId: sessionId ? +sessionId : undefined,
         productId: productId ? +productId : undefined,

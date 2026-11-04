@@ -162,12 +162,16 @@ export default function StockManagementPage() {
     try {
       const branchId = isAdmin ? selectedBranchId : user?.branchId;
       if (!branchId) return;
-      const allSessionsRes = await apiClient.stockSessions.getAll({
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-        status: filters.status || undefined,
-        branchId,
-      });
+      const allSessionsRes = await apiClient.stockSessions.getAll(
+        isAdmin
+          ? {
+              dateFrom: filters.dateFrom,
+              dateTo: filters.dateTo,
+              status: filters.status || undefined,
+              branchId,
+            }
+          : { branchId },
+      );
       setAllSessions(allSessionsRes.data || []);
     } catch (error) {
       console.error("Error loading sessions:", error);
@@ -272,7 +276,7 @@ export default function StockManagementPage() {
       }
     } catch (error) {
       console.error("Error loading session:", error);
-      toast.error("Failed to load session details");
+      toast.error(error.response?.data?.message || "Failed to load session details");
     }
   };
 
@@ -883,6 +887,7 @@ export default function StockManagementPage() {
               ))}
             </select>
           )}
+          {isAdmin && (
           <div className="flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
             <button
               type="button"
@@ -907,6 +912,7 @@ export default function StockManagementPage() {
               Calendar
             </button>
           </div>
+          )}
           {!currentSession ? (
             <button
               type="button"
@@ -937,7 +943,7 @@ export default function StockManagementPage() {
       )}
 
       {/* List View or Calendar View */}
-      {viewMode === 'list' ? (
+      {viewMode === 'list' || !isAdmin ? (
         <ListView 
           sessions={paginatedSessions}
           filters={filters}
@@ -1052,7 +1058,13 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
     <div className="space-y-6">
       {/* Date Range Metrics Overview */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Date Range Overview</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">{isAdmin ? "Date Range Overview" : "Today"}</h3>
+        {!isAdmin && (
+          <p className="text-sm text-gray-600 mb-3">
+            You can see today&apos;s session and any session still open. Past days are only visible to an admin.
+          </p>
+        )}
+        {isAdmin && <div className="mb-3" />}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-blue-50 p-4 rounded-lg">
             <p className="text-sm text-gray-600">Total Opening Stock</p>
@@ -1074,7 +1086,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        {/* Filters */}
+        {isAdmin && (
         <div className="p-4 border-b border-gray-200 bg-gray-50">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <div>
@@ -1135,6 +1147,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
             )}
           </div>
         </div>
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto">

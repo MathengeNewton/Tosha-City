@@ -730,7 +730,15 @@ export class SalesService {
     }
 
     this.assertSaleBranchAccess(sale, user);
+    if (sale.session) {
+      this.stockSessionsService.assertCanView(sale.session, user);
+    }
     return sale;
+  }
+
+  async assertCanViewSession(sessionId: number, user: RequestUser): Promise<void> {
+    const session = await this.stockSessionsService.findOne(sessionId);
+    this.stockSessionsService.assertCanView(session, user);
   }
 
   async getPaymentForSale(saleId: number, user?: RequestUser): Promise<SalePayment | null> {
