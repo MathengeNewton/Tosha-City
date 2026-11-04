@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNumber, IsEnum, IsArray, ValidateNested, Min, IsOptional, IsBoolean, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PaymentMethod } from '../entities/payment.enums';
+import { MpesaChannel, PaymentMethod } from '../entities/payment.enums';
 
 export class CreateSaleItemDto {
   @ApiProperty({ description: 'Product ID', example: 1 })
@@ -38,6 +38,11 @@ export class CreateSaleDto {
   @ApiProperty({ description: 'Payment method', enum: PaymentMethod, example: PaymentMethod.CASH })
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
+
+  @ApiProperty({ description: 'Till or paybill for M-Pesa sales; the bill prints only this one', enum: MpesaChannel, required: false })
+  @IsOptional()
+  @IsEnum(MpesaChannel)
+  mpesaChannel?: MpesaChannel;
 
   @ApiProperty({ description: 'Customer ID (required for credit sales)', required: false, example: 1 })
   @IsOptional()

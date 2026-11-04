@@ -20,9 +20,9 @@ export function paymentLabel(method, mpesaChannel) {
   return "Cash";
 }
 
-export function emptyPayment(method) {
+export function emptyPayment(method, mpesaChannel) {
   const start = METHODS.some((m) => m.id === method) ? method : "CASH";
-  return { method: start, mpesaChannel: start === "MPESA" ? "TILL" : "", reference: "" };
+  return { method: start, mpesaChannel: start === "MPESA" ? mpesaChannel || "TILL" : "", reference: "" };
 }
 
 /** First problem with the payment, or null when it can be recorded. */
@@ -49,14 +49,43 @@ function choiceClass(active) {
   }`;
 }
 
+/** Till or paybill buttons, each showing its number from sale settings. */
+export function MpesaChannelChoice({ value, onChange, settings, className = "" }) {
+  const till = settings?.tillNumber;
+  const paybill = settings?.paybillNumber;
+  const account = settings?.paybillAccount;
+  return (
+    <div className={`grid grid-cols-2 gap-2 ${className}`}>
+      <button
+        type="button"
+        onClick={() => onChange("TILL")}
+        className={`${choiceClass(value === "TILL")} py-2 text-left leading-tight`}
+      >
+        Till
+        {till && <span className="block text-xs font-normal opacity-80">{till}</span>}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("PAYBILL")}
+        className={`${choiceClass(value === "PAYBILL")} py-2 text-left leading-tight`}
+      >
+        Paybill
+        {paybill && (
+          <span className="block text-xs font-normal opacity-80">
+            {paybill}
+            {account ? ` · Acc ${account}` : ""}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
+
 const inputClass =
   "w-full min-h-[48px] rounded-xl border border-gray-300 bg-white px-3 py-2 text-base focus:border-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20";
 
 export default function PaymentPicker({ value, onChange, settings }) {
   const set = (patch) => onChange({ ...value, ...patch });
-  const till = settings?.tillNumber;
-  const paybill = settings?.paybillNumber;
-  const account = settings?.paybillAccount;
 
   return (
     <div className="space-y-3">
@@ -81,29 +110,11 @@ export default function PaymentPicker({ value, onChange, settings }) {
 
       {value.method === "MPESA" && (
         <>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => set({ mpesaChannel: "TILL" })}
-              className={`${choiceClass(value.mpesaChannel === "TILL")} py-2 text-left leading-tight`}
-            >
-              Till
-              {till && <span className="block text-xs font-normal opacity-80">{till}</span>}
-            </button>
-            <button
-              type="button"
-              onClick={() => set({ mpesaChannel: "PAYBILL" })}
-              className={`${choiceClass(value.mpesaChannel === "PAYBILL")} py-2 text-left leading-tight`}
-            >
-              Paybill
-              {paybill && (
-                <span className="block text-xs font-normal opacity-80">
-                  {paybill}
-                  {account ? ` · Acc ${account}` : ""}
-                </span>
-              )}
-            </button>
-          </div>
+          <MpesaChannelChoice
+            value={value.mpesaChannel}
+            onChange={(mpesaChannel) => set({ mpesaChannel })}
+            settings={settings}
+          />
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">M-Pesa code *</label>
             <input

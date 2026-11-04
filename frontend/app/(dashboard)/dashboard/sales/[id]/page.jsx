@@ -9,7 +9,13 @@ import { buildCustomerBillDocument } from "../customerBill";
 import { PageShell, PageHeader, PageLoading } from "../../../components/shell";
 import ProductGrid from "../ProductGrid";
 import SaleLineCard from "../SaleLineCard";
-import PaymentPicker, { emptyPayment, paymentLabel, paymentPayload, paymentProblem } from "../PaymentPicker";
+import PaymentPicker, {
+  MpesaChannelChoice,
+  emptyPayment,
+  paymentLabel,
+  paymentPayload,
+  paymentProblem,
+} from "../PaymentPicker";
 import {
   buildLine,
   changeLine,
@@ -41,6 +47,7 @@ export default function SaleDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
+  const [editMpesaChannel, setEditMpesaChannel] = useState("TILL");
   const [editPayment, setEditPayment] = useState(emptyPayment("CASH"));
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
@@ -207,7 +214,7 @@ export default function SaleDetailsPage() {
   };
 
   const openRecordPaymentModal = () => {
-    setPaymentForm(emptyPayment(sale?.paymentMethod));
+    setPaymentForm(emptyPayment(sale?.paymentMethod, sale?.mpesaChannel));
     setShowPaymentModal(true);
   };
 
@@ -242,6 +249,7 @@ export default function SaleDetailsPage() {
 
   const handleOpenEditModal = () => {
     setEditPaymentMethod(sale.paymentMethod || "CASH");
+    setEditMpesaChannel(sale.mpesaChannel || "TILL");
     const recorded = emptyPayment(payment?.method);
     setEditPayment({
       ...recorded,
@@ -253,7 +261,10 @@ export default function SaleDetailsPage() {
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
-    let body = { paymentMethod: editPaymentMethod };
+    let body = {
+      paymentMethod: editPaymentMethod,
+      mpesaChannel: editPaymentMethod === "MPESA" ? editMpesaChannel : undefined,
+    };
     if (isPaid) {
       const problem = paymentProblem(editPayment);
       if (problem) {
@@ -380,7 +391,7 @@ export default function SaleDetailsPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
           <p className="mt-1 text-lg font-bold text-gray-900">
-            {payment ? paymentLabel(payment.method, payment.mpesaChannel) : paymentLabel(sale.paymentMethod)}
+            {payment ? paymentLabel(payment.method, payment.mpesaChannel) : paymentLabel(sale.paymentMethod, sale.mpesaChannel)}
           </p>
           <p className={`mt-1 text-sm font-semibold ${sale.paymentStatus === "PAID" ? "text-green-700" : "text-amber-700"}`}>
             {sale.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
@@ -641,6 +652,14 @@ export default function SaleDetailsPage() {
                     <option value="PDQ">Card (PDQ)</option>
                     <option value="CREDIT">Credit</option>
                   </select>
+                  {editPaymentMethod === "MPESA" && (
+                    <MpesaChannelChoice
+                      value={editMpesaChannel}
+                      onChange={setEditMpesaChannel}
+                      settings={settings}
+                      className="mt-2"
+                    />
+                  )}
                 </div>
               )}
               <div className="flex gap-2">

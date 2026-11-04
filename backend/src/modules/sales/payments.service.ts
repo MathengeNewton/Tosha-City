@@ -111,7 +111,7 @@ export class PaymentsService {
         { id: createPaymentDto.saleId },
         sale.paymentMethod === PaymentMethod.CREDIT
           ? { paymentStatus: PaymentStatus.PAID }
-          : { paymentStatus: PaymentStatus.PAID, paymentMethod: createPaymentDto.method },
+          : { paymentStatus: PaymentStatus.PAID, paymentMethod: createPaymentDto.method, mpesaChannel },
       );
 
       await queryRunner.commitTransaction();
@@ -151,7 +151,7 @@ export class PaymentsService {
     await this.dataSource.transaction(async (manager) => {
       await manager.update(SalePayment, { id: payment.id }, { method: details.method, mpesaChannel, reference });
       if (sale.paymentMethod !== PaymentMethod.CREDIT) {
-        await manager.update(Sale, { id: sale.id }, { paymentMethod: details.method });
+        await manager.update(Sale, { id: sale.id }, { paymentMethod: details.method, mpesaChannel });
       }
     });
   }
@@ -163,7 +163,7 @@ export class PaymentsService {
   ): Promise<{ mpesaChannel: MpesaChannel | null; reference: string | null }> {
     const reference = dto.reference?.trim() || null;
     if (dto.method === PaymentMethod.MPESA) {
-      if (!dto.mpesaChannel) {
+      if (!dto.mpesaChannel || !Object.values(MpesaChannel).includes(dto.mpesaChannel)) {
         throw new BadRequestException('Choose whether the M-Pesa payment came to the till or the paybill');
       }
       if (!reference) {

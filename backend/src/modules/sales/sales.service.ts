@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, SelectQueryBuilder, In } from 'typeorm';
 import { Sale } from './entities/sale.entity';
-import { PaymentStatus, PaymentMethod, paymentLabel } from './entities/payment.enums';
+import { MpesaChannel, PaymentStatus, PaymentMethod, paymentLabel } from './entities/payment.enums';
 import { SaleItem } from './entities/sale-item.entity';
 import { SalePayment } from './entities/sale-payment.entity';
 import { PaymentsService } from './payments.service';
@@ -118,7 +118,14 @@ export class SalesService {
     }
   }
 
+  private assertValidMpesaChannel(channel?: string | null): void {
+    if (channel && !Object.values(MpesaChannel).includes(channel as MpesaChannel)) {
+      throw new BadRequestException('M-Pesa channel must be TILL or PAYBILL');
+    }
+  }
+
   async create(createSaleDto: CreateSaleDto, user: RequestUser): Promise<Sale> {
+    this.assertValidMpesaChannel(createSaleDto.mpesaChannel);
     // Verify session exists and is open (admins can also record into closed sessions)
     const session = await this.stockSessionsService.findOne(createSaleDto.sessionId);
     if (session.status !== SessionStatus.OPEN && !this.isAdmin(user)) {
@@ -215,6 +222,8 @@ export class SalesService {
           totalAmount,
           customerId: createSaleDto.customerId || null,
           paymentMethod: createSaleDto.paymentMethod,
+          mpesaChannel:
+            createSaleDto.paymentMethod === PaymentMethod.MPESA ? (createSaleDto.mpesaChannel ?? null) : null,
           paymentStatus: PaymentStatus.PENDING,
           soldById: user.userId,
           branchId: session.branchId,
@@ -826,7 +835,7 @@ export class SalesService {
         'Payment',
         sale.payment
           ? paymentLabel(sale.payment.method, sale.payment.mpesaChannel)
-          : paymentLabel(sale.paymentMethod),
+          : paymentLabel(sale.paymentMethod, sale.mpesaChannel),
       ),
     );
     lines.push(pair('Status', sale.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID'));
@@ -847,6 +856,7 @@ export class SalesService {
   }
 
   async update(id: number, updateSaleDto: UpdateSaleDto, userId: number, user?: RequestUser): Promise<Sale> {
+    this.assertValidMpesaChannel(updateSaleDto.mpesaChannel);
     try {
       const sale = await this.findOne(id, user);
       const isAdmin = this.isAdmin(user);
@@ -874,6 +884,8 @@ export class SalesService {
         if (updateSaleDto.paymentMethod) {
           sale.paymentMethod = updateSaleDto.paymentMethod;
         }
+        sale.mpesaChannel =
+          sale.paymentMethod === PaymentMethod.MPESA ? (updateSaleDto.mpesaChannel ?? sale.mpesaChannel ?? null) : null;
         saved = await this.saleRepository.save(sale);
       }
       await this.activityLog.log({

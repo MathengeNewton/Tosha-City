@@ -9,7 +9,12 @@ import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import ProductPicker from "../../../../components/restaurant/ProductPicker";
 import { isRetailCounterProduct } from "../../../../lib/productSegment";
 import { PageShell, PageHeader } from "../../components/shell";
-import PaymentPicker, { emptyPayment, paymentPayload, paymentProblem } from "../sales/PaymentPicker";
+import PaymentPicker, {
+  MpesaChannelChoice,
+  emptyPayment,
+  paymentPayload,
+  paymentProblem,
+} from "../sales/PaymentPicker";
 
 const fmtKes = (n) =>
   `${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} KES`;
@@ -86,6 +91,7 @@ export default function TableOrdersPage() {
   const [addNotes, setAddNotes] = useState("");
 
   const [billMethod, setBillMethod] = useState("CASH");
+  const [billChannel, setBillChannel] = useState("TILL");
   const [billIncomplete, setBillIncomplete] = useState(false);
 
   const [payForm, setPayForm] = useState(emptyPayment("CASH"));
@@ -100,9 +106,10 @@ export default function TableOrdersPage() {
 
   const linkedSaleId = detail?.linkedSale?.id;
   const linkedSaleMethod = detail?.linkedSale?.paymentMethod;
+  const linkedSaleChannel = detail?.linkedSale?.mpesaChannel;
   useEffect(() => {
-    setPayForm(emptyPayment(linkedSaleMethod));
-  }, [linkedSaleId, linkedSaleMethod]);
+    setPayForm(emptyPayment(linkedSaleMethod, linkedSaleChannel));
+  }, [linkedSaleId, linkedSaleMethod, linkedSaleChannel]);
 
   const effectiveBranchId = isAdmin ? selectedBranchId : user?.branchId ? String(user.branchId) : "";
 
@@ -303,6 +310,7 @@ export default function TableOrdersPage() {
     try {
       await apiClient.restaurantOrders.bill(detail.id, {
         paymentMethod: billMethod,
+        mpesaChannel: billMethod === "MPESA" ? billChannel : undefined,
         allowIncompleteServe: billIncomplete,
       });
       toast.success("Billed — record payment to close");
@@ -708,6 +716,14 @@ export default function TableOrdersPage() {
                         <option value="PDQ">Card (PDQ)</option>
                         <option value="CREDIT">Credit</option>
                       </select>
+                      {billMethod === "MPESA" && (
+                        <MpesaChannelChoice
+                          value={billChannel}
+                          onChange={setBillChannel}
+                          settings={saleSettings}
+                          className="rounded-md bg-white p-2"
+                        />
+                      )}
                       <label className="flex items-start gap-2 text-sm text-white/90">
                         <input
                           type="checkbox"

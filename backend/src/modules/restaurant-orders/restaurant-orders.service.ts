@@ -427,6 +427,7 @@ export class RestaurantOrdersService {
         sessionId: order.sessionId,
         items,
         paymentMethod: dto.paymentMethod,
+        mpesaChannel: dto.mpesaChannel,
         customerId: dto.customerId,
         restaurantOrderId: order.id,
       },

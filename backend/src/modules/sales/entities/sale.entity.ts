@@ -15,7 +15,7 @@ import { StockSession } from '../../stock-sessions/entities/stock-session.entity
 import { User } from '../../users/entities/user.entity';
 import { SaleItem } from './sale-item.entity';
 import { SalePayment } from './sale-payment.entity';
-import { PaymentMethod, PaymentStatus } from './payment.enums';
+import { MpesaChannel, PaymentMethod, PaymentStatus } from './payment.enums';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Branch } from '../../branches/entities/branch.entity';
 import { RestaurantOrder } from '../../restaurant-orders/entities/restaurant-order.entity';
@@ -65,6 +65,10 @@ export class Sale {
     default: PaymentMethod.CASH,
   })
   paymentMethod: PaymentMethod;
+
+  @ApiProperty({ description: 'M-Pesa till or paybill the customer should pay to (M-Pesa sales only)', enum: MpesaChannel, required: false })
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  mpesaChannel: MpesaChannel | null;
 
   @ApiProperty({ description: 'Payment status', enum: PaymentStatus, example: PaymentStatus.PAID })
   @Column({

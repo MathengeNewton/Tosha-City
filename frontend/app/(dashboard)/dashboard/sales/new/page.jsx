@@ -18,7 +18,7 @@ import {
   repriceLines,
   validateLines,
 } from "../saleLines";
-import { paymentLabel } from "../PaymentPicker";
+import { MpesaChannelChoice, paymentLabel } from "../PaymentPicker";
 
 const PAYMENT_METHODS = [
   { id: "CASH", label: "Cash" },
@@ -51,6 +51,9 @@ function writeDraft(draft) {
 function SaleOptions({
   paymentMethod,
   onPaymentMethodChange,
+  mpesaChannel,
+  onMpesaChannelChange,
+  settings,
   customerId,
   onCustomerChange,
   customers,
@@ -82,6 +85,15 @@ function SaleOptions({
           </button>
         ))}
       </div>
+
+      {paymentMethod === "MPESA" && (
+        <MpesaChannelChoice
+          value={mpesaChannel}
+          onChange={onMpesaChannelChange}
+          settings={settings}
+          className="px-3 pt-3"
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-2 px-3 pt-3">
         <select
@@ -222,6 +234,7 @@ function ReviewSale({
   cookingFeePerKg,
   allowPriceEdit,
   paymentMethod,
+  mpesaChannel,
   tableLabel,
   submitting,
   onConfirm,
@@ -249,7 +262,7 @@ function ReviewSale({
           </div>
           <div className="px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
-            <p className="text-base font-bold text-gray-900">{paymentLabel(paymentMethod)}</p>
+            <p className="text-base font-bold text-gray-900">{paymentLabel(paymentMethod, mpesaChannel)}</p>
             <p className="text-sm text-gray-600">{customer?.name || "Walk-in"}</p>
           </div>
           <div className="px-4 py-3">
@@ -349,6 +362,7 @@ export default function NewSalePage() {
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [saleItems, setSaleItems] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [mpesaChannel, setMpesaChannel] = useState("TILL");
   const [customerId, setCustomerId] = useState("");
   const [tableLabel, setTableLabel] = useState("");
   const [step, setStep] = useState("build");
@@ -377,10 +391,10 @@ export default function NewSalePage() {
     const hasContent = saleItems.length > 0 || step === "review";
     writeDraft(
       hasContent
-        ? { sessionId: currentSession.id, saleItems, paymentMethod, customerId, tableLabel, step }
+        ? { sessionId: currentSession.id, saleItems, paymentMethod, mpesaChannel, customerId, tableLabel, step }
         : null,
     );
-  }, [currentSession, saleItems, paymentMethod, customerId, tableLabel, step]);
+  }, [currentSession, saleItems, paymentMethod, mpesaChannel, customerId, tableLabel, step]);
 
   const initializeBranchContext = async () => {
     try {
@@ -444,6 +458,9 @@ export default function NewSalePage() {
         setSettings({
           cookingFeePerKg: Number(settingsRes.data.cookingFeePerKg ?? 100),
           tables: Array.isArray(settingsRes.data.tables) ? settingsRes.data.tables : [],
+          tillNumber: settingsRes.data.tillNumber,
+          paybillNumber: settingsRes.data.paybillNumber,
+          paybillAccount: settingsRes.data.paybillAccount,
         });
       }
 
@@ -451,6 +468,7 @@ export default function NewSalePage() {
       if (draft && draft.sessionId === session.id && draftRestoredFor.current !== session.id) {
         setSaleItems(Array.isArray(draft.saleItems) ? draft.saleItems : []);
         setPaymentMethod(draft.paymentMethod || "CASH");
+        setMpesaChannel(draft.mpesaChannel || "TILL");
         setCustomerId(draft.customerId || "");
         setTableLabel(draft.tableLabel || "");
         setStep(draft.step === "review" ? "review" : "build");
@@ -497,6 +515,7 @@ export default function NewSalePage() {
     setCustomerId("");
     setTableLabel("");
     setPaymentMethod("CASH");
+    setMpesaChannel("TILL");
     setStep("build");
   };
 
@@ -533,6 +552,7 @@ export default function NewSalePage() {
           ),
         ),
         paymentMethod,
+        mpesaChannel: paymentMethod === "MPESA" ? mpesaChannel : undefined,
         customerId: customerId ? parseInt(customerId, 10) : undefined,
         tableLabel: tableLabel || undefined,
       };
@@ -611,6 +631,9 @@ export default function NewSalePage() {
     <SaleOptions
       paymentMethod={paymentMethod}
       onPaymentMethodChange={handlePaymentMethodChange}
+      mpesaChannel={mpesaChannel}
+      onMpesaChannelChange={setMpesaChannel}
+      settings={settings}
       customerId={customerId}
       onCustomerChange={handleCustomerChange}
       customers={customers}
@@ -637,6 +660,7 @@ export default function NewSalePage() {
           cookingFeePerKg={cookingFeePerKg}
           allowPriceEdit={isAdmin}
           paymentMethod={paymentMethod}
+          mpesaChannel={mpesaChannel}
           tableLabel={tableLabel}
           submitting={submitting}
           onConfirm={handleConfirm}
