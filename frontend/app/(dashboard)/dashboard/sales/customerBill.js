@@ -1,5 +1,4 @@
-import { paymentLabel } from "./PaymentPicker";
-import { formatKes, isSmallCook, roundUpKes } from "./saleLines";
+import { formatKes, isSmallCook } from "./saleLines";
 
 function esc(value) {
   return String(value ?? "")
@@ -14,15 +13,14 @@ function billWhen(soldAt) {
   const datePart = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Africa/Nairobi",
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
   }).format(date);
-  const timePart = new Intl.DateTimeFormat("en-GB", {
+  const timePart = new Intl.DateTimeFormat("en-US", {
     timeZone: "Africa/Nairobi",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
+    hour12: true,
   }).format(date);
   return { datePart, timePart };
 }
@@ -33,10 +31,7 @@ function formatQty(value) {
   return qty.toLocaleString("en-KE", { maximumFractionDigits: 3 });
 }
 
-/** Till amounts (rounded up to whole shillings as everywhere else), shown POS-style with two decimals. */
-function money(value) {
-  return roundUpKes(value).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+const formatMoney = formatKes;
 
 // Weight lines are priced by amount and the stored quantity only keeps 2 decimals,
 // so 500 KES at 680/kg is saved as 0.74 kg; derive the weight that was actually sold.
@@ -49,118 +44,47 @@ function soldQuantity(item) {
   return Number(item.quantity);
 }
 
-const DIVIDER_ROW = `<tr><td class="divider" colspan="4"><hr class="rule" /></td></tr>`;
-
-function lineTotalOf(item) {
-  return item.totalPrice ?? Number(item.quantity) * Number(item.unitPrice || 0);
-}
-
-function kitchenSlipBody(sale, items, table, timePart) {
-  const orderNotes = sale?.restaurantOrder?.notes;
-  const lines = items
-    .map((item) => {
-      const qty = formatQty(soldQuantity(item));
-      const unit = item.product?.unit || "";
-      const name = item.product?.name || "Item";
-      return `
-        <div class="k-line">
-          <div>${item.cookInKitchen ? "COOK · " : ""}${esc(name)}</div>
-          <div class="row"><span>${esc(qty)} ${esc(unit)}</span><span>KES ${esc(formatKes(lineTotalOf(item)))}</span></div>
-        </div>`;
-    })
-    .join("");
-  return `
-    <div class="center k-title">KITCHEN</div>
-    ${table ? `<div class="table-big">TABLE ${esc(table)}</div>` : ""}
-    <div class="row"><span>${esc(timePart)}</span><span>${esc(sale?.saleNumber || "")}</span></div>
-    <hr class="rule" />
-    ${lines}
-    ${orderNotes ? `<hr class="rule" /><div class="k-line"><b>NOTES:</b> ${esc(orderNotes)}</div>` : ""}`;
-}
-
-function customerBillBody(sale, items, table, when, settings) {
-  const { datePart, timePart } = when;
+export function buildCustomerBillDocument(sale, kind = "customer", settings = {}) {
+  const { datePart, timePart } = billWhen(sale?.soldAt);
   const branch = sale?.branch?.name || "LakeTown Butchery";
   const servedBy = sale?.soldBy?.username || sale?.soldBy?.email || "Cashier";
+  const customer = sale?.customer?.name || "Walk-in";
+  const table = sale?.tableLabel || sale?.restaurantOrder?.tableLabel;
+  const items = Array.isArray(sale?.items) ? sale.items : [];
   const location = settings?.receiptLocation;
   const phone = settings?.receiptPhone;
   const channel = sale?.payment?.mpesaChannel || sale?.mpesaChannel;
   const till = channel === "PAYBILL" ? null : settings?.tillNumber;
   const paybill = channel === "TILL" ? null : settings?.paybillNumber;
   const paybillAccount = settings?.paybillAccount;
-  const payment = sale?.payment;
-  const customer = sale?.customer;
 
-  const itemRows = items
+  const orderNotes = sale?.restaurantOrder?.notes;
+  const itemHtml = items
     .map((item) => {
       const qty = formatQty(soldQuantity(item));
       const unit = item.product?.unit || "";
       const name = item.product?.name || "Item";
-      const row = `<tr><td class="desc">${esc(name)}</td><td>${esc(qty)} ${esc(unit)}</td><td>${esc(money(item.unitPrice))}</td><td>${esc(money(lineTotalOf(item)))}</td></tr>`;
-      if (!item.cookInKitchen || !(Number(item.cookingFee) > 0)) return row;
-      const small = isSmallCook(soldQuantity(item));
-      const cookRow = `<tr class="sub"><td class="desc">+ COOKING${small ? " (UNDER ½ KG)" : ""}</td><td>${esc(qty)} KG</td><td>${small ? "FLAT" : esc(money(item.cookingFeePerKg))}</td><td>${esc(money(item.cookingFee))}</td></tr>`;
-      return row + cookRow;
+      const cooked = !!item.cookInKitchen;
+      const unitPrice = formatMoney(item.unitPrice);
+      const lineTotal = formatMoney(item.totalPrice ?? Number(item.quantity) * Number(item.unitPrice || 0));
+      if (kind === "kitchen") {
+        return `
+        <div class="k-line">
+          <div>${cooked ? "COOK · " : ""}${esc(name)}</div>
+          <div class="row"><span>${esc(qty)} ${esc(unit)}</span><span>KES ${esc(lineTotal)}</span></div>
+        </div>`;
+      }
+      const cookRate = isSmallCook(soldQuantity(item))
+        ? "under ½ kg"
+        : `@${esc(formatMoney(item.cookingFeePerKg))}`;
+      const cookingLine =
+        cooked && Number(item.cookingFee) > 0
+          ? `<span class="name cook">+ Cooking</span><span>${esc(qty)} kg</span><span>${cookRate}</span><span class="amt">${esc(formatMoney(item.cookingFee))}</span>`
+          : "";
+      return `<span class="name">${esc(name)}</span><span>${esc(qty)} ${esc(unit)}</span><span>@${esc(unitPrice)}</span><span class="amt">${esc(lineTotal)}</span>${cookingLine}`;
     })
     .join("");
-
-  const paidLabel = payment
-    ? paymentLabel(payment.method, payment.mpesaChannel)
-    : `${paymentLabel(sale?.paymentMethod, sale?.mpesaChannel)} (UNPAID)`;
-  const paidAmount = payment ? payment.amount : sale?.totalAmount;
-  return `
-    <div class="head">
-      <div class="store">LAKETOWN BUTCHERY</div>
-      <div>${esc(branch)}</div>
-      ${location ? `<div>${esc(location)}</div>` : ""}
-      ${phone ? `<div>TELEPHONE NO: ${esc(phone)}</div>` : ""}
-      <div class="doc-title">CUSTOMER BILL</div>
-    </div>
-    <div class="meta">
-      <div>RECEIPT No: ${esc(sale?.saleNumber || "")}</div>
-      <div>DATETIME: ${esc(datePart)} &nbsp;${esc(timePart)}</div>
-      <div>STORE: ${esc(branch)}${table ? ` &nbsp; TABLE: ${esc(table)}` : ""}</div>
-      <div>CASHIER: ${esc(servedBy)}</div>
-    </div>
-    <hr class="rule" />
-    <table class="items">
-      <colgroup><col /><col class="c-qty" /><col class="c-price" /><col class="c-amt" /></colgroup>
-      <thead><tr><th class="desc">ITEM</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead>
-      <tbody>${DIVIDER_ROW}${itemRows}</tbody>
-    </table>
-    <hr class="rule" />
-    <div class="row"><span>TOTAL LINES: &nbsp;${items.length}</span><span></span></div>
-    <hr class="rule" />
-    <div class="row total"><span>TOTAL</span><span>${esc(money(sale?.totalAmount))}</span></div>
-    <hr class="rule" />
-    <div class="row"><span>${esc(paidLabel)}</span><span>${esc(money(paidAmount))}</span></div>
-    ${payment?.reference ? `<div class="row"><span>REF</span><span>${esc(payment.reference)}</span></div>` : ""}
-    <hr class="rule" />
-    ${till || paybill ? `
-    <div class="center">PAY VIA M-PESA</div>
-    ${till ? `<div class="row"><span>BUY GOODS TILL</span><span>${esc(till)}</span></div>` : ""}
-    ${paybill ? `<div class="row"><span>PAYBILL</span><span>${esc(paybill)}</span></div>` : ""}
-    ${paybill && paybillAccount ? `<div class="row"><span>ACCOUNT NO.</span><span>${esc(paybillAccount)}</span></div>` : ""}
-    <hr class="rule" />` : ""}
-    <div class="small">YOU WERE SERVED BY: ${esc(servedBy)}</div>
-    <hr class="rule" />
-    ${customer ? `
-    <div class="center">CUSTOMER DETAILS</div>
-    <div class="row"><span>NAME</span><span>${esc(customer.name)}</span></div>
-    ${customer.phone ? `<div class="row"><span>PHONE</span><span>${esc(customer.phone)}</span></div>` : ""}
-    <hr class="rule" />` : ""}
-    <div class="center">THANK YOU &amp; WELCOME AGAIN</div>
-    <div class="credit">Powered by mangoseasonlabs.co.ke</div>`;
-}
-
-export function buildCustomerBillDocument(sale, kind = "customer", settings = {}) {
-  const when = billWhen(sale?.soldAt);
-  const table = sale?.tableLabel || sale?.restaurantOrder?.tableLabel;
-  const items = Array.isArray(sale?.items) ? sale.items : [];
-  const body =
-    kind === "kitchen"
-      ? kitchenSlipBody(sale, items, table, when.timePart)
-      : customerBillBody(sale, items, table, when, settings);
+  const itemsBlock = kind === "kitchen" ? itemHtml : `<div class="items">${itemHtml}</div>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -190,34 +114,35 @@ export function buildCustomerBillDocument(sale, kind = "customer", settings = {}
       padding: 2mm 4mm 3mm;
       background: #fff;
       font-family: Arial, "Liberation Sans", Helvetica, sans-serif;
-      font-size: 7px;
+      font-size: 8px;
       font-weight: 400;
       line-height: 1.3;
       text-transform: uppercase;
     }
     .center { text-align: center; }
-    .head { text-align: center; font-size: 6px; }
-    .store { font-size: 7px; font-weight: 700; }
-    .doc-title { margin-top: 4px; }
-    .meta { margin-top: 3px; font-size: 6px; }
+    .title { font-size: 9px; font-weight: 700; }
+    .house { font-size: 8px; font-weight: 700; }
+    .head-line { font-size: 7px; }
     .rule { border: 0; border-top: 1px dashed #000; margin: 3px 0; }
     .row { display: flex; justify-content: space-between; gap: 6px; }
     .row span:last-child { text-align: right; white-space: nowrap; }
-    .total { font-size: 8px; font-weight: 700; }
-    .small { font-size: 6px; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 6.5px; }
-    th { font-weight: 400; text-align: right; padding: 0; }
-    td.divider { padding: 0; }
-    td { text-align: right; vertical-align: top; padding: 1px 0; white-space: nowrap; }
-    th.desc, td.desc { text-align: left; white-space: normal; overflow-wrap: anywhere; padding-right: 2mm; }
-    col.c-qty { width: 15mm; }
-    col.c-price { width: 13mm; }
-    col.c-amt { width: 15mm; }
-    tr.sub td.desc { padding-left: 2mm; }
-    .credit { text-align: center; margin-top: 2px; font-size: 5px; text-transform: none; }
+    .details { font-size: 7px; }
+    .items {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      column-gap: 6px;
+      row-gap: 1px;
+      font-size: 7.5px;
+    }
+    .items span { white-space: nowrap; text-align: right; }
+    .items .name { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+    .items .cook { padding-left: 6px; }
+    .total { font-size: 9px; font-weight: 700; }
+    .pay { font-size: 7px; }
+    .table-big { text-align: center; font-size: 12px; font-weight: 700; margin: 2px 0; }
+    .credit { text-align: center; margin-top: 2px; font-size: 6px; text-transform: none; }
     .k-title { font-size: 12px; font-weight: 700; }
     .k-line { font-size: 12px; margin-bottom: 4px; }
-    .table-big { text-align: center; font-size: 14px; font-weight: 700; margin: 2px 0; }
     @media print {
       html, body { width: 80mm; margin: 0; padding: 0; }
       .slip { break-inside: avoid; page-break-inside: avoid; }
@@ -225,8 +150,43 @@ export function buildCustomerBillDocument(sale, kind = "customer", settings = {}
   </style>
 </head>
 <body>
-  <div id="slip" class="slip">${body}
-  </div>
+  ${kind === "kitchen" ? `<div id="slip" class="slip">
+    <div class="center k-title">KITCHEN</div>
+    ${table ? `<div class="table-big">TABLE ${esc(table)}</div>` : ""}
+    <div class="row"><span>${esc(timePart)}</span><span>${esc(sale?.saleNumber || "")}</span></div>
+    <hr class="rule" />
+    ${itemsBlock}
+    ${orderNotes ? `<hr class="rule" /><div class="k-line"><b>Notes:</b> ${esc(orderNotes)}</div>` : ""}
+  </div>` : `<div id="slip" class="slip">
+    <div class="center title">CUSTOMER BILL</div>
+    <div class="center house">LAKETOWN BUTCHERY</div>
+    <div class="center head-line">${esc(branch)}</div>
+    ${location ? `<div class="center head-line">${esc(location)}</div>` : ""}
+    ${phone ? `<div class="center head-line">Tel: ${esc(phone)}</div>` : ""}
+    ${table ? `<div class="table-big">TABLE ${esc(table)}</div>` : ""}
+    <hr class="rule" />
+    <div class="details">
+      <div class="row"><span>Date</span><span>${esc(datePart)}</span></div>
+      <div class="row"><span>Time</span><span>${esc(timePart)}</span></div>
+      <div class="row"><span>Served by</span><span>${esc(servedBy)}</span></div>
+      <div class="row"><span>Customer</span><span>${esc(customer)}</span></div>
+      <div class="row"><span>Ticket</span><span>${esc(sale?.saleNumber || "")}</span></div>
+    </div>
+    <hr class="rule" />
+    ${itemsBlock}
+    <hr class="rule" />
+    <div class="row total"><span>Total</span><span>${esc(formatMoney(sale?.totalAmount))}</span></div>
+    ${till || paybill ? `<hr class="rule" />
+    <div class="pay">
+      <div class="center">PAY VIA M-PESA</div>
+      ${till ? `<div class="row"><span>Buy Goods Till</span><span>${esc(till)}</span></div>` : ""}
+      ${paybill ? `<div class="row"><span>Paybill</span><span>${esc(paybill)}</span></div>` : ""}
+      ${paybill && paybillAccount ? `<div class="row"><span>Account No.</span><span>${esc(paybillAccount)}</span></div>` : ""}
+    </div>` : ""}
+    <hr class="rule" />
+    <div class="center">THANK YOU &amp; WELCOME AGAIN.</div>
+    <div class="credit">Powered by mangoseasonlabs.co.ke</div>
+  </div>`}
   <script>
     window.onload = function () {
       function mm(el) {
