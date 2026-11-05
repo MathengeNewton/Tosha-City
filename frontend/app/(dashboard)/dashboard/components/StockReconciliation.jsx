@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiClient } from "../../../../lib/api";
 import { formatKes } from "../../../../lib/expenses";
-import { formatDate } from "../../../../lib/time";
+import { exportToCsv, exportToExcelMultiSheet } from "../../../../lib/exportExcel";
+import { formatDate, ymdFromApiDate } from "../../../../lib/time";
 
 const STATUS_STYLES = {
   SHORT: "bg-red-100 text-red-800 border-red-200",
@@ -65,6 +66,115 @@ function useReconciliation(sessionId, refreshKey) {
   return { data, loading, error };
 }
 
+function exportStockCheck({ session, rows, totals, payments }, format) {
+  const day = ymdFromApiDate(session.date);
+  const productRows = rows.map((r) => ({
+    product: r.product,
+    result: statusLabel(r.status, r.difference),
+    difference: r.difference,
+    opening: r.opening,
+    incoming: r.incoming,
+    closing: r.closing,
+    wastage: r.wastage,
+    sharedOrUsed: r.sharedOrUsed,
+    soldByStock: r.soldByStock,
+    unit: r.unit,
+    price: r.price,
+    expectedValue: r.expectedValue,
+    soldInSales: r.soldInSales,
+    salesValue: r.salesValue,
+    priceAdjustment: r.priceAdjustment > 0 ? r.priceAdjustment : null,
+  }));
+  productRows.push({
+    product: totals.productsPending > 0 ? `Total (${totals.productsPending} waiting for closing stock)` : "Total",
+    result: statusLabel(totals.status, totals.difference),
+    difference: totals.difference,
+    expectedValue: totals.expectedValue,
+    salesValue: totals.salesValue,
+    priceAdjustment: totals.priceAdjustment > 0 ? totals.priceAdjustment : null,
+  });
+
+  const summaryRows = [
+    { field: "Session date", value: day },
+    { field: "Session status", value: session.status === "OPEN" ? "Open" : "Closed" },
+    { field: "Result", value: statusLabel(totals.status, totals.difference) },
+    { field: "Difference (KES)", value: totals.difference },
+    { field: "Expected value (KES)", value: totals.expectedValue },
+    { field: "Sales value of checked products (KES)", value: totals.salesValue },
+    { field: "Sold below standard price (KES, not counted as short)", value: totals.priceAdjustment },
+    { field: "Products checked", value: totals.productsChecked },
+    { field: "Products waiting for closing stock", value: totals.productsPending },
+    { field: "Sales recorded (KES)", value: payments.totalSales },
+    { field: "Cash (KES)", value: payments.cash },
+    { field: "M-Pesa (KES)", value: payments.mpesa },
+    ...(payments.other > 0 ? [{ field: "Other (KES)", value: payments.other }] : []),
+    { field: "Credit owed (KES)", value: payments.creditOutstanding },
+    {
+      field: "How it is worked out",
+      value:
+        "(Opening + Incoming − Closing − Waste − Shared/used) = kg sold by stock count. That kg × price is compared with the kg recorded in sales (cash, M-Pesa and credit).",
+    },
+  ];
+
+  const sections = [
+    {
+      title: "Stock check",
+      rows: productRows,
+      columns: [
+        { key: "product", label: "Product" },
+        { key: "result", label: "Result" },
+        { key: "difference", label: "Difference (KES)" },
+        { key: "opening", label: "Opening" },
+        { key: "incoming", label: "Incoming" },
+        { key: "closing", label: "Closing" },
+        { key: "wastage", label: "Waste" },
+        { key: "sharedOrUsed", label: "Shared / used" },
+        { key: "soldByStock", label: "Sold by stock" },
+        { key: "unit", label: "Unit" },
+        { key: "price", label: "Price (KES)" },
+        { key: "expectedValue", label: "Expected (KES)" },
+        { key: "soldInSales", label: "Sold in sales" },
+        { key: "salesValue", label: "Sales value (KES)" },
+        { key: "priceAdjustment", label: "Below standard price (KES)" },
+      ],
+    },
+    {
+      title: "Summary",
+      rows: summaryRows,
+      columns: [
+        { key: "field", label: "Field" },
+        { key: "value", label: "Value" },
+      ],
+    },
+  ];
+
+  const filename = `stock-check-${day}`;
+  if (format === "csv") {
+    exportToCsv(sections, filename);
+  } else {
+    exportToExcelMultiSheet(
+      sections.map(({ title, ...rest }) => ({ sheetName: title, ...rest })),
+      filename,
+    );
+  }
+}
+
+function ExportButtons({ data, small = false }) {
+  const className = `bg-gray-700 text-white rounded-md hover:bg-gray-800 transition-colors font-medium whitespace-nowrap ${
+    small ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm min-h-[40px]"
+  }`;
+  return (
+    <div className="flex items-center gap-2">
+      <button type="button" onClick={() => exportStockCheck(data, "xlsx")} className={className}>
+        Export Excel
+      </button>
+      <button type="button" onClick={() => exportStockCheck(data, "csv")} className={className}>
+        Export CSV
+      </button>
+    </div>
+  );
+}
+
 function PaymentsBreakdown({ payments }) {
   const items = [
     { label: "Cash", value: payments.cash },
@@ -114,7 +224,10 @@ export function StockReconciliationTable({ sessionId, refreshKey }) {
             compared with the kg recorded in sales (cash, M-Pesa and credit).
           </p>
         </div>
-        <ReconciliationBadge status={totals.status} difference={totals.difference} large />
+        <div className="flex items-center gap-3">
+          <ReconciliationBadge status={totals.status} difference={totals.difference} large />
+          <ExportButtons data={data} />
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -255,12 +368,15 @@ export function StockReconciliationCard({ sessionId, refreshKey }) {
 
       <div className="flex flex-wrap items-end justify-between gap-3 border-t border-gray-100 pt-3">
         <PaymentsBreakdown payments={payments} />
-        <Link
-          href={`/dashboard/stock?sessionId=${session.id}&view=list`}
-          className="text-sm font-medium text-blue-900 hover:underline"
-        >
-          See full check →
-        </Link>
+        <div className="flex items-center gap-3">
+          {rows.length > 0 && <ExportButtons data={data} small />}
+          <Link
+            href={`/dashboard/stock?sessionId=${session.id}&view=list`}
+            className="text-sm font-medium text-blue-900 hover:underline"
+          >
+            See full check →
+          </Link>
+        </div>
       </div>
     </div>
   );
