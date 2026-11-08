@@ -14,6 +14,7 @@ import {
   ShareIcon,
 } from "@heroicons/react/24/outline";
 import { segmentOfProduct } from "../../../../lib/productSegment";
+import { DayStages, ProductFlow, StageTabNav, stageTabs } from "./DayBoard";
 
 const defaultEnd = new Date();
 const defaultStart = new Date();
@@ -64,7 +65,9 @@ export default function StockManagementPage() {
   const [stockEntries, setStockEntries] = useState([]);
   const [sales, setSales] = useState([]);
   const [productionRuns, setProductionRuns] = useState([]);
+  const [dayFlow, setDayFlow] = useState(null);
   const [currentSessionSales, setCurrentSessionSales] = useState([]);
+  const [currentDayFlow, setCurrentDayFlow] = useState(null);
   const [kitchenSupplyBalances, setKitchenSupplyBalances] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState(() => {
@@ -111,13 +114,11 @@ export default function StockManagementPage() {
 
   useEffect(() => {
     const t = searchParams.get("tab");
-    if (t === "production" && selectedSession?.id) {
-      setActiveTab("production");
+    if (!t || !selectedSession?.id) return;
+    if (stageTabs(isAdmin).some((stage) => stage.tabs.some((tab) => tab.id === t))) {
+      setActiveTab(t);
     }
-    if (t === "kitchen" && selectedSession?.id) {
-      setActiveTab("kitchen");
-    }
-  }, [searchParams, selectedSession?.id]);
+  }, [searchParams, selectedSession?.id, isAdmin]);
 
   // Deep-link: /dashboard/stock?tab=kitchen → open current branch session when none selected
   useEffect(() => {
@@ -223,15 +224,21 @@ export default function StockManagementPage() {
         
         // Fetch sales for current session to show detailed breakdown
         try {
-          const salesRes = await apiClient.sales.getAll({ sessionId: session.id });
+          const [salesRes, flowRes] = await Promise.all([
+            apiClient.sales.getAll({ sessionId: session.id }),
+            apiClient.sales.getDayFlow({ sessionId: session.id }).catch(() => ({ data: null })),
+          ]);
           setCurrentSessionSales(salesRes.data || []);
+          setCurrentDayFlow(flowRes.data || null);
         } catch (error) {
           console.error("Error loading current session sales:", error);
           setCurrentSessionSales([]);
+          setCurrentDayFlow(null);
         }
       } else {
         setCurrentSession(null);
         setCurrentSessionSales([]);
+        setCurrentDayFlow(null);
       }
 
       // Get products
@@ -262,12 +269,14 @@ export default function StockManagementPage() {
       setStockEntries(entriesRes.data || []);
       
       // Load sales for this session
-      const [salesRes, productionRes] = await Promise.all([
+      const [salesRes, productionRes, flowRes] = await Promise.all([
         apiClient.sales.getAll({ sessionId }),
         apiClient.production.getAll({ sessionId }),
+        apiClient.sales.getDayFlow({ sessionId }).catch(() => ({ data: null })),
       ]);
       setSales(salesRes.data || []);
       setProductionRuns(productionRes.data || []);
+      setDayFlow(flowRes.data || null);
       try {
         const balRes = await apiClient.sales.getKitchenSupplyBalances({ sessionId });
         setKitchenSupplyBalances(balRes.data || []);
@@ -308,9 +317,11 @@ export default function StockManagementPage() {
     }
   };
 
-  const handleViewSession = (session) => {
+  const handleViewSession = (session, tab) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('sessionId', session.id.toString());
+    if (typeof tab === 'string') params.set('tab', tab);
+    else params.delete('tab');
     router.push(`/dashboard/stock?${params.toString()}`);
   };
 
@@ -423,22 +434,9 @@ export default function StockManagementPage() {
         Saved entries can only be corrected by an admin.
       </p>
     ) : null;
-    const sessionTabs = [
-      'overview', 'opening', 'incoming', 'production', 'kitchen', 'closing', 'wastages',
-      ...(isAdmin ? ['adjustments'] : []),
-      'stock-share', 'sales',
-    ];
-
     const incomingKg = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const productionUsageEntries = stockEntries.filter((e) => e.type === "PRODUCTION_USAGE");
-    const totalProductionUsageQty = productionUsageEntries.reduce(
-      (sum, e) => sum + parseFloat(e.quantity || 0),
-      0
-    );
-    const partnerShareKg = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
     const soldKg = sales.reduce((total, s) => total + (s.items || []).reduce((sum, it) => sum + parseFloat(it.quantity || 0), 0), 0);
     const availableKg = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const productionOutputQty = productionRuns.reduce((sum, run) => sum + parseFloat(run.actualOutputQuantity || 0), 0);
 
     const handleCloseSession = async () => {
       if (!confirm("Are you sure you want to close this session? Make sure all sales are paid and closing stock is recorded.")) {
@@ -545,10 +543,15 @@ export default function StockManagementPage() {
               ← Back to {viewMode === 'list' ? 'List' : 'Calendar'} View
             </button>
             <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-              Session Details
+              {new Date(selectedSession.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+              {selectedSession.branch?.name ? ` · ${selectedSession.branch.name}` : ""}
             </h1>
             <p className="text-gray-600 mt-1">
-              {new Date(selectedSession.date).toLocaleDateString()}
+              <span className={`font-semibold ${selectedSession.status === 'OPEN' ? 'text-green-600' : 'text-gray-600'}`}>
+                {selectedSession.status === 'OPEN' ? 'Open' : 'Closed'}
+              </span>
+              {" · opened by "}
+              {selectedSession.openedBy?.username || selectedSession.openedBy?.email || 'N/A'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -577,127 +580,18 @@ export default function StockManagementPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 sm:p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-emerald-950 uppercase tracking-wide">Today&apos;s stock flow</h3>
-          <p className="text-xs text-emerald-900/85 mt-1 mb-4 max-w-3xl">
-            Follow the day: deliveries and opening → kitchen uses ingredients (production) → sales remove stock.
-            Tap a step to jump to that tab.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab("incoming")}
-              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
-            >
-              <span className="text-xs font-semibold text-emerald-800 uppercase">Incoming</span>
-              <span className="block text-lg font-bold text-gray-900 mt-1">{incomingKg.toFixed(2)}</span>
-              <span className="text-xs text-gray-600">Total qty logged (same units as entries)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("production")}
-              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
-            >
-              <span className="text-xs font-semibold text-emerald-800 uppercase">Production use</span>
-              <span className="block text-lg font-bold text-gray-900 mt-1">{totalProductionUsageQty.toFixed(2)}</span>
-              <span className="text-xs text-gray-600">{productionUsageEntries.length} ingredient pulls</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("sales")}
-              className="text-left rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm hover:border-emerald-400 transition-colors min-h-[72px]"
-            >
-              <span className="text-xs font-semibold text-emerald-800 uppercase">Sales</span>
-              <span className="block text-lg font-bold text-gray-900 mt-1">{sales.length}</span>
-              <span className="text-xs text-gray-600">Tickets · qty sum {soldKg.toFixed(2)} (all line units)</span>
-            </button>
-          </div>
-        </div>
+        <DayStages session={selectedSession} flow={dayFlow} activeTab={activeTab} onSelect={setActiveTab} />
 
-        {/* Session Information Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Session Information</h3>
-          <div className="mb-4 space-y-2">
-            <p className="text-sm text-gray-600">
-              Opened by: {selectedSession.openedBy?.username || selectedSession.openedBy?.email || 'N/A'}
-            </p>
-            <p className="text-sm text-gray-600">
-              Status: <span className={`font-semibold ${
-                selectedSession.status === 'OPEN' ? 'text-green-600' : 'text-gray-600'
-              }`}>
-                {selectedSession.status}
-              </span>
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Incoming stock (kg)</p>
-              <p className="text-2xl font-bold text-gray-900">{incomingKg.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Stock sold (kg)</p>
-              <p className="text-2xl font-bold text-gray-900">{soldKg.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Available stock</p>
-              <p className="text-2xl font-bold text-gray-900">{availableKg.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-            <div className="bg-red-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Wastage</p>
-              <p className="text-2xl font-bold text-gray-900">{stockEntries.filter(e => e.type === 'WASTAGE').length} entries</p>
-            </div>
-            <div className="bg-indigo-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Stock shared</p>
-              <p className="text-2xl font-bold text-gray-900">{partnerShareKg.toFixed(2)} kg</p>
-              <p className="text-xs text-gray-500">{partnerShareEntries.length} entries</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Production output</p>
-              <p className="text-2xl font-bold text-gray-900">{productionOutputQty.toFixed(2)}</p>
-              <p className="text-xs text-gray-500">{productionRuns.length} runs</p>
-            </div>
-          </div>
-        </div>
+        <ProductFlow flow={dayFlow} productionRuns={productionRuns} />
 
-        {/* Stock Entries with Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="border-b border-gray-200">
-            <nav className="flex -mb-px overflow-x-auto">
-              {sessionTabs.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 sm:px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap ${
-                    activeTab === tab
-                      ? 'border-blue-900 text-blue-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  {tab === 'overview' ? 'Overview' :
-                   tab === 'opening' ? 'Opening Stock' : 
-                   tab === 'incoming' ? 'Incoming Stock' :
-                   tab === 'production' ? 'Production' :
-                   tab === 'kitchen' ? 'Kitchen supplies' :
-                   tab === 'closing' ? 'Closing Stock' :
-                   tab === 'wastages' ? 'Wastages' :
-                   tab === 'adjustments' ? 'Adjustments' :
-                   tab === 'stock-share' ? 'Stock Share' :
-                   'Sales'}
-                </button>
-              ))}
-            </nav>
+            <StageTabNav activeTab={activeTab} onSelect={setActiveTab} isAdmin={isAdmin} />
           </div>
 
           <div className="p-6">
             {activeTab === 'overview' && (
-              <SessionOverviewAnalytics 
-                session={selectedSession}
-                stockEntries={stockEntries}
-                sales={sales}
-                products={products}
-                productionRuns={productionRuns}
-              />
+              <SessionOverviewAnalytics sales={sales} />
             )}
             {activeTab === 'stock-share' && (
               <StockShareTab
@@ -938,7 +832,8 @@ export default function StockManagementPage() {
         <CurrentSessionBanner 
           session={currentSession} 
           sales={currentSessionSales}
-          onViewSession={() => handleViewSession(currentSession)}
+          flow={currentDayFlow}
+          onViewSession={(tab) => handleViewSession(currentSession, tab)}
         />
       )}
 
@@ -2018,31 +1913,8 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
 }
 
 // Session Overview Analytics Component
-function SessionOverviewAnalytics({ session, stockEntries, sales, products = [], productionRuns = [] }) {
-  // Calculate comprehensive analytics
+function SessionOverviewAnalytics({ sales }) {
   const analytics = useMemo(() => {
-    const openingEntries = stockEntries.filter(e => e.type === 'OPENING');
-    const incomingEntries = stockEntries.filter(e => e.type === 'INCOMING');
-    const closingEntries = stockEntries.filter(e => e.type === 'CLOSING');
-    const wastageEntries = stockEntries.filter(e => e.type === 'WASTAGE');
-    const partnerShareEntries = stockEntries.filter(e => e.type === 'PARTNER_SHARE');
-    const kitchenIssueEntries = stockEntries.filter((e) => e.type === "KITCHEN_ISSUE");
-    const byproductSaleEntries = stockEntries.filter(e => e.type === 'BYPRODUCT_SALE');
-    const productionUsageEntries = stockEntries.filter(e => e.type === 'PRODUCTION_USAGE');
-    const productionOutputByProduct = {};
-    const productionWastageByProduct = {};
-
-    productionRuns.forEach((run) => {
-      const pid = run.finishedProduct?.id ?? run.finishedProductId;
-      if (!pid) return;
-      productionOutputByProduct[pid] = (productionOutputByProduct[pid] || 0) + parseFloat(run.actualOutputQuantity || 0);
-      productionWastageByProduct[pid] = (productionWastageByProduct[pid] || 0) + parseFloat(run.wastedQuantity || 0);
-    });
-
-    const totalPartnerShareQty = partnerShareEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const totalKitchenIssueQty = kitchenIssueEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const totalProductionUsageQty = productionUsageEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-
     // Sales statistics
     const totalSales = sales.length;
     const paidSales = sales.filter(s => s.paymentStatus === 'PAID');
@@ -2050,22 +1922,8 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
     const totalRevenue = paidSales.reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), 0);
     const pendingRevenue = pendingSales.reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), 0);
 
-    // Calculate total quantities
-    const totalOpeningQty = openingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const totalIncomingQty = incomingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const totalClosingQty = closingEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const totalWastageQty = wastageEntries.reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-    const byproductSaleQtyByProduct = {};
-    byproductSaleEntries.forEach(e => {
-      const pid = e.product?.id ?? e.productId;
-      if (pid) {
-        byproductSaleQtyByProduct[pid] = (byproductSaleQtyByProduct[pid] || 0) + parseFloat(e.quantity || 0);
-      }
-    });
-
-    // Sales by product
+    // Sales by product, each in its own unit
     const salesByProduct = {};
-    let totalSalesQuantity = 0;
     let totalSalesRevenue = 0;
 
     sales.forEach(sale => {
@@ -2074,25 +1932,18 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
         if (!salesByProduct[productName]) {
           salesByProduct[productName] = {
             name: productName,
+            unit: item.product?.unit || '',
             quantity: 0,
             revenue: 0,
             count: 0,
-            avgPrice: 0,
           };
         }
-        const qty = parseFloat(item.quantity || 0);
         const rev = parseFloat(item.totalPrice || 0);
-        salesByProduct[productName].quantity += qty;
+        salesByProduct[productName].quantity += parseFloat(item.quantity || 0);
         salesByProduct[productName].revenue += rev;
         salesByProduct[productName].count += 1;
-        totalSalesQuantity += qty;
         totalSalesRevenue += rev;
       });
-    });
-
-    // Calculate average price per kg for each product
-    Object.values(salesByProduct).forEach((product) => {
-      product.avgPrice = product.quantity > 0 ? (product.revenue / product.quantity) : 0;
     });
 
     // Sort products by revenue
@@ -2112,139 +1963,20 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
       }
     });
 
-    // Product breakdown: quantities sold and remaining per product
-    const productBreakdown = {};
-    
-    // Get all unique products from stock entries
-    const allProducts = new Set();
-    stockEntries.forEach(entry => {
-      if (entry.product) {
-        allProducts.add(entry.product.id);
-      }
-    });
-    sales.forEach(sale => {
-      sale.items?.forEach(item => {
-        if (item.product) {
-          allProducts.add(item.product.id);
-        }
-      });
-    });
-
-    // Calculate for each product
-    allProducts.forEach(productId => {
-      // Find product name
-      let productName = 'Unknown';
-      const entryWithProduct = stockEntries.find(e => e.product?.id === productId);
-      if (entryWithProduct) {
-        productName = entryWithProduct.product.name;
-      } else {
-        sales.forEach(sale => {
-          sale.items?.forEach(item => {
-            if (item.product?.id === productId) {
-              productName = item.product.name;
-            }
-          });
-        });
-      }
-
-      // Calculate opening stock
-      const opening = openingEntries
-        .filter(e => e.product?.id === productId)
-        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-
-      // Calculate incoming stock
-      const incoming = incomingEntries
-        .filter(e => e.product?.id === productId)
-        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-
-      // Calculate total available
-      const totalAvailable = opening + incoming;
-
-      // Calculate sold quantity (direct sales of this product)
-      let sold = 0;
-      sales.forEach(sale => {
-        sale.items?.forEach(item => {
-          if (item.product?.id === productId) {
-            sold += parseFloat(item.quantity || 0);
-          }
-        });
-      });
-      // Add byproduct sales deducted from this parent product
-      const byproductSold = byproductSaleQtyByProduct[productId] || 0;
-      const soldInclByproduct = sold + byproductSold;
-
-      // Wastage: only real wastage (exclude BYPRODUCT_SALE)
-      const wastage = wastageEntries
-        .filter(e => e.product?.id === productId)
-        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-      const partnerShare = partnerShareEntries
-        .filter(e => e.product?.id === productId)
-        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-      const kitchenIssue = kitchenIssueEntries
-        .filter((e) => e.product?.id === productId)
-        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-      const productionUsage = productionUsageEntries
-        .filter(e => e.product?.id === productId)
-        .reduce((sum, e) => sum + parseFloat(e.quantity || 0), 0);
-
-      const productMeta = products.find(p => p.id === productId);
-      const isByproduct = productMeta?.parentProductId != null;
-      const isProductionItem = productMeta?.category === 'PRODUCTION_ITEM';
-      const productionOutput = productionOutputByProduct[productId] || 0;
-      const productionWastage = productionWastageByProduct[productId] || 0;
-      const effectiveAvailable = isProductionItem ? productionOutput : totalAvailable;
-      const effectiveWastage = isProductionItem ? productionWastage : wastage;
-      // Aligns with backend getAvailableStock (approx.): outflows include kitchenIssue for non-byproducts.
-      const remaining = isByproduct
-        ? null
-        : (effectiveAvailable - soldInclByproduct - effectiveWastage - partnerShare - productionUsage - kitchenIssue);
-
-      productBreakdown[productId] = {
-        name: productName,
-        opening: isProductionItem ? 0 : opening,
-        incoming: isProductionItem ? 0 : incoming,
-        totalAvailable: effectiveAvailable,
-        sold,
-        byproductSold,
-        soldInclByproduct,
-        wastage: effectiveWastage,
-        partnerShare,
-        kitchenIssue,
-        productionUsage,
-        remaining,
-        isByproduct,
-        isProductionItem,
-      };
-    });
-
-    const totalProducedQty = productionRuns.reduce((sum, run) => sum + parseFloat(run.actualOutputQuantity || 0), 0);
-    const totalProductionWastage = productionRuns.reduce((sum, run) => sum + parseFloat(run.wastedQuantity || 0), 0);
-
     return {
-      stock: {
-        opening: { entries: openingEntries.length, quantity: totalOpeningQty },
-        incoming: { entries: incomingEntries.length, quantity: totalIncomingQty },
-        closing: { entries: closingEntries.length, quantity: totalClosingQty },
-        wastage: { entries: wastageEntries.length, quantity: totalWastageQty },
-        partnerShare: { entries: partnerShareEntries.length, quantity: totalPartnerShareQty },
-        kitchenIssue: { entries: kitchenIssueEntries.length, quantity: totalKitchenIssueQty },
-        productionUsage: { entries: productionUsageEntries.length, quantity: totalProductionUsageQty },
-        production: { entries: productionRuns.length, quantity: totalProducedQty, wastage: totalProductionWastage },
-      },
       sales: {
         total: totalSales,
         paid: paidSales.length,
         pending: pendingSales.length,
         totalRevenue,
         pendingRevenue,
-        totalQuantity: totalSalesQuantity,
         totalRevenueAll: totalSalesRevenue,
+        averageSale: totalSales > 0 ? totalSalesRevenue / totalSales : 0,
       },
       products: topProducts,
       paymentMethods,
-      productBreakdown: Object.values(productBreakdown),
     };
-  }, [stockEntries, sales, products, productionRuns]);
+  }, [sales]);
 
   return (
     <div className="space-y-6">
@@ -2268,218 +2000,64 @@ function SessionOverviewAnalytics({ session, stockEntries, sales, products = [],
             </p>
           )}
         </div>
-        <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
-          <p className="text-xs text-gray-600 mb-1">Total Quantity Sold</p>
+        <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
+          <p className="text-xs text-gray-600 mb-1">Unpaid</p>
           <p className="text-2xl font-bold text-gray-900">
-            {analytics.sales.totalQuantity.toFixed(2)} kg
+            KES {analytics.sales.pendingRevenue.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
           </p>
+          <p className="text-xs text-gray-500 mt-1">{analytics.sales.pending} bills</p>
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
-          <p className="text-xs text-gray-600 mb-1">Avg Price per Kg</p>
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <p className="text-xs text-gray-600 mb-1">Average sale</p>
           <p className="text-2xl font-bold text-gray-900">
-            {analytics.sales.totalQuantity > 0 
-              ? `KES ${(analytics.sales.totalRevenue / analytics.sales.totalQuantity).toFixed(2)}`
-              : 'KES 0.00'}
+            KES {analytics.sales.averageSale.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
           </p>
         </div>
       </div>
 
-      {/* Stock Summary */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">Stock Summary</h4>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs text-gray-600">Opening Stock</p>
-            <p className="text-lg font-bold text-gray-900">
-              {analytics.stock.opening.quantity.toFixed(2)} kg
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.opening.entries} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Incoming Stock</p>
-            <p className="text-lg font-bold text-gray-900">
-              {analytics.stock.incoming.quantity.toFixed(2)} kg
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.incoming.entries} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Closing Stock</p>
-            <p className="text-lg font-bold text-gray-900">
-              {analytics.stock.closing.quantity.toFixed(2)} kg
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.closing.entries} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Wastage</p>
-            <p className="text-lg font-bold text-red-600">
-              {analytics.stock.wastage.quantity.toFixed(2)} kg
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.wastage.entries} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Stock shared</p>
-            <p className="text-lg font-bold text-indigo-600">
-              {(analytics.stock.partnerShare?.quantity ?? 0).toFixed(2)} kg
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.partnerShare?.entries ?? 0} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Production use</p>
-            <p className="text-lg font-bold text-purple-600">
-              {(analytics.stock.productionUsage?.quantity ?? 0).toFixed(2)} kg
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.productionUsage?.entries ?? 0} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Kitchen issued</p>
-            <p className="text-lg font-bold text-amber-800">
-              {(analytics.stock.kitchenIssue?.quantity ?? 0).toLocaleString("en-KE", {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2,
-              })}
-            </p>
-            <p className="text-xs text-gray-500">{analytics.stock.kitchenIssue?.entries ?? 0} entries</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600">Production output</p>
-            <p className="text-lg font-bold text-purple-600">
-              {(analytics.stock.production?.quantity ?? 0).toFixed(2)}
-            </p>
-            <p className="text-xs text-gray-500">
-              {analytics.stock.production?.entries ?? 0} runs
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Aggregated Sales Breakdown by Product */}
-      {sales.length > 0 && (() => {
-        // Aggregate sales by product
-        const aggregatedByProduct = {};
-        sales.forEach(sale => {
-          sale.items?.forEach(item => {
-            const productName = item.product?.name || 'N/A';
-            if (!aggregatedByProduct[productName]) {
-              aggregatedByProduct[productName] = {
-                name: productName,
-                totalQuantity: 0,
-                totalRevenue: 0,
-                salesCount: 0,
-              };
-            }
-            aggregatedByProduct[productName].totalQuantity += parseFloat(item.quantity || 0);
-            aggregatedByProduct[productName].totalRevenue += parseFloat(item.totalPrice || 0);
-            aggregatedByProduct[productName].salesCount += 1;
-          });
-        });
-
-        const aggregatedProducts = Object.values(aggregatedByProduct)
-          .sort((a, b) => b.totalRevenue - a.totalRevenue);
-
-        return (
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">Sales Breakdown by Product (Aggregated)</h4>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Quantity (kg)</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Sales (KES)</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sales Count</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Avg Price/kg</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {aggregatedProducts.map((product, idx) => (
-                    <tr key={idx}>
-                      <td className="px-4 py-2 text-sm font-medium text-gray-900">{product.name}</td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {product.totalQuantity.toFixed(2)} kg
-                      </td>
-                      <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                        KES {product.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">{product.salesCount}</td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        KES {product.totalQuantity > 0 
-                          ? (product.totalRevenue / product.totalQuantity).toFixed(2)
-                          : '0.00'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50">
-                  <tr>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900 text-right">
-                      Total:
-                    </td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                      {analytics.sales.totalQuantity.toFixed(2)} kg
-                    </td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                      KES {analytics.sales.totalRevenueAll.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                      {analytics.sales.total}
-                    </td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">
-                      KES {analytics.sales.totalQuantity > 0 
-                        ? (analytics.sales.totalRevenueAll / analytics.sales.totalQuantity).toFixed(2)
-                        : '0.00'}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Product Breakdown: Quantities Sold and Remaining */}
-      {analytics.productBreakdown.length > 0 && (
+      {analytics.products.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Product Breakdown: Quantities Sold and Remaining</h4>
+          <h4 className="text-sm font-semibold text-gray-900 mb-3">Sales by product</h4>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opening (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Incoming (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Available (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sold (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Wastage (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock shared (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Kitchen issued</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Production use (kg)</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Remaining (kg)</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Lines</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Avg price</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {analytics.productBreakdown.map((product, idx) => (
-                  <tr key={idx} className={product.remaining != null && product.remaining < 0 ? 'bg-red-50' : product.isByproduct ? 'bg-gray-50/50' : ''}>
-                    <td className="px-4 py-2 text-sm font-medium text-gray-900">
-                      {product.name}
-                      {product.isByproduct && <span className="ml-1 text-xs text-gray-500">(from parent stock)</span>}
+                {analytics.products.map((product) => (
+                  <tr key={product.name}>
+                    <td className="px-4 py-2 text-sm font-medium text-gray-900">{product.name}</td>
+                    <td className="px-4 py-2 text-right text-sm tabular-nums text-gray-600">
+                      {product.quantity.toLocaleString('en-KE', { maximumFractionDigits: 2 })} {product.unit}
                     </td>
-                    <td className="px-4 py-2 text-sm text-gray-600">{product.opening.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-gray-600">{product.incoming.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">{product.totalAvailable.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-gray-600" title={product.byproductSold > 0 ? `Direct: ${product.sold.toFixed(2)}, via byproduct: ${product.byproductSold.toFixed(2)}` : ''}>
-                      {product.soldInclByproduct.toFixed(2)}
-                      {product.byproductSold > 0 && <span className="ml-1 text-xs text-gray-500">(incl. byproduct)</span>}
+                    <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
+                      KES {product.revenue.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
                     </td>
-                    <td className="px-4 py-2 text-sm text-red-600">{product.wastage.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-indigo-600">{(product.partnerShare ?? 0).toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-amber-800">{(product.kitchenIssue ?? 0).toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-purple-600">{(product.productionUsage ?? 0).toFixed(2)}</td>
-                    <td className={`px-4 py-2 text-sm font-semibold ${product.remaining == null ? 'text-gray-500' : product.remaining < 0 ? 'text-red-600' : product.remaining === 0 ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {product.remaining == null ? '—' : product.remaining.toFixed(2)}
+                    <td className="px-4 py-2 text-right text-sm tabular-nums text-gray-600">{product.count}</td>
+                    <td className="px-4 py-2 text-right text-sm tabular-nums text-gray-600">
+                      {product.quantity > 0
+                        ? `KES ${(product.revenue / product.quantity).toLocaleString('en-KE', { maximumFractionDigits: 0 })} / ${product.unit || 'unit'}`
+                        : '—'}
                     </td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td className="px-4 py-2 text-sm font-semibold text-gray-900">Total</td>
+                  <td />
+                  <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
+                    KES {analytics.sales.totalRevenueAll.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>

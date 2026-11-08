@@ -146,6 +146,7 @@ function CashierTill({
   branchName,
   branchPicker,
   products,
+  gridProducts,
   customer,
   saleItems,
   addProduct,
@@ -162,7 +163,7 @@ function CashierTill({
     <form onSubmit={onSubmit} className="flex h-full min-h-0 flex-col gap-2 lg:flex-row">
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white">
         {branchPicker}
-        <ProductGrid products={products} customer={customer} onPick={addProduct} autoFocus className="flex-1" />
+        <ProductGrid products={gridProducts} customer={customer} onPick={addProduct} autoFocus className="flex-1" />
       </section>
 
       <aside className="flex max-h-[46%] min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white lg:max-h-none lg:w-[400px]">
@@ -224,6 +225,7 @@ function CashierTill({
 function ReviewSale({
   branchName,
   products,
+  gridProducts,
   customer,
   saleItems,
   addProduct,
@@ -306,7 +308,7 @@ function ReviewSale({
                 Done
               </button>
             </div>
-            <ProductGrid products={products} customer={customer} onPick={addProduct} className="max-h-[60vh]" />
+            <ProductGrid products={gridProducts} customer={customer} onPick={addProduct} className="max-h-[60vh]" />
           </div>
         ) : (
           <button
@@ -356,6 +358,7 @@ export default function NewSalePage() {
   const [branchInitDone, setBranchInitDone] = useState(false);
   const [currentSession, setCurrentSession] = useState(null);
   const [products, setProducts] = useState([]);
+  const [gridProducts, setGridProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [settings, setSettings] = useState({ cookingFeePerKg: 100, tables: [] });
   const [branches, setBranches] = useState([]);
@@ -416,6 +419,31 @@ export default function NewSalePage() {
     }
   };
 
+  const applyAvailability = (data) => {
+    const list = Array.isArray(data) ? data : [];
+    setGridProducts(list);
+    setProducts(list.filter((product) => Number(product.available) > 0));
+  };
+
+  // New kitchen batches and other tills' sales show up without a reload.
+  useEffect(() => {
+    const sessionId = currentSession?.id;
+    if (!sessionId) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      apiClient.sales
+        .getTillAvailability({ sessionId })
+        .then((res) => applyAvailability(res.data))
+        .catch(() => {});
+    };
+    const timer = setInterval(refresh, 20000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [currentSession?.id]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -444,8 +472,7 @@ export default function NewSalePage() {
         apiClient.saleSettings.get().catch(() => ({ data: null })),
         apiClient.customers.getCreditWithBalances().catch(() => ({ data: [] })),
       ]);
-      const productsList = Array.isArray(productsRes.data) ? productsRes.data : [];
-      setProducts(productsList.filter((product) => Number(product.available) > 0));
+      applyAvailability(productsRes.data);
       const balances = new Map(
         (balancesRes.data || []).map((customer) => [customer.id, Number(customer.outstandingBalance) || 0])
       );
@@ -650,6 +677,7 @@ export default function NewSalePage() {
         <ReviewSale
           branchName={branchName}
           products={products}
+          gridProducts={gridProducts}
           customer={selectedCustomer}
           saleItems={saleItems}
           addProduct={addProduct}
@@ -690,6 +718,7 @@ export default function NewSalePage() {
         ) : null
       }
       products={products}
+      gridProducts={gridProducts}
       customer={selectedCustomer}
       saleItems={saleItems}
       addProduct={addProduct}

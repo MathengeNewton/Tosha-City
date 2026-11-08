@@ -5,12 +5,7 @@ import Link from "next/link";
 import { toast } from "react-toastify";
 import { apiClient } from "../../../../lib/api";
 import { useAuth } from "../../../../contexts/AuthContext";
-import {
-  BeakerIcon,
-  CheckIcon,
-  ClipboardDocumentListIcon,
-  InformationCircleIcon,
-} from "@heroicons/react/24/outline";
+import { BeakerIcon, CheckIcon, InformationCircleIcon } from "@heroicons/react/24/outline";
 
 function recipeMatchesBranch(recipe, branchType) {
   if (!recipe) return false;
@@ -21,35 +16,146 @@ function recipeMatchesBranch(recipe, branchType) {
 const inputClass =
   "w-full min-h-[44px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-[#0D47A1] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/25";
 
+function fmt(value) {
+  return Number(value || 0).toLocaleString("en-KE", { maximumFractionDigits: 2 });
+}
+
+function kes(value) {
+  return `KES ${Number(value || 0).toLocaleString("en-KE", { maximumFractionDigits: 0 })}`;
+}
+
+function shelfStatus(row) {
+  const left = Number(row.left || 0);
+  const made = Number(row.made || 0);
+  if (made <= 0 && left <= 0) return "notCooked";
+  if (left <= 0) return "soldOut";
+  if (made > 0 && (left <= 2 || left <= made * 0.25)) return "low";
+  return "ok";
+}
+
+function timeOf(value) {
+  return value ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—";
+}
+
+/** One row per prepared item: made, sold, left, with its batches folded underneath. */
+function Shelf({ rows, runsByProduct, loading }) {
+  const cooked = rows.filter((row) => shelfStatus(row) !== "notCooked");
+  const notCooked = rows.filter((row) => shelfStatus(row) === "notCooked");
+  const valueLeft = cooked.reduce((sum, row) => sum + Math.max(0, Number(row.left || 0)) * Number(row.price || 0), 0);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-baseline justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">On the shelf now</h2>
+          <p className="text-xs text-gray-500">Exactly what the till shows under &ldquo;From the kitchen&rdquo;.</p>
+        </div>
+        {cooked.length > 0 && <span className="text-sm font-semibold tabular-nums text-gray-700">{kes(valueLeft)}</span>}
+      </div>
+      <div className="space-y-3 p-4">
+        {loading && cooked.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-500">Loading…</p>
+        ) : cooked.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-600">
+            Nothing cooked yet this session. Each batch you send appears here and on the till.
+          </p>
+        ) : (
+          cooked.map((row) => {
+            const status = shelfStatus(row);
+            const made = Number(row.made || 0);
+            const left = Math.max(0, Number(row.left || 0));
+            const pct = made > 0 ? Math.min(100, (left / made) * 100) : 0;
+            const runs = runsByProduct.get(row.productId) || [];
+            return (
+              <div
+                key={row.productId}
+                className={`rounded-lg border px-3 py-3 ${
+                  status === "low" ? "border-amber-300 bg-amber-50/40" : status === "soldOut" ? "border-gray-200 bg-gray-50" : "border-gray-200"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900">{row.name}</span>
+                  {status === "low" && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Low · cook again</span>
+                  )}
+                  {status === "soldOut" && (
+                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">Sold out</span>
+                  )}
+                  <span className="ml-auto text-sm font-bold tabular-nums text-gray-900">
+                    {fmt(left)} {row.unit} left
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className={`h-full rounded-full ${status === "low" ? "bg-amber-500" : status === "soldOut" ? "bg-gray-300" : "bg-emerald-500"}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <details className="group mt-2">
+                  <summary className="flex cursor-pointer list-none items-center justify-between text-xs text-gray-500 marker:hidden [&::-webkit-details-marker]:hidden">
+                    <span>
+                      {fmt(made)} made · {fmt(row.sold)} sold
+                      {Number(row.wasted) > 0 ? ` · ${fmt(row.wasted)} wasted` : ""}
+                    </span>
+                    <span className="font-medium text-blue-900">
+                      {runs.length} {runs.length === 1 ? "batch" : "batches"}
+                      <span className="group-open:hidden"> ▾</span>
+                      <span className="hidden group-open:inline"> ▴</span>
+                    </span>
+                  </summary>
+                  <ul className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-100 bg-white text-xs">
+                    {runs.map((run) => (
+                      <li key={run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+                        <span className="font-medium text-gray-800">{timeOf(run.recordedAt)}</span>
+                        <span className="text-gray-600">{run.recipe?.name}</span>
+                        <span className="ml-auto tabular-nums text-gray-800">
+                          {fmt(run.actualOutputQuantity)} made
+                          <span className="text-gray-400"> / {fmt(run.expectedOutputQuantity)} expected</span>
+                        </span>
+                        {Number(run.wastedQuantity) > 0 && (
+                          <span className="tabular-nums text-red-600">{fmt(run.wastedQuantity)} wasted</span>
+                        )}
+                        {run.recordedBy?.username && <span className="text-gray-400">by {run.recordedBy.username}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            );
+          })
+        )}
+        {notCooked.length > 0 && (
+          <p className="text-sm text-gray-500">Not cooked yet: {notCooked.map((row) => row.name).join(", ")}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
- * Production runs for a stock session — used on Morning production page and Stock session → Production tab.
+ * Kitchen view for a stock session — used on the Production page and Stock session → Kitchen tab.
+ * Cook on the left (recipe → quantity → send), the shelf on the right.
  * @param {"page" | "embedded"} variant — "embedded" uses a tighter intro (inside session detail).
  */
-export default function ProductionTab({
-  session,
-  canManage,
-  onRefresh,
-  productionRuns = [],
-  variant = "page",
-}) {
+export default function ProductionTab({ session, canManage, onRefresh, productionRuns = [], variant = "page" }) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
-  const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [recipes, setRecipes] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  const [dayFlow, setDayFlow] = useState(null);
+  const [loadingShelf, setLoadingShelf] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [actualOutputQuantity, setActualOutputQuantity] = useState("");
   const [wastedQuantity, setWastedQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [ingredientAdjustments, setIngredientAdjustments] = useState([]);
+  const [editIngredients, setEditIngredients] = useState(false);
+  const [showExtras, setShowExtras] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const isEmbedded = variant === "embedded";
 
   const availableRecipes = useMemo(
-    () =>
-      recipes.filter(
-        (recipe) => recipe.isActive !== false && recipeMatchesBranch(recipe, session?.branch?.type)
-      ),
+    () => recipes.filter((recipe) => recipe.isActive !== false && recipeMatchesBranch(recipe, session?.branch?.type)),
     [recipes, session?.branch?.type]
   );
 
@@ -58,52 +164,105 @@ export default function ProductionTab({
     [availableRecipes, selectedRecipeId]
   );
 
+  const runsByProduct = useMemo(() => {
+    const map = new Map();
+    for (const run of productionRuns) {
+      const id = run.finishedProduct?.id ?? run.finishedProductId;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id).push(run);
+    }
+    return map;
+  }, [productionRuns]);
+
+  const shelfRows = useMemo(() => {
+    if (dayFlow?.rows) return dayFlow.rows.filter((row) => row.lane === "KITCHEN");
+    // Without the day-flow numbers, fall back to what was made from the runs alone.
+    return [...runsByProduct.entries()].map(([productId, runs]) => {
+      const made = runs.reduce((s, r) => s + Number(r.actualOutputQuantity || 0), 0);
+      const wasted = runs.reduce((s, r) => s + Number(r.wastedQuantity || 0), 0);
+      return {
+        productId,
+        name: runs[0]?.finishedProduct?.name || "Product",
+        unit: runs[0]?.finishedProduct?.unit || "",
+        price: Number(runs[0]?.finishedProduct?.defaultPrice || 0),
+        made,
+        wasted,
+        sold: 0,
+        left: made - wasted,
+      };
+    });
+  }, [dayFlow, runsByProduct]);
+
+  const leftByProduct = useMemo(() => new Map(shelfRows.map((row) => [row.productId, row])), [shelfRows]);
+
   useEffect(() => {
     if (!session?.id) return;
-    loadRecipes();
+    apiClient.recipes
+      .getAll({ activeOnly: true })
+      .then((res) => setRecipes(res.data || []))
+      .catch(() => toast.error("Failed to load recipes"));
   }, [session?.id]);
+
+  const runsKey = productionRuns.map((run) => run.id).join(",");
+  useEffect(() => {
+    if (!session?.id) return;
+    setLoadingShelf(true);
+    apiClient.sales
+      .getDayFlow({ sessionId: session.id })
+      .then((res) => setDayFlow(res.data))
+      .catch(() => setDayFlow(null))
+      .finally(() => setLoadingShelf(false));
+  }, [session?.id, runsKey]);
 
   useEffect(() => {
     if (!selectedRecipe) {
       setIngredientAdjustments([]);
       return;
     }
-    setActualOutputQuantity(String(selectedRecipe.expectedOutputQuantity || ""));
+    setActualOutputQuantity(String(Number(selectedRecipe.expectedOutputQuantity || 0) || ""));
+    setWastedQuantity("");
+    setNotes("");
+    setEditIngredients(false);
+    setShowExtras(false);
     setIngredientAdjustments(
       (selectedRecipe.ingredients || []).map((ingredient) => ({
         recipeIngredientId: ingredient.id,
         ingredientName: ingredient.ingredientName,
         productName: ingredient.product?.name || "",
-        actualQuantity: String(ingredient.estimatedQuantity || ""),
+        estimatedQuantity: ingredient.estimatedQuantity,
+        actualQuantity: String(Number(ingredient.estimatedQuantity || 0)),
         unit: ingredient.unit,
       }))
     );
   }, [selectedRecipe]);
 
-  const loadRecipes = async () => {
-    try {
-      setLoadingRecipes(true);
-      const recipesRes = await apiClient.recipes.getAll({ activeOnly: true });
-      setRecipes(recipesRes.data || []);
-    } catch (error) {
-      console.error("Error loading production data:", error);
-      toast.error("Failed to load production data");
-    } finally {
-      setLoadingRecipes(false);
-    }
+  const resetForm = () => {
+    setSelectedRecipeId("");
+    setActualOutputQuantity("");
+    setWastedQuantity("");
+    setNotes("");
+    setIngredientAdjustments([]);
+  };
+
+  const stepOutput = (delta) => {
+    const next = Math.max(0, (parseFloat(actualOutputQuantity) || 0) + delta);
+    setActualOutputQuantity(String(Math.round(next * 100) / 100));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedRecipe) {
-      toast.error("Select a recipe");
+    if (!selectedRecipe || saving) return;
+    const output = parseFloat(actualOutputQuantity || 0);
+    if (!(output > 0)) {
+      toast.error("Enter how much came out");
       return;
     }
     try {
+      setSaving(true);
       await apiClient.production.create({
         recipeId: selectedRecipe.id,
         sessionId: session.id,
-        actualOutputQuantity: parseFloat(actualOutputQuantity || 0),
+        actualOutputQuantity: output,
         wastedQuantity: parseFloat(wastedQuantity || 0) || 0,
         notes: notes.trim() || undefined,
         ingredientAdjustments: ingredientAdjustments.map((ingredient) => ({
@@ -111,22 +270,18 @@ export default function ProductionTab({
           actualQuantity: parseFloat(ingredient.actualQuantity || 0),
         })),
       });
-      toast.success("Production run recorded");
-      setShowForm(false);
-      setSelectedRecipeId("");
-      setActualOutputQuantity("");
-      setWastedQuantity("");
-      setNotes("");
-      setIngredientAdjustments([]);
+      toast.success(`${fmt(output)} ${selectedRecipe.outputUnit || ""} ${selectedRecipe.finishedProduct?.name || ""} sent to the till`);
+      resetForm();
       await onRefresh?.();
     } catch (error) {
       console.error("Error recording production run:", error);
       toast.error(error.response?.data?.message || "Failed to record production run");
+    } finally {
+      setSaving(false);
     }
   };
 
   const sessionEditable = session?.status === "OPEN" || isAdmin;
-  const canRecord = canManage && sessionEditable;
 
   const howItWorksBody = (
     <ul className="mt-3 list-none space-y-2 text-sm text-gray-700">
@@ -135,8 +290,7 @@ export default function ProductionTab({
           −
         </span>
         <span>
-          <strong className="text-gray-900">Stock out:</strong> each ingredient quantity you confirm is{" "}
-          <strong>deducted</strong> from this session&apos;s stock.
+          <strong className="text-gray-900">Ingredients out:</strong> what the batch used is taken from counter stock.
         </span>
       </li>
       <li className="flex gap-2">
@@ -144,8 +298,8 @@ export default function ProductionTab({
           +
         </span>
         <span>
-          <strong className="text-gray-900">Stock in:</strong> the recipe&apos;s <strong>finished product</strong>{" "}
-          (prepared item) is <strong>added</strong> for this session so kitchen and tills can sell it.
+          <strong className="text-gray-900">Food onto the shelf:</strong> what came out appears on the till under{" "}
+          <strong>From the kitchen</strong> and counts down as it sells.
         </span>
       </li>
       <li className="flex gap-2">
@@ -153,7 +307,7 @@ export default function ProductionTab({
           i
         </span>
         <span>
-          Recipes must use a finished product marked <strong>Production item</strong>
+          A recipe&apos;s finished product must be marked <strong>Production item</strong>
           {isAdmin ? (
             <>
               {" "}
@@ -163,183 +317,145 @@ export default function ProductionTab({
               </Link>
             </>
           ) : (
-            <> in Admin → Products (ask an admin if recipes fail to save)</>
+            <> in Admin → Products</>
           )}
-          . Raw items only won&apos;t save.
+          , and needs an active recipe for this branch to show up here.
         </span>
       </li>
     </ul>
   );
 
-  return (
-    <div className="space-y-6">
-      {/* How it works */}
-      {isEmbedded ? (
-        <details className="group rounded-xl border border-gray-200 bg-white shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 marker:hidden [&::-webkit-details-marker]:hidden">
-            <InformationCircleIcon className="h-5 w-5 shrink-0 text-[#0D47A1]" aria-hidden />
-            <span className="min-w-0 flex-1">How production updates stock</span>
-            <span className="shrink-0 text-xs font-normal text-gray-500 group-open:hidden">Show</span>
-            <span className="hidden shrink-0 text-xs font-normal text-gray-500 group-open:inline">Hide</span>
-          </summary>
-          <div className="border-t border-gray-100 px-4 pb-4 pt-0">{howItWorksBody}</div>
-        </details>
-      ) : (
-        <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50/80 to-white p-4 shadow-sm sm:p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-              <BeakerIcon className="h-6 w-6 text-[#0D47A1]" aria-hidden />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-base font-semibold text-gray-900">How production updates stock</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Use this after opening the day and recording <strong>incoming</strong> stock. Log each cook batch
-                (mutura, soup, roasts, etc.) — <strong>one save per batch</strong>.
-              </p>
-              {howItWorksBody}
-            </div>
+  const ingredientSummary = ingredientAdjustments
+    .map((i) => `${fmt(i.actualQuantity)} ${i.unit} ${i.productName || i.ingredientName}`)
+    .join(", ");
+
+  const cookPanel = (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-100 px-4 py-3">
+        <h2 className="text-base font-semibold text-gray-900">Cook</h2>
+        <p className="text-xs text-gray-500">Tap what you cooked, set how much came out, send it to the till.</p>
+      </div>
+      <div className="p-4">
+        {!sessionEditable ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            This session is <strong>not open</strong>. Batches can only be logged while the session is open.
           </div>
-        </div>
-      )}
-
-      {/* Record a run */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-1 border-b border-gray-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Log a production run</h2>
-            <p className="text-sm text-gray-600">
-              Pick the recipe, enter how much you made, confirm ingredients — then save once per batch.
-            </p>
+        ) : !canManage ? (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+            You don&apos;t have permission to log batches for this branch.
           </div>
-          {canRecord && !showForm && (
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1e88b5] sm:mt-0 sm:w-auto"
-            >
-              <ClipboardDocumentListIcon className="h-5 w-5" aria-hidden />
-              Start new run
-            </button>
-          )}
-        </div>
-
-        <div className="pt-4">
-          {!sessionEditable && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              This session is <strong>not open</strong>. Production can only be recorded while the stock session status
-              is <strong>Open</strong>.
-            </div>
-          )}
-
-          {sessionEditable && !canManage && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-              You don&apos;t have permission to record production for this branch.
-            </div>
-          )}
-
-          {canRecord && showForm && (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <ol className="grid gap-4 sm:grid-cols-3">
-                <li className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 sm:col-span-1">
-                  <span className="text-xs font-bold uppercase tracking-wide text-[#0D47A1]">Step 1</span>
-                  <p className="mt-1 text-sm font-medium text-gray-900">Recipe</p>
-                  <label className="mt-2 block text-xs text-gray-500">What did you cook?</label>
-                  <select
-                    value={selectedRecipeId}
-                    onChange={(e) => setSelectedRecipeId(e.target.value)}
-                    className={`${inputClass} mt-1`}
-                    required
+        ) : availableRecipes.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-600">
+            No active recipes for this branch yet.
+            {isAdmin && (
+              <>
+                {" "}
+                <Link href="/admin/recipes" className="font-medium text-blue-900 underline">
+                  Add one in Recipes
+                </Link>
+                .
+              </>
+            )}
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              {availableRecipes.map((recipe) => {
+                const active = recipe.id === selectedRecipe?.id;
+                const shelf = leftByProduct.get(recipe.finishedProductId ?? recipe.finishedProduct?.id);
+                const status = shelf ? shelfStatus(shelf) : "notCooked";
+                return (
+                  <button
+                    key={recipe.id}
+                    type="button"
+                    onClick={() => setSelectedRecipeId(active ? "" : String(recipe.id))}
+                    className={`min-h-[72px] rounded-lg border-2 px-3 py-2 text-left transition ${
+                      active ? "border-[#0D47A1] bg-blue-50" : "border-gray-200 hover:border-gray-400"
+                    }`}
                   >
-                    <option value="">Select recipe…</option>
-                    {availableRecipes.map((recipe) => (
-                      <option key={recipe.id} value={recipe.id}>
-                        {recipe.name} — {recipe.finishedProduct?.name || "No product"}
-                      </option>
-                    ))}
-                  </select>
-                </li>
-                <li className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 sm:col-span-1">
-                  <span className="text-xs font-bold uppercase tracking-wide text-[#0D47A1]">Step 2</span>
-                  <p className="mt-1 text-sm font-medium text-gray-900">Output & wastage</p>
-                  <label className="mt-2 block text-xs text-gray-500">
-                    How much finished product did you get?
-                    {selectedRecipe && (
-                      <span className="mt-0.5 block font-medium text-gray-700">
-                        Unit: <span className="tabular-nums">{selectedRecipe.outputUnit || "—"}</span>
-                      </span>
-                    )}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={actualOutputQuantity}
-                    onChange={(e) => setActualOutputQuantity(e.target.value)}
-                    className={`${inputClass} mt-1`}
-                    placeholder="e.g. 12"
-                    required
-                  />
-                  <label className="mt-3 block text-xs text-gray-500">Wastage (optional, same unit)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={wastedQuantity}
-                    onChange={(e) => setWastedQuantity(e.target.value)}
-                    className={`${inputClass} mt-1`}
-                    placeholder="0"
-                  />
-                </li>
-                <li className="rounded-lg border border-gray-100 bg-gray-50/80 p-3 sm:col-span-1">
-                  <span className="text-xs font-bold uppercase tracking-wide text-[#0D47A1]">Step 3</span>
-                  <p className="mt-1 text-sm font-medium text-gray-900">Notes (optional)</p>
-                  <label className="mt-2 block text-xs text-gray-500">Anything the next shift should know?</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className={`${inputClass} mt-1 min-h-[120px] resize-y`}
-                    rows={4}
-                    placeholder="e.g. Second batch, slightly smaller portions"
-                  />
-                </li>
-              </ol>
+                    <span className="block font-semibold text-gray-900">{recipe.finishedProduct?.name || recipe.name}</span>
+                    <span className="block text-xs text-gray-500">{recipe.name}</span>
+                    <span
+                      className={`mt-1 block text-xs font-medium ${
+                        status === "low" ? "text-amber-700" : status === "soldOut" ? "text-red-700" : "text-gray-600"
+                      }`}
+                    >
+                      {status === "notCooked"
+                        ? "Not cooked today"
+                        : status === "soldOut"
+                          ? "Sold out"
+                          : `${fmt(shelf.left)} ${shelf.unit} on till`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-              {selectedRecipe && (
-                <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-                  <div className="flex flex-col gap-1 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">Ingredients taken from stock</p>
-                      <p className="text-xs text-gray-600">
-                        Expected for this recipe at{" "}
-                        <span className="font-medium tabular-nums">
-                          {parseFloat(selectedRecipe.expectedOutputQuantity || 0).toFixed(2)} {selectedRecipe.outputUnit}
-                        </span>{" "}
-                        output — adjust if you used more or less.
-                      </p>
-                    </div>
+            {selectedRecipe && (
+              <div className="space-y-4 border-t border-gray-100 pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-800">
+                    How much {selectedRecipe.finishedProduct?.name || "came out"}?
+                  </label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => stepOutput(-1)}
+                      className="h-12 w-12 rounded-lg border border-gray-300 text-xl font-bold text-gray-700 hover:bg-gray-50"
+                      aria-label="Less"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={actualOutputQuantity}
+                      onChange={(e) => setActualOutputQuantity(e.target.value)}
+                      className="h-12 w-28 rounded-lg border border-gray-300 text-center text-xl font-bold tabular-nums focus:border-[#0D47A1] focus:outline-none focus:ring-2 focus:ring-[#0D47A1]/25"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => stepOutput(1)}
+                      className="h-12 w-12 rounded-lg border border-gray-300 text-xl font-bold text-gray-700 hover:bg-gray-50"
+                      aria-label="More"
+                    >
+                      +
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      {selectedRecipe.outputUnit}
+                      <span className="block text-xs text-gray-400">
+                        usually {fmt(selectedRecipe.expectedOutputQuantity)}
+                      </span>
+                    </span>
                   </div>
-                  <div className="divide-y divide-gray-100 bg-white">
-                    {ingredientAdjustments.map((ingredient, index) => (
-                      <div
-                        key={ingredient.recipeIngredientId}
-                        className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-12 md:items-center"
+                </div>
+
+                {ingredientAdjustments.length > 0 && (
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-gray-700">
+                        <span className="font-medium text-gray-900">Takes from stock:</span> {ingredientSummary}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setEditIngredients((v) => !v)}
+                        className="shrink-0 text-xs font-semibold text-blue-900 hover:underline"
                       >
-                        <div className="md:col-span-5">
-                          <p className="text-sm font-medium text-gray-900">{ingredient.ingredientName}</p>
-                          {ingredient.productName && (
-                            <p className="text-xs text-gray-500">Stock product: {ingredient.productName}</p>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-600 md:col-span-3">
-                          Recipe estimate:{" "}
-                          <span className="font-medium tabular-nums text-gray-900">
-                            {parseFloat(selectedRecipe.ingredients?.[index]?.estimatedQuantity || 0).toFixed(2)}{" "}
-                            {ingredient.unit}
-                          </span>
-                        </div>
-                        <div className="md:col-span-4">
-                          <label className="block text-xs font-medium text-gray-600">Actually used</label>
-                          <div className="mt-1 flex gap-2">
+                        {editIngredients ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                    {editIngredients && (
+                      <div className="mt-3 space-y-2">
+                        {ingredientAdjustments.map((ingredient, index) => (
+                          <div key={ingredient.recipeIngredientId} className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-gray-800">
+                              {ingredient.ingredientName}
+                              <span className="block text-xs text-gray-500">
+                                recipe says {fmt(ingredient.estimatedQuantity)} {ingredient.unit}
+                              </span>
+                            </span>
                             <input
                               type="number"
                               step="0.01"
@@ -350,119 +466,110 @@ export default function ProductionTab({
                                 next[index] = { ...next[index], actualQuantity: e.target.value };
                                 setIngredientAdjustments(next);
                               }}
-                              className={inputClass}
+                              className={`${inputClass} w-24`}
                             />
-                            <span className="inline-flex min-w-[2.5rem] items-center text-sm text-gray-500">
-                              {ingredient.unit}
-                            </span>
+                            <span className="w-10 text-xs text-gray-500">{ingredient.unit}</span>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
+                )}
+
+                {showExtras ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block text-xs text-gray-600">
+                      Spoilt in cooking ({selectedRecipe.outputUnit})
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={wastedQuantity}
+                        onChange={(e) => setWastedQuantity(e.target.value)}
+                        className={`${inputClass} mt-1`}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="block text-xs text-gray-600">
+                      Note for the next shift
+                      <input
+                        type="text"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className={`${inputClass} mt-1`}
+                        placeholder="Optional"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowExtras(true)}
+                    className="text-xs font-semibold text-blue-900 hover:underline"
+                  >
+                    + Spoilt or note
+                  </button>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-lg bg-blue-900 px-5 text-base font-semibold text-white hover:bg-[#1e88b5] disabled:opacity-60"
+                  >
+                    <CheckIcon className="h-5 w-5" aria-hidden />
+                    {saving
+                      ? "Sending…"
+                      : `Send ${fmt(actualOutputQuantity)} ${selectedRecipe.outputUnit || ""} to till`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="min-h-[48px] rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
                 </div>
-              )}
-
-              <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setSelectedRecipeId("");
-                    setActualOutputQuantity("");
-                    setWastedQuantity("");
-                    setNotes("");
-                    setIngredientAdjustments([]);
-                  }}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-blue-900 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#1e88b5]"
-                >
-                  <CheckIcon className="h-4 w-4" aria-hidden />
-                  Save production run
-                </button>
               </div>
-            </form>
-          )}
-
-          {canRecord && !showForm && (
-            <p className="text-center text-sm text-gray-500 sm:text-left">
-              When you&apos;re ready, tap <strong className="text-gray-700">Start new run</strong> above.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* History */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-1 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Runs logged this session</h2>
-          <p className="text-xs text-gray-500">Each row is one saved batch.</p>
-        </div>
-        {loadingRecipes ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">Loading recipes…</p>
-        ) : productionRuns.length === 0 ? (
-          <div className="mx-4 my-6 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 px-4 py-8 text-center">
-            <ClipboardDocumentListIcon className="mx-auto h-10 w-10 text-gray-300" aria-hidden />
-            <p className="mt-2 text-sm font-medium text-gray-800">No production runs yet</p>
-            <p className="mt-1 text-sm text-gray-600">
-              {canRecord
-                ? "When you save your first batch, it will show up here."
-                : "Runs will appear here once staff record production for this session."}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Recipe
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Finished product
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Expected
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Actual
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Wastage
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Recorded
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {productionRuns.map((run) => (
-                  <tr key={run.id} className="hover:bg-gray-50/80">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{run.recipe?.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{run.finishedProduct?.name}</td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-700">
-                      {parseFloat(run.expectedOutputQuantity || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-900">
-                      {parseFloat(run.actualOutputQuantity || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums text-red-600">
-                      {parseFloat(run.wastedQuantity || 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {run.recordedAt ? new Date(run.recordedAt).toLocaleString() : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            )}
+          </form>
         )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {isEmbedded ? (
+        <details className="group rounded-xl border border-gray-200 bg-white shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-gray-900 marker:hidden [&::-webkit-details-marker]:hidden">
+            <InformationCircleIcon className="h-5 w-5 shrink-0 text-[#0D47A1]" aria-hidden />
+            <span className="min-w-0 flex-1">How the kitchen feeds the till</span>
+            <span className="shrink-0 text-xs font-normal text-gray-500 group-open:hidden">Show</span>
+            <span className="hidden shrink-0 text-xs font-normal text-gray-500 group-open:inline">Hide</span>
+          </summary>
+          <div className="border-t border-gray-100 px-4 pb-4 pt-0">{howItWorksBody}</div>
+        </details>
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 ring-1 ring-gray-200">
+              <BeakerIcon className="h-6 w-6 text-[#0D47A1]" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold text-gray-900">How the kitchen feeds the till</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Log each batch as it comes off the fire — <strong>one send per batch</strong>.
+              </p>
+              {howItWorksBody}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={`grid gap-6 ${isEmbedded ? "lg:grid-cols-2" : ""}`}>
+        {cookPanel}
+        <Shelf rows={shelfRows} runsByProduct={runsByProduct} loading={loadingShelf} />
       </div>
     </div>
   );

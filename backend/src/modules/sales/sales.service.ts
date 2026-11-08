@@ -1197,19 +1197,26 @@ export class SalesService {
 
     const rows = sellable
       .map((product) => {
-        const available = this.isUniversal(product)
+        const universal = this.isUniversal(product);
+        const isKitchen = product.category === ProductCategory.PRODUCTION_ITEM;
+        const available = universal
           ? this.universalOnHand(product, pooledStock)
-          : product.category === ProductCategory.PRODUCTION_ITEM
+          : isKitchen
             ? (producedByProduct.get(product.id) || 0) +
               entryQty(product.id, StockEntryType.ADJUSTMENT) -
               (soldByProduct.get(product.id) || 0)
             : this.sessionStockOnHand(product.parentProductId || product.id, entryQty, soldByProduct);
-        return { product, available: Math.round(available * 1000) / 1000 };
+        const made = isKitchen
+          ? (universal ? pooledStock.produced : producedByProduct).get(product.id) || 0
+          : null;
+        const sold = (universal ? pooledStock.sold : soldByProduct).get(product.id) || 0;
+        return { product, available: Math.round(available * 1000) / 1000, made, sold };
       })
-      .filter((row) => row.available > 0.0005)
+      // Kitchen items stay listed when sold out or not cooked yet, so the till can say so.
+      .filter((row) => row.available > 0.0005 || row.made !== null)
       .sort((a, b) => a.product.name.localeCompare(b.product.name));
 
-    return rows.map(({ product, available }) => ({
+    return rows.map(({ product, available, made, sold }) => ({
       id: product.id,
       name: product.name,
       unit: product.unit,
@@ -1220,8 +1227,167 @@ export class SalesService {
       segment: product.segment,
       salesPrompt: product.salesPrompt,
       parentProductId: product.parentProductId,
-      available,
+      available: Math.max(0, available),
+      lane: made !== null ? 'KITCHEN' : 'COUNTER',
+      made: made !== null ? this.round2(made) : null,
+      sold: this.round2(sold),
     }));
+  }
+
+  /**
+   * Read-only picture of one session, one row per product in its own unit:
+   * where counter stock went (sold, into the kitchen, shared, wasted, left) and
+   * what the kitchen made from it (made, sold, left, batches).
+   * Kitchen "left" uses the till's formula scoped to this session; for shared-pool
+   * (branchScope ALL) items the till pools across open sessions, so it can differ.
+   */
+  async getDayFlow(sessionId: number, user: RequestUser) {
+    const session = await this.stockSessionsService.findOne(sessionId);
+    this.stockSessionsService.assertCanView(session, user);
+
+    const [entries, saleRows, runs, saleItemRows, products] = await Promise.all([
+      this.stockEntryRepository.find({ where: { sessionId } }),
+      this.saleRepository.find({
+        where: { sessionId },
+        select: { id: true, totalAmount: true, paymentStatus: true },
+      }),
+      this.productionRunRepository.find({ where: { sessionId }, order: { recordedAt: 'ASC' } }),
+      this.saleItemRepository
+        .createQueryBuilder('item')
+        .select('item.productId', 'productId')
+        .addSelect('COALESCE(SUM(item.quantity), 0)', 'qty')
+        .addSelect('COALESCE(SUM(item.totalPrice), 0)', 'revenue')
+        .innerJoin('item.sale', 'sale')
+        .where('sale.sessionId = :sessionId', { sessionId })
+        .groupBy('item.productId')
+        .getRawMany(),
+      this.productsService.findActive(),
+    ]);
+
+    const productById = new Map<number, Product>(products.map((p) => [p.id, p]));
+    for (const entry of entries) if (entry.product) productById.set(entry.productId, entry.product);
+    for (const run of runs) if (run.finishedProduct) productById.set(run.finishedProductId, run.finishedProduct);
+
+    const qtyByType = new Map<string, number>();
+    for (const entry of entries) {
+      const key = `${entry.productId}:${entry.type}`;
+      qtyByType.set(key, (qtyByType.get(key) || 0) + Number(entry.quantity));
+    }
+    const entryQty = (productId: number, type: StockEntryType) => qtyByType.get(`${productId}:${type}`) || 0;
+
+    const soldQty = new Map<number, number>();
+    const revenueByProduct = new Map<number, number>();
+    for (const row of saleItemRows) {
+      const id = Number(row.productId ?? row.productid);
+      soldQty.set(id, Number(row.qty) || 0);
+      revenueByProduct.set(id, Number(row.revenue) || 0);
+    }
+
+    const runsByProduct = new Map<number, ProductionRun[]>();
+    for (const run of runs) {
+      const list = runsByProduct.get(run.finishedProductId) || [];
+      list.push(run);
+      runsByProduct.set(run.finishedProductId, list);
+    }
+
+    const branchType = session.branch?.type;
+    const allowedHere = (product: Product) => {
+      const scope = product.branchScope ?? BranchCatalogScope.ALL;
+      if (scope === BranchCatalogScope.ALL) return true;
+      if (scope === BranchCatalogScope.GENERAL_BUTCHERY) return branchType === BranchType.GENERAL_BUTCHERY;
+      if (scope === BranchCatalogScope.PORK_BUTCHERY) return branchType === BranchType.PORK_BUTCHERY;
+      return false;
+    };
+
+    const ids = new Set<number>([
+      ...entries.map((e) => e.productId),
+      ...soldQty.keys(),
+      ...runsByProduct.keys(),
+      ...products
+        .filter((p) => p.category === ProductCategory.PRODUCTION_ITEM && p.isActive && allowedHere(p))
+        .map((p) => p.id),
+    ]);
+
+    const rows = [...ids]
+      .map((id) => productById.get(id))
+      .filter((p): p is Product => !!p && p.segment !== ProductSegment.KITCHEN_SUPPLY)
+      .map((product) => {
+        const id = product.id;
+        const isKitchen = product.category === ProductCategory.PRODUCTION_ITEM;
+        const productRuns = runsByProduct.get(id) || [];
+        const made = productRuns.reduce((s, r) => s + Number(r.actualOutputQuantity), 0);
+        const runWaste = productRuns.reduce((s, r) => s + Number(r.wastedQuantity || 0), 0);
+        const soldDirect = soldQty.get(id) || 0;
+        const byproductSold = entryQty(id, StockEntryType.BYPRODUCT_SALE);
+        const adjusted = entryQty(id, StockEntryType.ADJUSTMENT);
+        const start = entryQty(id, StockEntryType.OPENING) + entryQty(id, StockEntryType.INCOMING);
+        const toKitchen =
+          entryQty(id, StockEntryType.PRODUCTION_USAGE) + entryQty(id, StockEntryType.KITCHEN_ISSUE);
+        const shared = entryQty(id, StockEntryType.PARTNER_SHARE);
+        const wasted = isKitchen ? runWaste : entryQty(id, StockEntryType.WASTAGE);
+        const isByproduct = !!product.parentProductId;
+        const left = isByproduct
+          ? null
+          : isKitchen
+            ? made - runWaste + adjusted - soldDirect
+            : start + adjusted - soldDirect - byproductSold - shared - toKitchen - entryQty(id, StockEntryType.WASTAGE);
+        return {
+          productId: id,
+          name: product.name,
+          unit: product.unit,
+          price: Number(product.defaultPrice),
+          lane: isKitchen ? 'KITCHEN' : 'COUNTER',
+          sharedPool: this.isUniversal(product),
+          parentProductId: product.parentProductId,
+          start: this.round2(start),
+          toKitchen: this.round2(toKitchen),
+          made: isKitchen ? this.round2(made) : null,
+          sold: this.round2(soldDirect + byproductSold),
+          shared: this.round2(shared),
+          wasted: this.round2(wasted),
+          adjusted: this.round2(adjusted),
+          left: left === null ? null : this.round2(left),
+          revenue: this.round2(revenueByProduct.get(id) || 0),
+          batches: productRuns.map((r) => ({
+            id: r.id,
+            recipe: r.recipe?.name || null,
+            made: Number(r.actualOutputQuantity),
+            wasted: Number(r.wastedQuantity || 0),
+            recordedAt: r.recordedAt,
+          })),
+        };
+      })
+      .sort((a, b) => (a.lane === b.lane ? a.name.localeCompare(b.name) : a.lane === 'KITCHEN' ? -1 : 1));
+
+    const kitchen = rows.filter((r) => r.lane === 'KITCHEN' && r.made !== null && r.made > 0);
+    const isLow = (r: (typeof rows)[number]) =>
+      r.left !== null && r.left > 0 && (r.left <= 2 || r.left <= (r.made || 0) * 0.25);
+    const revenue = saleRows.reduce((s, sale) => s + Number(sale.totalAmount), 0);
+    const paid = saleRows
+      .filter((sale) => sale.paymentStatus === PaymentStatus.PAID)
+      .reduce((s, sale) => s + Number(sale.totalAmount), 0);
+
+    return {
+      sessionId,
+      status: session.status,
+      date: session.date,
+      branch: session.branch ? { id: session.branch.id, name: session.branch.name } : null,
+      summary: {
+        salesCount: saleRows.length,
+        revenue: this.round2(revenue),
+        unpaid: this.round2(revenue - paid),
+        unpaidCount: saleRows.filter((sale) => sale.paymentStatus !== PaymentStatus.PAID).length,
+        kitchenValueLeft: this.round2(kitchen.reduce((s, r) => s + Math.max(0, r.left || 0) * r.price, 0)),
+        batches: runs.length,
+        lowCount: kitchen.filter(isLow).length,
+        soldOutCount: kitchen.filter((r) => (r.left || 0) <= 0).length,
+        openingLines: entries.filter((e) => e.type === StockEntryType.OPENING).length,
+        incomingLines: entries.filter((e) => e.type === StockEntryType.INCOMING).length,
+        closingLines: entries.filter((e) => e.type === StockEntryType.CLOSING).length,
+        wastageLines: entries.filter((e) => e.type === StockEntryType.WASTAGE).length,
+      },
+      rows,
+    };
   }
 
   private sessionStockOnHand(

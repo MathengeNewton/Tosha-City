@@ -119,6 +119,7 @@ export const apiClient = {
     getKitchenSupplyBalances: (params) =>
       api.get('/sales/kitchen-supply-balances', { params }),
     getTillAvailability: (params) => api.get('/sales/till-availability', { params }),
+    getDayFlow: (params) => api.get('/sales/day-flow', { params }),
     getById: (id) => api.get(`/sales/${id}`),
     getPayment: (id) => api.get(`/sales/${id}/payment`),
     getReceipt: (id) => api.get(`/sales/${id}/receipt`, { responseType: 'text' }),

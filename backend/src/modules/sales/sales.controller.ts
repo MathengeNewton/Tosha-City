@@ -110,6 +110,15 @@ export class SalesController {
     return this.salesService.getTillAvailability(+sessionId, req.user);
   }
 
+  @Get('day-flow')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  @ApiOperation({ summary: 'Per-product flow for a session: start, to kitchen, made, sold, shared, wasted, left' })
+  @ApiQuery({ name: 'sessionId', required: true, type: Number })
+  getDayFlow(@Query('sessionId') sessionId: string, @Request() req) {
+    return this.salesService.getDayFlow(+sessionId, req.user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a sale by ID (branch-scoped for non-admins)' })
   findOne(@Param('id') id: string, @Request() req) {
