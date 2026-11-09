@@ -591,7 +591,7 @@ export default function StockManagementPage() {
 
           <div className="p-6">
             {activeTab === 'overview' && (
-              <SessionOverviewAnalytics sales={sales} />
+              <SessionOverviewAnalytics sales={sales} showMoney={isAdmin} />
             )}
             {activeTab === 'stock-share' && (
               <StockShareTab
@@ -834,6 +834,7 @@ export default function StockManagementPage() {
           sales={currentSessionSales}
           flow={currentDayFlow}
           onViewSession={(tab) => handleViewSession(currentSession, tab)}
+          showMoney={isAdmin}
         />
       )}
 
@@ -924,7 +925,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
       openingStock: s.stats?.openingStockCount || 0,
       incomingStock: s.stats?.incomingStockCount || 0,
       sales: s.stats?.salesCount || 0,
-      revenue: parseFloat(s.stats?.totalRevenue || 0),
+      ...(isAdmin && { revenue: parseFloat(s.stats?.totalRevenue || 0) }),
     }));
     const from = (filters.dateFrom || '').replace(/-/g, '');
     const to = (filters.dateTo || '').replace(/-/g, '');
@@ -938,7 +939,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
         { key: "openingStock", label: "Opening Stock" },
         { key: "incomingStock", label: "Incoming Stock" },
         { key: "sales", label: "Sales" },
-        { key: "revenue", label: "Revenue (KES)" },
+        ...(isAdmin ? [{ key: "revenue", label: "Revenue (KES)" }] : []),
       ],
       filename
     );
@@ -960,7 +961,7 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
           </p>
         )}
         {isAdmin && <div className="mb-3" />}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
           <div className="bg-blue-50 p-4 rounded-lg">
             <p className="text-sm text-gray-600">Total Opening Stock</p>
             <p className="text-2xl font-bold text-gray-900">{dateRangeMetrics.totalOpeningStock} entries</p>
@@ -973,10 +974,12 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
             <p className="text-sm text-gray-600">Total Sales</p>
             <p className="text-2xl font-bold text-gray-900">{dateRangeMetrics.totalSales}</p>
           </div>
-          <div className="bg-yellow-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600">Total Revenue</p>
-            <p className="text-2xl font-bold text-gray-900">KES {dateRangeMetrics.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
-          </div>
+          {isAdmin && (
+            <div className="bg-yellow-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Total Revenue</p>
+              <p className="text-2xl font-bold text-gray-900">KES {dateRangeMetrics.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1055,14 +1058,14 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
               <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Opening Stock</th>
               <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Incoming Stock</th>
               <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sales</th>
-              <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+              {isAdmin && <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>}
               <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {sessions.length === 0 ? (
               <tr>
-                <td colSpan="8" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+                <td colSpan={isAdmin ? 8 : 7} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                   No sessions found
                 </td>
               </tr>
@@ -1093,9 +1096,11 @@ function ListView({ sessions, filters, setFilters, listPage, setListPage, listPa
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {session.stats?.salesCount || 0}
                   </td>
-                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    KES {parseFloat(session.stats?.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                  </td>
+                  {isAdmin && (
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      KES {parseFloat(session.stats?.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                    </td>
+                  )}
                   <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex flex-wrap items-center gap-1">
                       <button
@@ -1913,7 +1918,7 @@ function StockShareTab({ session, products, canManage, onRefresh }) {
 }
 
 // Session Overview Analytics Component
-function SessionOverviewAnalytics({ sales }) {
+function SessionOverviewAnalytics({ sales, showMoney = false }) {
   const analytics = useMemo(() => {
     // Sales statistics
     const totalSales = sales.length;
@@ -1981,7 +1986,7 @@ function SessionOverviewAnalytics({ sales }) {
   return (
     <div className="space-y-6">
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${showMoney ? "lg:grid-cols-4" : ""}`}>
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
           <p className="text-xs text-gray-600 mb-1">Total Sales</p>
           <p className="text-2xl font-bold text-gray-900">{analytics.sales.total}</p>
@@ -1989,17 +1994,19 @@ function SessionOverviewAnalytics({ sales }) {
             {analytics.sales.paid} paid, {analytics.sales.pending} pending
           </p>
         </div>
-        <div className="bg-green-50 p-4 rounded-lg border border-green-100">
-          <p className="text-xs text-gray-600 mb-1">Total Revenue</p>
-          <p className="text-2xl font-bold text-gray-900">
-            KES {analytics.sales.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-          </p>
-          {analytics.sales.pendingRevenue > 0 && (
-            <p className="text-xs text-yellow-600 mt-1">
-              {analytics.sales.pendingRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })} pending
+        {showMoney && (
+          <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+            <p className="text-xs text-gray-600 mb-1">Total Revenue</p>
+            <p className="text-2xl font-bold text-gray-900">
+              KES {analytics.sales.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
             </p>
-          )}
-        </div>
+            {analytics.sales.pendingRevenue > 0 && (
+              <p className="text-xs text-yellow-600 mt-1">
+                {analytics.sales.pendingRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })} pending
+              </p>
+            )}
+          </div>
+        )}
         <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
           <p className="text-xs text-gray-600 mb-1">Unpaid</p>
           <p className="text-2xl font-bold text-gray-900">
@@ -2007,12 +2014,14 @@ function SessionOverviewAnalytics({ sales }) {
           </p>
           <p className="text-xs text-gray-500 mt-1">{analytics.sales.pending} bills</p>
         </div>
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-xs text-gray-600 mb-1">Average sale</p>
-          <p className="text-2xl font-bold text-gray-900">
-            KES {analytics.sales.averageSale.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
-          </p>
-        </div>
+        {showMoney && (
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-600 mb-1">Average sale</p>
+            <p className="text-2xl font-bold text-gray-900">
+              KES {analytics.sales.averageSale.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+        )}
       </div>
 
       {analytics.products.length > 0 && (
@@ -2048,16 +2057,18 @@ function SessionOverviewAnalytics({ sales }) {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-gray-50">
-                <tr>
-                  <td className="px-4 py-2 text-sm font-semibold text-gray-900">Total</td>
-                  <td />
-                  <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                    KES {analytics.sales.totalRevenueAll.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
-                  </td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
+              {showMoney && (
+                <tfoot className="bg-gray-50">
+                  <tr>
+                    <td className="px-4 py-2 text-sm font-semibold text-gray-900">Total</td>
+                    <td />
+                    <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
+                      KES {analytics.sales.totalRevenueAll.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

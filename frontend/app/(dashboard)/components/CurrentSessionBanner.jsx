@@ -24,9 +24,10 @@ function Metric({ label, value, sub, tone }) {
 /**
  * Today's open session on the Stock home: where the day is, what it has earned,
  * what the kitchen still has on the till, and what needs attention.
- * Props: session, sales (with items.product), flow (day-flow response), onViewSession(tab?).
+ * Props: session, sales (with items.product), flow (day-flow response), onViewSession(tab?),
+ * showMoney (admin only: the day's revenue total).
  */
-export default function CurrentSessionBanner({ session, sales, flow, onViewSession }) {
+export default function CurrentSessionBanner({ session, sales, flow, onViewSession, showMoney = false }) {
   const salesByProduct = useMemo(() => {
     const byProduct = {};
     sales.forEach((sale) => {
@@ -72,18 +73,30 @@ export default function CurrentSessionBanner({ session, sales, flow, onViewSessi
 
         {flow && <DayStages session={session} flow={flow} activeTab={null} onSelect={(tab) => onViewSession(tab)} />}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric
-            label="Revenue"
-            value={kes(revenue)}
-            sub={summary?.unpaid > 0 ? `${kes(summary.unpaid)} unpaid` : `${sales.length} sales`}
-          />
+        <div className={`grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+          {showMoney && (
+            <Metric
+              label="Revenue"
+              value={kes(revenue)}
+              sub={summary?.unpaid > 0 ? `${kes(summary.unpaid)} unpaid` : `${sales.length} sales`}
+            />
+          )}
           <Metric
             label="Kitchen food on till"
             value={kes(summary?.kitchenValueLeft)}
             sub={kitchenRows.length > 0 ? `${kitchenRows.length} items cooked today` : "Nothing cooked yet"}
           />
-          <Metric label="Sales" value={String(summary?.salesCount ?? sales.length)} sub={summary ? `${summary.unpaidCount} unpaid` : undefined} />
+          <Metric
+            label="Sales"
+            value={String(summary?.salesCount ?? sales.length)}
+            sub={
+              summary
+                ? !showMoney && summary.unpaid > 0
+                  ? `${summary.unpaidCount} unpaid · ${kes(summary.unpaid)}`
+                  : `${summary.unpaidCount} unpaid`
+                : undefined
+            }
+          />
           <Metric
             label="Needs attention"
             value={attention[0] || "All good"}

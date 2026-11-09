@@ -1366,6 +1366,7 @@ export class SalesService {
     const paid = saleRows
       .filter((sale) => sale.paymentStatus === PaymentStatus.PAID)
       .reduce((s, sale) => s + Number(sale.totalAmount), 0);
+    const showDayTotal = this.isAdmin(user);
 
     return {
       sessionId,
@@ -1374,7 +1375,7 @@ export class SalesService {
       branch: session.branch ? { id: session.branch.id, name: session.branch.name } : null,
       summary: {
         salesCount: saleRows.length,
-        revenue: this.round2(revenue),
+        ...(showDayTotal && { revenue: this.round2(revenue) }),
         unpaid: this.round2(revenue - paid),
         unpaidCount: saleRows.filter((sale) => sale.paymentStatus !== PaymentStatus.PAID).length,
         kitchenValueLeft: this.round2(kitchen.reduce((s, r) => s + Math.max(0, r.left || 0) * r.price, 0)),

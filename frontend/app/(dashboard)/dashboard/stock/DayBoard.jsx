@@ -108,7 +108,7 @@ export function DayStages({ session, flow, activeTab, onSelect }) {
       tab: "sales",
       tabs: ["sales", "stock-share"],
       state: closed ? "done" : s?.salesCount > 0 ? "live" : "todo",
-      line: s ? `${s.salesCount} sales · ${kes(s.revenue)}` : "—",
+      line: s ? (s.revenue !== undefined ? `${s.salesCount} sales · ${kes(s.revenue)}` : `${s.salesCount} sales`) : "—",
       alert: s?.unpaid > 0 ? `${kes(s.unpaid)} unpaid (${s.unpaidCount})` : null,
     },
     {

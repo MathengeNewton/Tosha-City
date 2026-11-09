@@ -71,7 +71,7 @@ export class StockSessionsController {
   @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date in YYYY-MM-DD format' })
   @ApiQuery({ name: 'status', required: false, enum: SessionStatus, description: 'Filter by session status' })
   @ApiQuery({ name: 'branchId', required: false, type: Number, description: 'Branch ID filter (admin only)' })
-  findAll(
+  async findAll(
     @Request() req,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
@@ -80,7 +80,17 @@ export class StockSessionsController {
   ) {
     if (!isAdminUser(req.user)) {
       if (!req.user.branchId) return [];
-      return this.stockSessionsService.findAllWithStats(dateFrom, dateTo, status, req.user.branchId, true);
+      const sessions = await this.stockSessionsService.findAllWithStats(
+        dateFrom,
+        dateTo,
+        status,
+        req.user.branchId,
+        true,
+      );
+      return sessions.map((session) => ({
+        ...session,
+        stats: { ...session.stats, totalRevenue: undefined },
+      }));
     }
     const scopedBranchId = branchId ? +branchId : undefined;
     // If any filter is provided, use findAllWithStats, otherwise use simple findAll
