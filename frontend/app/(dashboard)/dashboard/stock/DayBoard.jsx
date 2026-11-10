@@ -97,7 +97,9 @@ export function DayStages({ session, flow, activeTab, onSelect }) {
       state: closed ? "done" : s?.batches > 0 ? "live" : "todo",
       line: s
         ? s.batches > 0
-          ? `${s.batches} ${s.batches === 1 ? "batch" : "batches"} · ${kes(s.kitchenValueLeft)} on till`
+          ? `${s.batches} ${s.batches === 1 ? "batch" : "batches"}${
+              s.kitchenValueLeft !== undefined ? ` · ${kes(s.kitchenValueLeft)} on till` : ""
+            }`
           : "Nothing cooked yet"
         : "—",
       alert: s?.lowCount > 0 ? `${s.lowCount} running low` : s?.soldOutCount > 0 ? `${s.soldOutCount} sold out` : null,
@@ -222,6 +224,7 @@ export function ProductFlow({ flow, productionRuns = [] }) {
   }, [productionRuns]);
 
   if (!flow?.rows) return null;
+  const showMoney = flow.summary?.revenue !== undefined;
 
   const kitchen = flow.rows.filter((r) => r.lane === "KITCHEN" && (Number(r.made) > 0 || Number(r.sold) > 0));
   const notCooked = flow.rows.filter((r) => r.lane === "KITCHEN" && !(Number(r.made) > 0 || Number(r.sold) > 0));
@@ -242,13 +245,13 @@ export function ProductFlow({ flow, productionRuns = [] }) {
       <th className="px-3 py-2 text-right">Wasted</th>
       <th className="px-3 py-2 text-right">Left</th>
       <th className="w-40 px-3 py-2">Where it went</th>
-      <th className="px-3 py-2 text-right">Revenue</th>
+      {showMoney && <th className="px-3 py-2 text-right">Revenue</th>}
     </tr>
   );
 
   const groupRow = (title, hint) => (
     <tr className="bg-gray-50">
-      <td colSpan={10} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-gray-700">
+      <td colSpan={showMoney ? 10 : 9} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-gray-700">
         {title} <span className="ml-1 font-normal normal-case tracking-normal text-gray-500">{hint}</span>
       </td>
     </tr>
@@ -288,7 +291,9 @@ export function ProductFlow({ flow, productionRuns = [] }) {
             ]}
           />
         </td>
-        <td className="px-3 py-2 text-right tabular-nums text-gray-700">{Number(r.revenue) > 0 ? kes(r.revenue) : ""}</td>
+        {showMoney && (
+          <td className="px-3 py-2 text-right tabular-nums text-gray-700">{Number(r.revenue) > 0 ? kes(r.revenue) : ""}</td>
+        )}
       </tr>
     );
   };
@@ -328,7 +333,9 @@ export function ProductFlow({ flow, productionRuns = [] }) {
             />
           )}
         </td>
-        <td className="px-3 py-2 text-right tabular-nums text-gray-700">{Number(r.revenue) > 0 ? kes(r.revenue) : ""}</td>
+        {showMoney && (
+          <td className="px-3 py-2 text-right tabular-nums text-gray-700">{Number(r.revenue) > 0 ? kes(r.revenue) : ""}</td>
+        )}
       </tr>
     );
   };
@@ -360,7 +367,7 @@ export function ProductFlow({ flow, productionRuns = [] }) {
             {kitchen.map(kitchenRow)}
             {notCooked.length > 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-2 text-xs text-gray-500">
+                <td colSpan={showMoney ? 10 : 9} className="px-3 py-2 text-xs text-gray-500">
                   Not cooked yet: {notCooked.map((r) => r.name).join(", ")}
                 </td>
               </tr>

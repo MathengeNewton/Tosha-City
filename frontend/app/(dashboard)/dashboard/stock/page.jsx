@@ -487,7 +487,7 @@ export default function StockManagementPage() {
       const salesRows = sales.map((s) => ({
         saleNumber: s.saleNumber,
         soldAt: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
-        totalAmount: parseFloat(s.totalAmount || 0),
+        ...(isAdmin && { totalAmount: parseFloat(s.totalAmount || 0) }),
         paymentMethod: s.paymentMethod || "",
         paymentStatus: s.paymentStatus || "",
         itemsCount: s.items?.length ?? 0,
@@ -520,7 +520,7 @@ export default function StockManagementPage() {
             columns: [
               { key: "saleNumber", label: "Sale #" },
               { key: "soldAt", label: "Sold at" },
-              { key: "totalAmount", label: "Total (KES)" },
+              ...(isAdmin ? [{ key: "totalAmount", label: "Total (KES)" }] : []),
               { key: "paymentMethod", label: "Payment method" },
               { key: "paymentStatus", label: "Payment status" },
               { key: "itemsCount", label: "Items" },
@@ -641,6 +641,7 @@ export default function StockManagementPage() {
                 productionRuns={productionRuns}
                 onRefresh={() => loadSessionDetails(selectedSession.id)}
                 variant="embedded"
+                showValue={isAdmin}
               />
             )}
             {activeTab === 'kitchen' && (
@@ -748,7 +749,7 @@ export default function StockManagementPage() {
               </div>
             )}
             {activeTab === 'sales' && (
-              <SalesTable sales={sales} />
+              <SalesTable sales={sales} showMoney={isAdmin} />
             )}
           </div>
         </div>
@@ -2033,7 +2034,7 @@ function SessionOverviewAnalytics({ sales, showMoney = false }) {
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  {showMoney && <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>}
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Lines</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Avg price</th>
                 </tr>
@@ -2045,9 +2046,11 @@ function SessionOverviewAnalytics({ sales, showMoney = false }) {
                     <td className="px-4 py-2 text-right text-sm tabular-nums text-gray-600">
                       {product.quantity.toLocaleString('en-KE', { maximumFractionDigits: 2 })} {product.unit}
                     </td>
-                    <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                      KES {product.revenue.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
-                    </td>
+                    {showMoney && (
+                      <td className="px-4 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
+                        KES {product.revenue.toLocaleString('en-KE', { maximumFractionDigits: 0 })}
+                      </td>
+                    )}
                     <td className="px-4 py-2 text-right text-sm tabular-nums text-gray-600">{product.count}</td>
                     <td className="px-4 py-2 text-right text-sm tabular-nums text-gray-600">
                       {product.quantity > 0
@@ -2084,9 +2087,11 @@ function SessionOverviewAnalytics({ sales, showMoney = false }) {
               <div key={method} className="bg-gray-50 p-3 rounded-lg">
                 <p className="text-xs text-gray-600">{method}</p>
                 <p className="text-lg font-bold text-gray-900">{stats.count} sales</p>
-                <p className="text-xs text-gray-500">
-                  KES {stats.revenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                </p>
+                {showMoney && (
+                  <p className="text-xs text-gray-500">
+                    KES {stats.revenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -2097,7 +2102,7 @@ function SessionOverviewAnalytics({ sales, showMoney = false }) {
 }
 
 // Sales Table Component
-function SalesTable({ sales }) {
+function SalesTable({ sales, showMoney = false }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -2106,7 +2111,7 @@ function SalesTable({ sales }) {
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale Number</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Products</th>
-            <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+            {showMoney && <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>}
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
             <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
           </tr>
@@ -2114,7 +2119,7 @@ function SalesTable({ sales }) {
         <tbody className="bg-white divide-y divide-gray-200">
           {sales.length === 0 ? (
             <tr>
-              <td colSpan="6" className="px-4 sm:px-6 py-4 text-center text-gray-500">
+              <td colSpan={showMoney ? 6 : 5} className="px-4 sm:px-6 py-4 text-center text-gray-500">
                 No sales found for this session
               </td>
             </tr>
@@ -2139,9 +2144,11 @@ function SalesTable({ sales }) {
                     ))}
                   </div>
                 </td>
-                <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                  KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                </td>
+                {showMoney && (
+                  <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    KES {parseFloat(sale.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                  </td>
+                )}
                 <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                     sale.paymentStatus === 'PAID' 

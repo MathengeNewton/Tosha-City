@@ -25,7 +25,7 @@ function Metric({ label, value, sub, tone }) {
  * Today's open session on the Stock home: where the day is, what it has earned,
  * what the kitchen still has on the till, and what needs attention.
  * Props: session, sales (with items.product), flow (day-flow response), onViewSession(tab?),
- * showMoney (admin only: the day's revenue total).
+ * showMoney (admin only: day revenue, revenue per product and the kitchen food value).
  */
 export default function CurrentSessionBanner({ session, sales, flow, onViewSession, showMoney = false }) {
   const salesByProduct = useMemo(() => {
@@ -73,19 +73,21 @@ export default function CurrentSessionBanner({ session, sales, flow, onViewSessi
 
         {flow && <DayStages session={session} flow={flow} activeTab={null} onSelect={(tab) => onViewSession(tab)} />}
 
-        <div className={`grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        <div className={`grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-4" : "lg:grid-cols-2"}`}>
           {showMoney && (
-            <Metric
-              label="Revenue"
-              value={kes(revenue)}
-              sub={summary?.unpaid > 0 ? `${kes(summary.unpaid)} unpaid` : `${sales.length} sales`}
-            />
+            <>
+              <Metric
+                label="Revenue"
+                value={kes(revenue)}
+                sub={summary?.unpaid > 0 ? `${kes(summary.unpaid)} unpaid` : `${sales.length} sales`}
+              />
+              <Metric
+                label="Kitchen food on till"
+                value={kes(summary?.kitchenValueLeft)}
+                sub={kitchenRows.length > 0 ? `${kitchenRows.length} items cooked today` : "Nothing cooked yet"}
+              />
+            </>
           )}
-          <Metric
-            label="Kitchen food on till"
-            value={kes(summary?.kitchenValueLeft)}
-            sub={kitchenRows.length > 0 ? `${kitchenRows.length} items cooked today` : "Nothing cooked yet"}
-          />
           <Metric
             label="Sales"
             value={String(summary?.salesCount ?? sales.length)}
@@ -116,7 +118,7 @@ export default function CurrentSessionBanner({ session, sales, flow, onViewSessi
                   <tr>
                     <th className="px-3 py-1.5 text-left text-xs font-medium uppercase text-gray-600">Product</th>
                     <th className="px-3 py-1.5 text-right text-xs font-medium uppercase text-gray-600">Qty</th>
-                    <th className="px-3 py-1.5 text-right text-xs font-medium uppercase text-gray-600">Revenue</th>
+                    {showMoney && <th className="px-3 py-1.5 text-right text-xs font-medium uppercase text-gray-600">Revenue</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -126,7 +128,9 @@ export default function CurrentSessionBanner({ session, sales, flow, onViewSessi
                       <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-700">
                         {fmt(row.quantity)} {row.unit}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-700">{kes(row.revenue)}</td>
+                      {showMoney && (
+                        <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-700">{kes(row.revenue)}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

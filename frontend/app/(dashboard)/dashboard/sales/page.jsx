@@ -142,7 +142,7 @@ function SalesList() {
         saleNumber: s.saleNumber,
         date: s.soldAt ? new Date(s.soldAt).toLocaleString() : "",
         itemsCount: s.items?.length ?? 0,
-        totalAmount: parseFloat(s.totalAmount || 0),
+        ...(isAdmin && { totalAmount: parseFloat(s.totalAmount || 0) }),
         paymentMethod: s.paymentMethod || "",
         paymentStatus: s.paymentStatus,
       }));
@@ -153,7 +153,7 @@ function SalesList() {
           { key: "saleNumber", label: "Sale #" },
           { key: "date", label: "Date" },
           { key: "itemsCount", label: "Items" },
-          { key: "totalAmount", label: "Total (KES)" },
+          ...(isAdmin ? [{ key: "totalAmount", label: "Total (KES)" }] : []),
           { key: "paymentMethod", label: "Payment method" },
           { key: "paymentStatus", label: "Payment status" },
         ],
@@ -179,7 +179,8 @@ function SalesList() {
   const today = nairobiToday();
   const showingToday = !filters.productId && filters.dateFrom === today && filters.dateTo === today;
   const showingAll = !filters.productId && !filters.dateFrom && !filters.dateTo;
-  const countAndTotal = `${totals.count} sale${totals.count === 1 ? "" : "s"} · KES ${formatKes(totals.amount)}`;
+  const countLabel = `${totals.count} sale${totals.count === 1 ? "" : "s"}`;
+  const countAndTotal = isAdmin ? `${countLabel} · KES ${formatKes(totals.amount)}` : countLabel;
 
   return (
     <PageShell className="space-y-4 sm:space-y-8">
@@ -287,9 +288,11 @@ function SalesList() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-bold text-gray-900">{sale.saleNumber}</p>
-                  <p className="text-lg font-bold tabular-nums text-gray-900">
-                    {formatKes(sale.totalAmount)}
-                  </p>
+                  {isAdmin && (
+                    <p className="text-lg font-bold tabular-nums text-gray-900">
+                      {formatKes(sale.totalAmount)}
+                    </p>
+                  )}
                 </div>
                 <p className="mt-1 text-sm text-gray-500">
                   {sale.soldAt ? new Date(sale.soldAt).toLocaleString() : ""}

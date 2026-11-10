@@ -38,7 +38,7 @@ function timeOf(value) {
 }
 
 /** One row per prepared item: made, sold, left, with its batches folded underneath. */
-function Shelf({ rows, runsByProduct, loading }) {
+function Shelf({ rows, runsByProduct, loading, showValue }) {
   const cooked = rows.filter((row) => shelfStatus(row) !== "notCooked");
   const notCooked = rows.filter((row) => shelfStatus(row) === "notCooked");
   const valueLeft = cooked.reduce((sum, row) => sum + Math.max(0, Number(row.left || 0)) * Number(row.price || 0), 0);
@@ -50,7 +50,9 @@ function Shelf({ rows, runsByProduct, loading }) {
           <h2 className="text-base font-semibold text-gray-900">On the shelf now</h2>
           <p className="text-xs text-gray-500">Exactly what the till shows under &ldquo;From the kitchen&rdquo;.</p>
         </div>
-        {cooked.length > 0 && <span className="text-sm font-semibold tabular-nums text-gray-700">{kes(valueLeft)}</span>}
+        {showValue && cooked.length > 0 && (
+          <span className="text-sm font-semibold tabular-nums text-gray-700">{kes(valueLeft)}</span>
+        )}
       </div>
       <div className="space-y-3 p-4">
         {loading && cooked.length === 0 ? (
@@ -137,7 +139,14 @@ function Shelf({ rows, runsByProduct, loading }) {
  * Cook on the left (recipe → quantity → send), the shelf on the right.
  * @param {"page" | "embedded"} variant — "embedded" uses a tighter intro (inside session detail).
  */
-export default function ProductionTab({ session, canManage, onRefresh, productionRuns = [], variant = "page" }) {
+export default function ProductionTab({
+  session,
+  canManage,
+  onRefresh,
+  productionRuns = [],
+  variant = "page",
+  showValue = false,
+}) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
   const [recipes, setRecipes] = useState([]);
@@ -569,7 +578,7 @@ export default function ProductionTab({ session, canManage, onRefresh, productio
 
       <div className={`grid gap-6 ${isEmbedded ? "lg:grid-cols-2" : ""}`}>
         {cookPanel}
-        <Shelf rows={shelfRows} runsByProduct={runsByProduct} loading={loadingShelf} />
+        <Shelf rows={shelfRows} runsByProduct={runsByProduct} loading={loadingShelf} showValue={showValue} />
       </div>
     </div>
   );

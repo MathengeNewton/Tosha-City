@@ -167,7 +167,7 @@ export class SeedService implements OnApplicationBootstrap {
       unit: 'kg',
       defaultPrice: 120,
       wholesalePrice: null,
-      category: ProductCategory.RAW_STOCK,
+      category: ProductCategory.CONSUMABLE,
       saleMode: ProductSaleMode.WEIGHT,
       segment: ProductSegment.KITCHEN_SUPPLY,
       branchScope: BranchCatalogScope.PORK_BUTCHERY,

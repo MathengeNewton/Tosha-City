@@ -166,6 +166,7 @@ export default function MorningProductionPage() {
             productionRuns={productionRuns}
             onRefresh={load}
             variant="page"
+            showValue={isAdmin}
           />
         </>
       )}

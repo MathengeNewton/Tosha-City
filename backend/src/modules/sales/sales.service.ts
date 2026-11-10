@@ -1366,7 +1366,7 @@ export class SalesService {
     const paid = saleRows
       .filter((sale) => sale.paymentStatus === PaymentStatus.PAID)
       .reduce((s, sale) => s + Number(sale.totalAmount), 0);
-    const showDayTotal = this.isAdmin(user);
+    const showMoney = this.isAdmin(user);
 
     return {
       sessionId,
@@ -1375,10 +1375,14 @@ export class SalesService {
       branch: session.branch ? { id: session.branch.id, name: session.branch.name } : null,
       summary: {
         salesCount: saleRows.length,
-        ...(showDayTotal && { revenue: this.round2(revenue) }),
+        ...(showMoney && {
+          revenue: this.round2(revenue),
+          kitchenValueLeft: this.round2(
+            kitchen.reduce((s, r) => s + Math.max(0, r.left || 0) * r.price, 0),
+          ),
+        }),
         unpaid: this.round2(revenue - paid),
         unpaidCount: saleRows.filter((sale) => sale.paymentStatus !== PaymentStatus.PAID).length,
-        kitchenValueLeft: this.round2(kitchen.reduce((s, r) => s + Math.max(0, r.left || 0) * r.price, 0)),
         batches: runs.length,
         lowCount: kitchen.filter(isLow).length,
         soldOutCount: kitchen.filter((r) => (r.left || 0) <= 0).length,
@@ -1387,7 +1391,9 @@ export class SalesService {
         closingLines: entries.filter((e) => e.type === StockEntryType.CLOSING).length,
         wastageLines: entries.filter((e) => e.type === StockEntryType.WASTAGE).length,
       },
-      rows,
+      rows: showMoney
+        ? rows
+        : rows.map((row) => ({ ...row, revenue: undefined })),
     };
   }
 

@@ -87,7 +87,8 @@ export class SalesController {
     if (limit) {
       const pageSize = Math.min(Math.max(parseInt(limit, 10) || MAX_PAGE_SIZE, 1), MAX_PAGE_SIZE);
       const skip = Math.max(parseInt(offset || '0', 10) || 0, 0);
-      return this.salesService.findPage(filters, pageSize, skip);
+      const page = await this.salesService.findPage(filters, pageSize, skip);
+      return isAdmin ? page : { ...page, totalAmount: undefined };
     }
     return this.salesService.findAll(filters);
   }
